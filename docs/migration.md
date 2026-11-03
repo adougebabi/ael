@@ -56,7 +56,7 @@ ael activate --project PATH --migration ID --approved-digest HASH --ack-drained
 
 每次目标改写前保存 hash 与必要备份到运行目录。outbox 保存意图、原版本与新内容，原子替换；中断可 repair。rollback 逐文件比较应用后 hash，遇到用户新修改保留内容并报告 rollback_conflict。不会以整目录旧备份覆盖新项目。
 
-已回滚的计划不能直接重用；重新扫描/计划并审阅新摘要。源目录始终不由迁移器改写。运行数据导出恢复的迁移记录标记 restored_review_required，不自动激活旧计划；先重新核查来源、当前目标与备份路径。
+已回滚的计划不能直接重用；重新扫描/计划并审阅新摘要。每份新计划拥有独立运行ID，inventory_id与来源/目标映射仍由确定输入决定；重复apply同一计划不会新建运行或重复任务。源目录始终不由迁移器改写。运行数据导出恢复的迁移记录标记 restored_review_required，不自动激活旧计划；先重新核查来源、当前目标与备份路径。
 
 ## 当前保守限制
 

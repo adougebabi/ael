@@ -40,12 +40,13 @@ type Inventory struct {
 	Warnings []string  `json:"warnings"`
 }
 type Plan struct {
-	ID      string            `json:"id"`
-	Digest  string            `json:"digest"`
-	Project string            `json:"project"`
-	Sources []Source          `json:"sources"`
-	Targets map[string]string `json:"target_hashes"`
-	Created time.Time         `json:"created"`
+	InventoryID string            `json:"inventory_id"`
+	ID          string            `json:"id"`
+	Digest      string            `json:"digest"`
+	Project     string            `json:"project"`
+	Sources     []Source          `json:"sources"`
+	Targets     map[string]string `json:"target_hashes"`
+	Created     time.Time         `json:"created"`
 }
 type Suggestion struct {
 	SupersededBy string `json:"superseded_by,omitempty"`
@@ -274,13 +275,16 @@ func Scan(root string) (Inventory, error) {
 		}
 		ids[src.ID] = true
 	}
+	for i := range inv.Sources {
+		sort.Strings(inv.Sources[i].Risks)
+	}
 	b, _ := json.Marshal(inv.Sources)
 	inv.ID = "migration-" + store.Hash(b)[:20]
 	return inv, nil
 }
 func stringField(m map[string]any, k string) string { v, _ := m[k].(string); return v }
 func MakePlan(inv Inventory) (Plan, error) {
-	p := Plan{ID: inv.ID, Project: inv.Project, Sources: inv.Sources, Targets: map[string]string{}, Created: time.Now().UTC()}
+	p := Plan{ID: core.ID("migration-"), InventoryID: inv.ID, Project: inv.Project, Sources: inv.Sources, Targets: map[string]string{}, Created: time.Now().UTC()}
 	for _, s := range p.Sources {
 		if s.Target == "" {
 			continue

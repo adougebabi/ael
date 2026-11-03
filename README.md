@@ -16,7 +16,7 @@ GOCACHE=/tmp/ael-go-cache go build -o bin/ael ./cmd/ael
 /tmp/ael-install/bin/ael help
 ```
 
-正式用户级安装：`./scripts/install.sh "$HOME/.local" ./bin/ael`，将 `$HOME/.local/bin` 加入 PATH。升级重新构建后运行同一安装脚本，保存上一版本；已被用户替换的未知二进制拒绝覆盖。卸载 `./scripts/uninstall.sh "$HOME/.local"` 只删除已校验的受管二进制与安装摘要，保留项目/知识/数据库/备份。`scripts/package.sh` 构建 macOS arm64、Linux amd64，生成 tar.gz 与 SHA256SUMS。Linux 产物是否实际运行请看验收报告。
+正式用户级安装：`./scripts/install.sh "$HOME/.local" ./bin/ael`，将 `$HOME/.local/bin` 加入 PATH。升级重新构建后运行同一安装脚本，保存上一版本；已被用户替换的未知二进制拒绝覆盖。卸载 `./scripts/uninstall.sh "$HOME/.local"` 只删除已校验的受管二进制与安装摘要，保留项目/知识/数据库/备份。`scripts/package.sh` 构建 macOS arm64、Linux amd64，生成 tar.gz 与 SHA256SUMS。Linux 产物是否实际运行请看验收报告。解开 macOS 分发包后可运行 `./scripts/install.sh "$HOME/.local" ./ael-darwin-arm64`；安装脚本已随包附带。
 
 工具升级与 `ael refresh --project PATH` 更新项目资产分开。后者基于受管哈希，遇到用户修改返回 ASSET_CONFLICT；没有强制覆盖用户内容的开关。
 

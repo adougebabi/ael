@@ -401,3 +401,58 @@ func TestProposalSupersessionCyclesAndLongChinesePaths(t *testing.T) {
 		t.Fatal("long Chinese source missing")
 	}
 }
+
+func TestReplanAfterRollbackUsesNewRunAndStableTargets(t *testing.T) {
+	s, p := setup(t)
+	d, e := Validate(p, nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	r, e := Apply(s, p, nil, d)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = Rollback(s, r.ID); e != nil {
+		t.Fatal(e)
+	}
+	inv, e := Scan(s.Root)
+	if e != nil {
+		t.Fatal(e)
+	}
+	again, e := MakePlan(inv)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if again.ID == p.ID || again.InventoryID != p.InventoryID {
+		t.Fatal("new review must have a distinct run, same source inventory")
+	}
+	d, e = Validate(again, nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = Apply(s, again, nil, d); e != nil {
+		t.Fatal("replanned apply after rollback", e)
+	}
+}
+
+func TestInventoryStableAcrossUnknownMetadataMapOrder(t *testing.T) {
+	s, _ := setup(t)
+	p := filepath.Join(s.Root, ".trellis/tasks/active/task.json")
+	b, _ := os.ReadFile(p)
+	var m map[string]any
+	json.Unmarshal(b, &m)
+	m["unknown_z"] = 1
+	m["unknown_a"] = 2
+	b, _ = json.Marshal(m)
+	os.WriteFile(p, b, 0644)
+	first, e := Scan(s.Root)
+	if e != nil {
+		t.Fatal(e)
+	}
+	for i := 0; i < 10; i++ {
+		again, e := Scan(s.Root)
+		if e != nil || again.ID != first.ID {
+			t.Fatal("inventory changed for identical sources", again.ID, first.ID, e)
+		}
+	}
+}
