@@ -6,6 +6,7 @@ import (
 	"gopkg.in/yaml.v3"
 	"os"
 	"slices"
+	"time"
 )
 
 type Policy struct {
@@ -13,6 +14,7 @@ type Policy struct {
 	Schema                       int      `json:"schema" yaml:"schema"`
 	MaxRetries                   int      `json:"max_retries" yaml:"max_retries"`
 	MaxSeconds                   int      `json:"max_seconds" yaml:"max_seconds"`
+	LeaseSeconds                 int      `json:"lease_seconds,omitempty" yaml:"lease_seconds"`
 	Checks                       []Check  `json:"checks" yaml:"checks"`
 	CriticalKnowledge            []string `json:"critical_knowledge" yaml:"critical_knowledge"`
 	DeliveryRequiresConfirmation bool     `json:"delivery_requires_confirmation" yaml:"delivery_requires_confirmation"`
@@ -45,7 +47,7 @@ func (s *Service) normalize(d *Definition) error {
 	if d.MaxRetries <= 0 {
 		d.MaxRetries = p.MaxRetries
 	}
-	if d.MaxSeconds <= 0 {
+	if d.MaxSeconds == 0 {
 		d.MaxSeconds = p.MaxSeconds
 	}
 	for _, required := range p.Checks {
@@ -70,6 +72,20 @@ func (s *Service) normalize(d *Definition) error {
 		}
 	}
 	return nil
+}
+
+func (s *Service) leaseDuration() (time.Duration, error) {
+	p, e := s.Policy()
+	if e != nil {
+		return 0, e
+	}
+	if p.LeaseSeconds == 0 {
+		return 30 * time.Minute, nil
+	}
+	if p.LeaseSeconds < 60 {
+		return 0, Error("INVALID_LEASE_DURATION", "lease_seconds must be at least 60")
+	}
+	return time.Duration(p.LeaseSeconds) * time.Second, nil
 }
 
 func (s *Service) policyHash() (string, error) {

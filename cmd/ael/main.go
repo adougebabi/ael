@@ -6,10 +6,15 @@ import (
 	"ael/internal/execution"
 	"ael/internal/knowledge"
 	"ael/internal/migration"
+	"ael/internal/process"
 	"ael/internal/server"
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -77,7 +82,7 @@ func run(raw []string) (any, error) {
 	executor := a.get("executor", "attached")
 	switch cmd {
 	case "", "help":
-		return map[string]any{"commands": []string{"version", "doctor", "init [--dry-run] [--bundle-dir DIR]", "refresh", "task create --file definition.json", "task show|plan --task ID", "task list", "task edit --task ID --file definition.json --reason TEXT", "task cancel --task ID --reason TEXT", "claim --task ID --executor NAME [--unit CHECK]", "heartbeat --task ID --attempt ID --token TOKEN", "context --task ID", "submit --file submission.json", "next --task ID", "resume --task ID [--ack-stopped] [--return-to execute]", "verify --task ID --check ID", "confirm --task ID --kind plan|revision|delivery --decision approve|adjust|reject --revision N --plan-revision N --candidate HASH --reason TEXT --executor PERSON", "confirm --kind review --task ID --check ID --artifacts report.md --reason TEXT --executor PERSON", "dashboard [--addr 127.0.0.1:7331]", "loop run --task ID --config executor.json | --codex [--session EXACT_ID]", "executor probe", "workspace bind --path WORKTREE", "knowledge search --query TEXT", "knowledge read --id ID", "migrate scan --out REPORT", "migrate plan --inventory REPORT/inventory.json --out REPORT", "migrate validate --plan REPORT/plan.json [--proposal proposal.json]", "migrate apply --plan REPORT/plan.json --approved-digest HASH [--proposal proposal.json]", "migrate verify|repair|rollback --migration ID", "activate --migration ID --approved-digest HASH --ack-drained", "storage stats", "storage backup --out NEW_DIR", "storage restore --from EXPORT_DIR", "storage prune [--before RFC3339] [--apply]", "repair"}, "global": "--project PATH; all output JSON; errors stderr exit 1", "definition": core.Definition{}, "submission": core.Submission{}, "step_result": core.StepResult{}}, nil
+		return map[string]any{"commands": []string{"version", "doctor", "init [--dry-run] [--bundle-dir DIR]", "refresh", "task create --file definition.json", "task show|plan --task ID", "task list", "task edit --task ID --file definition.json --reason TEXT", "task cancel --task ID --reason TEXT", "task delete --task ID --reason TEXT", "task budget --task ID --max-seconds 0 --reason TEXT", "claim --task ID --executor NAME [--unit CHECK] [--owner-pid PERSISTENT_AGENT_PID]", "heartbeat --task ID --attempt ID --token TOKEN", "context --task ID", "submit --file submission.json", "next --task ID", "resume --task ID [--ack-stopped] [--return-to execute]", "verify --task ID --check ID", "confirm --task ID --kind plan|revision|delivery --decision approve|adjust|reject --revision N --plan-revision N --candidate HASH --reason TEXT --executor PERSON", "confirm --kind review --task ID --check ID --artifacts report.md --reason TEXT --executor PERSON", "dashboard [--addr 0.0.0.0:7331]", "loop run --task ID --config executor.json | --codex [--session EXACT_ID]", "executor probe", "workspace bind --path WORKTREE", "knowledge search --query TEXT", "knowledge read --id ID", "migrate scan --out REPORT", "migrate plan --inventory REPORT/inventory.json --out REPORT", "migrate validate --plan REPORT/plan.json [--proposal proposal.json]", "migrate apply --plan REPORT/plan.json --approved-digest HASH [--proposal proposal.json]", "migrate verify|repair|rollback --migration ID", "activate --migration ID --approved-digest HASH --ack-drained", "storage stats", "storage backup --out NEW_DIR", "storage restore --from EXPORT_DIR", "storage prune [--before RFC3339] [--apply]", "repair"}, "global": "--project PATH; all output JSON; errors stderr exit 1", "definition": core.Definition{}, "submission": core.Submission{}, "step_result": core.StepResult{}}, nil
 	case "version":
 		return map[string]string{"version": bootstrap.Version, "build": build}, nil
 	case "doctor":
@@ -168,7 +173,10 @@ func run(raw []string) (any, error) {
 		}
 		return svc.Prune(before, a.has("apply"))
 	case "repair":
-		return map[string]string{"outbox": "repaired or conflict retained"}, svc.Store.Flush()
+		if e = svc.Store.Flush(); e == nil {
+			e = svc.RecoverDefinitions()
+		}
+		return map[string]string{"outbox": "repaired or conflict retained", "records": "project checkpoints reconciled"}, e
 	case "task create":
 		var d core.Definition
 		if e = input(a.get("file", ""), &d); e != nil {
@@ -181,6 +189,12 @@ func run(raw []string) (any, error) {
 			return nil, e
 		}
 		return svc.Edit(id, d, a.get("reason", ""))
+	case "task budget":
+		seconds, e := strconv.Atoi(a.get("max-seconds", ""))
+		if e != nil {
+			return nil, e
+		}
+		return svc.SetTimeLimit(id, seconds, a.get("reason", ""))
 	case "task list":
 		var limit, offset, days int
 		fmt.Sscan(a.get("limit", "20"), &limit)
@@ -190,7 +204,55 @@ func run(raw []string) (any, error) {
 	case "task show", "task plan", "next":
 		return svc.Next(id)
 	case "claim":
-		return svc.Claim(id, a.get("unit", ""), executor, a.get("workspace", ""), a.get("session", ""))
+		owner := 0
+		identity := ""
+		if value := a.get("owner-pid", ""); value != "" {
+			owner, e = strconv.Atoi(value)
+			if e != nil {
+				return nil, e
+			}
+			identity, e = process.Identity(owner)
+			if e != nil {
+				return nil, e
+			}
+		}
+		n, e := svc.Claim(id, a.get("unit", ""), executor, a.get("workspace", ""), a.get("session", ""))
+		if e != nil || owner == 0 {
+			return n, e
+		}
+		return startKeeper(svc, id, n, owner, identity)
+	case "lease watch":
+		owner, e := strconv.Atoi(a.get("owner-pid", ""))
+		if e != nil {
+			return nil, e
+		}
+		identity := os.Getenv("AEL_LEASE_OWNER_ID")
+		if identity == "" {
+			return nil, core.Error("OWNER_IDENTITY_REQUIRED", "use claim --owner-pid with the Agent's persistent PID")
+		}
+		attempt, token := a.get("attempt", ""), os.Getenv("AEL_LEASE_TOKEN")
+		current, e := process.Identity(owner)
+		if e != nil {
+			return nil, e
+		}
+		if current != identity {
+			return nil, core.Error("OWNER_CHANGED", "")
+		}
+		if _, e = svc.Heartbeat(id, attempt, token); e != nil {
+			return nil, e
+		}
+		if os.Getenv("AEL_LEASE_READY") == "1" {
+			ready := os.NewFile(3, "lease-ready")
+			if ready == nil {
+				return nil, core.Error("KEEPER_HANDSHAKE_FAILED", "")
+			}
+			_, e = ready.Write([]byte{1})
+			ready.Close()
+			if e != nil {
+				return nil, e
+			}
+		}
+		return nil, svc.WatchLease(context.Background(), id, attempt, token, owner, identity, 20*time.Second)
 	case "heartbeat":
 		return svc.Heartbeat(id, a.get("attempt", ""), a.get("token", ""))
 	case "submit":
@@ -205,6 +267,8 @@ func run(raw []string) (any, error) {
 		return svc.Resume(id, a.get("return-to", ""), a.has("ack-stopped"))
 	case "task cancel":
 		return svc.Cancel(id, a.get("reason", ""))
+	case "task delete":
+		return svc.Delete(id, a.get("reason", ""))
 	case "task pause":
 		return svc.Pause(id, a.get("reason", ""))
 	case "confirm":
@@ -246,8 +310,72 @@ func run(raw []string) (any, error) {
 		}
 		return nil, core.Error("KNOWLEDGE_MISSING", a.get("id", ""))
 	case "dashboard":
-		return nil, server.Listen(svc, a.get("addr", "127.0.0.1:7331"), nil)
+		return nil, server.Listen(svc, a.get("addr", "0.0.0.0:7331"), nil)
 	default:
 		return nil, core.Error("UNKNOWN_COMMAND", cmd)
 	}
+}
+
+// The owner is persisted before spawning. Readiness proves the detached keeper
+// opened the same runtime and renewed the claim before success is reported.
+func startKeeper(s *core.Service, id string, n core.Next, owner int, identity string) (core.Next, error) {
+	original := n.Attempt
+	var e error
+	n, e = s.BindLeaseOwner(id, original.ID, original.Token, owner, identity)
+	if e != nil {
+		return n, e
+	}
+	failed := func(e error) (core.Next, error) {
+		_, _ = s.Interrupt(id, original.ID, original.Token, "attached keeper failed to start: "+e.Error())
+		return n, e
+	}
+	exe, e := os.Executable()
+	if e != nil {
+		return failed(e)
+	}
+	reader, writer, e := os.Pipe()
+	if e != nil {
+		return failed(e)
+	}
+	defer reader.Close()
+	defer writer.Close()
+	dir := filepath.Join(s.Store.Dir, "artifacts", original.ID)
+	if e = os.MkdirAll(dir, 0700); e != nil {
+		return failed(e)
+	}
+	log, e := os.OpenFile(filepath.Join(dir, "keeper.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+	if e != nil {
+		return failed(e)
+	}
+	defer log.Close()
+	watcher := process.Command(context.Background(), exe, "lease", "watch", "--project", s.Root, "--task", id, "--attempt", original.ID, "--owner-pid", strconv.Itoa(owner))
+	watcher.Env = append(os.Environ(), "AEL_LEASE_TOKEN="+original.Token, "AEL_LEASE_OWNER_ID="+identity, "AEL_LEASE_READY=1")
+	watcher.ExtraFiles = []*os.File{writer}
+	watcher.Stderr = log
+	if e = watcher.Start(); e != nil {
+		return failed(e)
+	}
+	writer.Close()
+	ready := make(chan error, 1)
+	go func() {
+		var marker [1]byte
+		_, e := io.ReadFull(reader, marker[:])
+		if e == nil && marker[0] != 1 {
+			e = core.Error("KEEPER_HANDSHAKE_FAILED", "")
+		}
+		ready <- e
+	}()
+	select {
+	case e = <-ready:
+	case <-time.After(5 * time.Second):
+		e = core.Error("KEEPER_START_TIMEOUT", "")
+	}
+	if e != nil {
+		_ = process.StopGroup(watcher.Process.Pid)
+		_ = watcher.Wait()
+		return failed(e)
+	}
+	n.KeeperPID = watcher.Process.Pid
+	_ = watcher.Process.Release()
+	return n, nil
 }

@@ -59,7 +59,7 @@ func Fingerprint(root string) (string, error) {
 			}
 		}
 		if d.IsDir() {
-			if d.Name() == ".git" || d.Name() == "node_modules" || rel == ".ael/work-items" || rel == ".ael/outcomes" || rel == ".ael/imports" || rel == ".ael/bin" {
+			if d.Name() == ".git" || d.Name() == "node_modules" || rel == ".ael/work-items" || rel == ".ael/outcomes" || rel == ".ael/records" || rel == ".ael/deleted" || rel == ".ael/imports" || rel == ".ael/bin" {
 				return filepath.SkipDir
 			}
 			return nil

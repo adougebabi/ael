@@ -23,7 +23,16 @@ test('准确修订确认、五板块同时存在、离线本地资源',async({pa
  const title='严格修订确认 '+Date.now(),id=await make(title,{preset:'strict'});await step(id);await step(id);await page.goto('/');await page.locator('[data-board=confirmation] .task').filter({hasText:title}).click();await page.getByLabel('理由 / 人工验收结论').fill('已审阅当前定义与计划，要求补足约束');await page.getByRole('button',{name:'要求调整',exact:true}).click();await expect(page.locator('.detail')).toContainText('计划 · 修订 2');await page.getByRole('button',{name:'关闭 ×'}).click();
  const confirmId=await make('待确认的关键契约',{preset:'strict'});await step(confirmId);await step(confirmId);await make('等待下一执行者',{type:'docs'});const active=await make('真实已领取的进行任务',{type:'bug'});expect((await request.post('/api/action',{headers,data:{action:'claim',id:active,executor:'held-browser-attempt'}})).ok()).toBeTruthy();await page.waitForTimeout(3000);
  for(const board of ['active','pending','confirmation','completed','cancelled'])await expect(page.locator(`[data-board=${board}] .task`).first()).toBeVisible();
- await page.route('**/*',route=>{const u=new URL(route.request().url());if(u.hostname!=='127.0.0.1')return route.abort();return route.continue()});await page.reload();await expect(page.locator('[data-board]')).toHaveCount(5);await page.screenshot({path:'/tmp/ael-browser-results/five-boards.png',fullPage:true});
+ const allowedHost=new URL(page.url()).hostname;await page.route('**/*',route=>{const u=new URL(route.request().url());if(u.hostname!==allowedHost)return route.abort();return route.continue()});await page.reload();await expect(page.locator('[data-board]')).toHaveCount(5);await page.screenshot({path:'/tmp/ael-browser-results/five-boards.png',fullPage:true});
  // Leave fixture unlocked after screenshot for repeatable CLI/UI tests.
  expect((await request.post('/api/action',{headers,data:{action:'resume',id:active,ack_stopped:true}})).ok()).toBeTruthy();
+});
+
+test('验证类型原名、真实删除与重新加载不复活',async({page})=>{
+ await page.goto('/');await page.getByRole('button',{name:'＋ 创建任务'}).click();
+ for(const type of ['test','qa','verify'])await expect(page.getByRole('combobox',{name:'类型',exact:true}).locator('option',{hasText:new RegExp('^'+type+'$')})).toHaveCount(1);
+ const title='qa 专项误建任务 '+Date.now();await page.getByLabel('标题',{exact:true}).fill(title);await page.getByRole('combobox',{name:'类型',exact:true}).selectOption('qa');await page.getByLabel('验收条件（每行一条）').fill('专项验证不能以通用 UI 规范检查代替');await page.getByRole('button',{name:'创建并生成计划'}).click();
+ await expect(page.locator('[data-board=pending] .task').filter({hasText:title})).toContainText('qa');await expect(page.locator('.detail')).toContainText('不限时');
+ await page.getByLabel('理由 / 人工验收结论').fill('误建，删除浏览器测试工作项');page.once('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'永久删除任务',exact:true}).click();
+ await expect(page.getByRole('status')).toContainText('deleted');await expect(page.locator('.task').filter({hasText:title})).toHaveCount(0);await page.reload();await expect(page.locator('[data-board]')).toHaveCount(5);await expect(page.locator('.task').filter({hasText:title})).toHaveCount(0);
 });

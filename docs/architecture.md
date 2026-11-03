@@ -12,4 +12,8 @@ Codex官方 noninteractive/skills 文档核对于2026-11-03；本机0.144.1。ex
 
 终态使用专用Outcome投影，排除完整Attempt、租约token、PID和工作区绝对路径；迁移提交文件仅携带相对映射与hash，原始快照在运行目录。项目policy.yaml内容hash绑定任务，变化时生成新定义/计划修订并等待确认；显式轻量预设不能降低风险信号所要求的门禁。
 
-0.1.2项目分发：./ael为POSIX入口，.ael/toolchain.lock绑定平台与SHA-256，四平台独立可执行文件随项目Git提交。工具文件与本机运行状态分离；候选包含启动器和锁文件，.ael/bin不重复作为源码输入。init/refresh通过受管哈希保护与bundle-install恢复记录安装工具资产，平台包不写入SQLite BLOB。
+0.1.3项目分发：./ael为POSIX入口，.ael/toolchain.lock绑定平台与SHA-256，四平台独立可执行文件随项目Git提交。工具文件与本机运行状态分离；候选包含启动器和锁文件，.ael/bin不重复作为源码输入。init/refresh通过受管哈希保护与bundle-install恢复记录安装工具资产，平台包不写入SQLite BLOB。
+
+0.1.3可用性修正：默认无时间硬上限，显式正预算计有效执行区间并合并重叠；可单独调整运行预算，不改验收版本。默认30分钟租约，Attached可绑定真实常驻进程身份（含启动时间防PID复用）独立续约，Managed/verify持有生命周期续约并在失败时停止子进程；过期fence及未知旧writer仍不得自动恢复。
+
+新增records为仓库内脱敏检查点/历史投影，与SQLite更新使用同一outbox事务。只导入缺失/外部更新的记录，不把旧检查/批准当作当前授权；未完任务暂停待恢复，验证/交付需重新执行。DB仍是本机调度权威；records不携带租约、token、PID、session、workspace或审批。删除清理owned文件/DB记录，deleted小型标记传播跨clone删除，依赖与活跃writer保护保留。Host与Origin跟随实际请求authority校验，默认允许0.0.0.0监听；会话token不充当远程身份认证。

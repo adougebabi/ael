@@ -22,6 +22,13 @@ func (s *Service) Verify(id, check, executor string) (Next, error) {
 	}
 	a := n.Attempt
 	t := n.Task
+	leaseCtx, leaseCancel := context.WithCancel(context.Background())
+	defer leaseCancel()
+	keeper, e := s.KeepLease(leaseCtx, id, a, 20*time.Second, leaseCancel)
+	if e != nil {
+		return n, e
+	}
+	defer keeper.Stop()
 	var c Check
 	for _, x := range t.Definition.Checks {
 		if x.ID == check {
@@ -37,7 +44,7 @@ func (s *Service) Verify(id, check, executor string) (Next, error) {
 		if seconds <= 0 {
 			seconds = 60
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(seconds)*time.Second)
+		ctx, cancel := context.WithTimeout(leaseCtx, time.Duration(seconds)*time.Second)
 		defer cancel()
 		cmd := process.Command(ctx, c.Command[0], c.Command[1:]...)
 		cmd.Dir = a.Workspace
@@ -54,29 +61,25 @@ func (s *Service) Verify(id, check, executor string) (Next, error) {
 		background := false
 		runErr := cmd.Start()
 		if runErr == nil {
-			_ = s.RecordProcess(id, a.ID, a.Token, cmd.Process.Pid)
-			done := make(chan struct{})
-			go func() {
-				tick := time.NewTicker(20 * time.Second)
-				defer tick.Stop()
-				for {
-					select {
-					case <-done:
-						return
-					case <-tick.C:
-						_, _ = s.Heartbeat(id, a.ID, a.Token)
-					}
-				}
-			}()
+			if e = s.RecordProcess(id, a.ID, a.Token, cmd.Process.Pid); e != nil {
+				cancel()
+				_ = cmd.Wait()
+				f.Close()
+				_, _ = s.Interrupt(id, a.ID, a.Token, "checker process registration failed: "+e.Error())
+				return n, e
+			}
 			runErr = cmd.Wait()
 			if process.GroupAlive(cmd.Process.Pid) {
 				background = true
 				_ = process.StopGroup(cmd.Process.Pid)
 				runErr = Error("BACKGROUND_PROCESSES", "checker left a process group alive")
 			}
-			close(done)
 		}
 		_ = f.Close()
+		if leaseErr := keeper.Err(); leaseErr != nil {
+			_, _ = s.Interrupt(id, a.ID, a.Token, "lease renewal failed; checker stopped: "+leaseErr.Error())
+			return n, Error("LEASE_LOST", leaseErr.Error())
+		}
 		ref := "runtime:artifacts/" + a.ID + ".log"
 		ev.Artifacts = []string{ref}
 		result.Artifacts = ev.Artifacts
@@ -184,6 +187,9 @@ func (s *Service) Review(id, check, actor, reason string, refs []string) (Next, 
 }
 func (s *Service) Artifact(ref string) ([]byte, error) { return s.artifact(ref) }
 func (s *Service) RecoverDefinitions() error {
+	if e := s.recoverRecords(); e != nil {
+		return e
+	}
 	paths, e := filepath.Glob(filepath.Join(s.Root, ".ael/work-items/*.md"))
 	if e != nil {
 		return e
@@ -213,12 +219,13 @@ func (s *Service) RecoverDefinitions() error {
 				t.Status = historic.Status
 				t.Completed = historic.Completed
 				t.Historical = true
-				t.Result = "historical summary; original runtime evidence not restored"
+				t.Result = historic.Result
+				t.Candidate = historic.Candidate
 				t.Step = "done"
 			}
 		}
 		if e = s.Store.Write(func(tx *store.Tx) error {
-			if e := save(tx, &t); e != nil {
+			if e := s.save(tx, &t); e != nil {
 				return e
 			}
 			return tx.Event(d.ID, "definition_recovered", map[string]string{"result": t.Result})
@@ -226,7 +233,7 @@ func (s *Service) RecoverDefinitions() error {
 			return e
 		}
 	}
-	return nil
+	return s.PublishRecords()
 }
 func (s *Service) ImportTask(t Task) error {
 	policyHash, e := s.policyHash()
@@ -241,7 +248,7 @@ func (s *Service) ImportTask(t Task) error {
 	b := definitionBytes(t.Definition)
 	t.DefinitionHash = store.Hash(b)
 	e = s.Store.Write(func(tx *store.Tx) error {
-		if e := save(tx, &t); e != nil {
+		if e := s.save(tx, &t); e != nil {
 			return e
 		}
 		if e := tx.File(p, b); e != nil {
@@ -265,7 +272,23 @@ func (s *Service) ImportTask(t Task) error {
 	return e
 }
 func (s *Service) DeleteImported(id string) error {
-	_, e := s.Store.DB.Exec("DELETE FROM tasks WHERE id=?", id)
+	e := s.Store.Write(func(tx *store.Tx) error {
+		p, e := s.recordPath(id)
+		if e != nil {
+			return e
+		}
+		if e = tx.DeleteFile(p); e != nil {
+			return e
+		}
+		if _, e = tx.Exec("DELETE FROM metadata WHERE key=?", "record:"+id); e != nil {
+			return e
+		}
+		_, e = tx.Exec("DELETE FROM tasks WHERE id=?", id)
+		return e
+	})
+	if e == nil {
+		e = s.Store.Flush()
+	}
 	return e
 }
 
@@ -313,6 +336,9 @@ func (s *Service) RestoreImportedSnapshot(t Task, definition, outcome []byte) er
 			completed = t.Completed.Format(time.RFC3339Nano)
 		}
 		if _, e = tx.Exec("INSERT INTO tasks(id,body,status,step,updated,completed) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body,status=excluded.status,step=excluded.step,updated=excluded.updated,completed=excluded.completed", t.Definition.ID, string(b), t.Status, t.Step, t.Updated.Format(time.RFC3339Nano), completed); e != nil {
+			return e
+		}
+		if e = s.writeRecord(tx, t); e != nil {
 			return e
 		}
 		if e = tx.File(p, definition); e != nil {

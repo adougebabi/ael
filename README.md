@@ -2,7 +2,7 @@
 
 项目可携带、同机进程协作的工程闭环工具。Go CLI 与本地 HTTP 服务共用领域内核，Vue 3 + TypeScript 看板随二进制嵌入。一个 Agent 可连续执行，多 Agent 可逐步骤交接；验证失败保留在同一 WorkItem 内。无需数据库服务器、Node 前端服务、模型 API Key 或云基础设施。
 
-实现状态与实测边界以 [验收报告](docs/acceptance-report.md) 为准。原始需求完整保留在 `AEL-V1-local-implementation-prompt.md`。当前仅在测试夹具和临时项目验证，未迁移摇光、未执行真实生产发布。
+实现状态与实测边界以 [验收报告](docs/acceptance-report.md) 为准。原始需求完整保留在 `AEL-V1-local-implementation-prompt.md`。工具分发与项目初始化已在本机项目使用；迁移器的通用验收使用完整夹具。未执行真实生产发布。
 
 ## 项目内直接使用
 
@@ -17,7 +17,7 @@
 
 启动器检测macOS/Linux与ARM64/AMD64，校验锁定SHA-256后运行对应二进制。不回退到PATH中的其他版本；未知平台、资源缺失或校验失败会明确报错。需要native Windows时不能把此Unix分发标为已支持，可在WSL使用Linux版本。
 
-新机器不重复init、不改变project_id。首次需要运行状态时，在本机仓库外建立SQLite，读取已提交定义和终态摘要；不复活旧租约、PID或审批。原始产物和运行历史需要显式导出/导入。
+新机器不重复init、不改变project_id。首次运行时在仓库外建立SQLite，读取已提交定义、`.ael/records/<id>.json` 检查点和脱敏历史；不复活旧租约、PID、会话或审批。终态保留原结果和完成时间，标为历史未复验。未完任务进入恢复确认，历史检查不能满足当前门禁，验证/交付检查点回到执行并重新验收。原始日志、截图和完整事件仍需 `storage backup/restore`。
 
 ## 工具构建与首次初始化
 
@@ -27,7 +27,7 @@
 ./scripts/package.sh
 ```
 
-产物包括四个运行时、`ael-toolchain.lock`、许可证与`ael-0.1.2-unix.tar.gz`。使用适合初始化机器的二进制，例如macOS ARM64：
+产物包括四个运行时、`ael-toolchain.lock`、许可证与`ael-0.1.3-unix.tar.gz`。使用适合初始化机器的二进制，例如macOS ARM64：
 
 ```sh
 ./dist/ael-darwin-arm64 init --project /path/to/project --bundle-dir ./dist
@@ -49,8 +49,10 @@
 ./dist/ael-darwin-arm64 init --project /path/to/project --bundle-dir ./dist --dry-run
 ./dist/ael-darwin-arm64 init --project /path/to/project --bundle-dir ./dist
 /path/to/project/ael doctor
-/path/to/project/ael dashboard --addr 127.0.0.1:7331
+/path/to/project/ael dashboard --addr 0.0.0.0:7331
 ```
+
+看板默认监听 `0.0.0.0:7331`，可用本机或局域网 IP 访问；只想本机访问时显式用 `--addr 127.0.0.1:7331`。保留端口、Host 和同源 Origin 校验；会话 token 是防跨站凭证，不是用户登录，能连到端口的用户可操作看板。
 
 初始化不运行安装、构建、旧 hooks 或发布。生成必要配置、项目启动器、锁定平台二进制、短 AGENTS 受管块与 `.agents/skills/ael-work`、`.agents/skills/ael-migrate-legacy`。已有 Trellis 时进入 shadow，不接管任务。现有构建清单列入检测结果；尚未配置的检查/环境不会被猜测。`project.yaml`、policy.yaml 与任务 frontmatter 使用 JSON（合法 YAML 子集），便于确定解析与审阅。政策也可写标准 YAML；知识 frontmatter 支持 YAML。
 
@@ -97,7 +99,7 @@ ael confirm --kind review --task ID --check review --executor person --reason '�
 
 ## 连续执行与交接
 
-Attached 使用 claim/context/submit/next 持续执行；Handoff 提交后释放执行权，下一个执行者自己 claim，不需要前一 Bot 安排下游。租约两分钟，长步骤用 heartbeat；过期 token 拒绝。相同幂等键及相同结果返回原响应，内容不同拒绝。
+Attached 使用 claim/context/submit/next 持续执行；Handoff 提交后释放执行权，下一个执行者自己 claim，不需要前一 Bot 安排下游。默认租约三十分钟，可通过 `policy.lease_seconds` 配置（至少60秒）；过期 token 拒绝。Attached 可在 claim 时用 `--owner-pid PERSISTENT_AGENT_PID` 启动独立续约器（每20秒），不受模型排队和工具等待影响。PID 必须是当前 Agent 的常驻进程，不能绑定短命 shell 或无关进程；owner 身份仅保存在本机运行库，owner 退出时停止续约并保留写锁供核实恢复；owner 仍存活时，即使 --ack-stopped 也不能释放其锁。keeper 启动需握手成功，PID 在 claim 的 keeper_pid 返回，错误日志在运行目录 artifacts/<attempt>/keeper.log。Attached 无权杀掉宿主 Agent，续约失败时保留 fence 并记录中断；受管子进程则会被停止。无法确定 owner 时省略该参数，在租约有效期内手动 heartbeat。相同幂等键及相同结果返回原响应，内容不同拒绝。
 
 ```sh
 ael heartbeat --task ID --attempt AT-ID --token TOKEN --project PATH
@@ -107,7 +109,9 @@ ael resume --task ID --ack-stopped --project PATH
 
 `--ack-stopped` 是操作者对旧进程已停的明确核实；AEL 不把超时当作进程已停止。中断执行保留工作区保护。隔离 worktree 用 `workspace bind --path WORKTREE`（需同 project_id），随后 claim --workspace；同一可写目录默认互斥，验证检查可独立并行。
 
-Managed 通用命令配置：`{"command":["/absolute/executor"],"max_steps":20,"timeout_seconds":300}`。子进程得到 AEL_CONTEXT、AEL_RESULT、AEL_STEP，只执行当前 Attempt，最终结果写 AEL_RESULT，Schema 在 schemas/step-result.json。stdout/stderr 是原始进程日志，不是节点完成证明。
+默认不设任务时间上限（`policy.max_seconds: 0`），重试和重复失败保护保留。正数 `max_seconds` 仍限制有效执行区间，过期后的空等不再累计，并行检查的重叠时间只计算一次；定义中 `-1` 可显式覆盖项目预算为不限时。旧任务可直接执行 `./ael task budget --task ID --max-seconds 0 --reason 调整时间预算`，不改变验收版本或门禁。refresh 只升级完全未修改的旧默认政策，用户自定义政策和显式任务预算不会被擅自改写。
+
+Managed 通用命令配置：`{"command":["/absolute/executor"],"max_steps":20,"timeout_seconds":0}`。子进程得到 AEL_CONTEXT、AEL_RESULT、AEL_STEP，只执行当前 Attempt，最终结果写 AEL_RESULT，Schema 在 schemas/step-result.json。stdout/stderr 是原始进程日志，不是节点完成证明。`timeout_seconds: 0` 不设置子进程时间上限，正数才设置；独立续约覆盖准备到提交，续约或进程登记失败会停止执行器，不吞掉错误。
 
 ```sh
 ael loop run --task ID --config /tmp/executor.json --project PATH
@@ -126,6 +130,10 @@ Codex 适配已核对本机 0.144.1 help 与官方文档，不使用 --last、�
 
 `task list` 返回 items/counts/total，支持 --limit、--offset、--board、--query、--days（分页按板块）。
 
+支持 feature、bug、improvement、refactor、research、docs、chore、test、qa、verify；验证类名称原样保存，默认 Fast，风险仍升级 Strict。
+
+误建任务可用 `./ael task delete --task ID --reason 理由` 真正删除，或在看板填写理由后点击“永久删除任务”。活跃/未核实停止的执行和入向依赖/父子/反馈引用会阻止删除。删除清理定义、记录、终态、任务事件、提交和所属原始日志；小型 `.ael/deleted/<id>.json` 删除标记随 Git 传播，避免其他已打开过项目的机器复活任务。
+
 task edit --file 定义 --reason 理由生成新定义/计划修订，清空旧证据并请求准确版本确认。外部直接编辑定义也会被检测。已完成任务的新反馈用 feedback_of 创建关联新任务，保留旧历史。父子关系不自动变依赖，取消依赖不能满足门禁。
 
 ```sh
@@ -137,7 +145,7 @@ ael storage prune --before 2026-01-01T00:00:00Z --project PATH
 ael repair --project PATH
 ```
 
-备份使用 VACUUM INTO 一致数据库快照，加原始产物与校验清单。恢复到匹配定义的全新运行实例，拒绝覆盖已有 Attempt；不复活旧租约/token/PID/审批。Git clone 只能恢复定义及终态摘要，历史显示未复验，不能恢复完整事件/证据；完整运行数据需要 export。prune 默认预览，仅清理终态任务的旧产物，不清理进行中与待确认依赖；摘要/hash 保留，UI 显示原件已清理或缺失。
+备份使用 VACUUM INTO 一致数据库快照，加原始产物与校验清单。恢复到匹配定义的全新运行实例，拒绝覆盖已有 Attempt；不复活旧租约/token/PID/审批。Git clone 会恢复定义、检查点与脱敏 Attempt/检查摘要，历史显示未复验；不会恢复完整事件、原始证据和运行授权。已有运行库在重新打开或执行 `repair` 时导入 Git 更新的记录，活跃本地执行与外部检查点冲突时拒绝覆盖；这不是跨机并发运行数据库。完整运行数据仍需要 backup/restore。请将 `.ael/work-items`、`records`、`outcomes`、`deleted` 一起提交；没有提交/传输的本地修改不会自动出现在另一台电脑。prune 默认预览，仅清理终态任务的旧产物，不清理进行中与待确认依赖；摘要/hash 保留，UI 显示原件已清理或缺失。
 
 迁移流程见 [migration.md](docs/migration.md)，数据边界见 [architecture.md](docs/architecture.md)，实测见 [capacity-report.md](docs/capacity-report.md)。本机同用户工具不是恶意程序的防篡改沙箱，SQLite 不支持网络盘跨机并发。
 

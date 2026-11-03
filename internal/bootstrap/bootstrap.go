@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-const Version = "0.1.2"
+const Version = "0.1.3"
 
 type Config struct {
 	Schema    int    `json:"schema"`
@@ -128,9 +128,25 @@ func Init(root string, dry, refresh bool) (Report, error) {
 	if newProject {
 		b, _ := json.MarshalIndent(c, "", "  ")
 		targets[".ael/project.yaml"] = b
-		targets[".ael/policy.yaml"] = []byte("{\"schema\":1,\"max_retries\":3,\"max_seconds\":3600,\"checks\":[],\"critical_knowledge\":[],\"delivery_requires_confirmation\":true}\n")
-		targets[".ael/executor.example.json"] = []byte(`{"command":[],"codex":false,"workspace":"","session":"","max_steps":20,"timeout_seconds":300}` + "\n")
+		targets[".ael/policy.yaml"] = []byte("{\"schema\":1,\"max_retries\":3,\"max_seconds\":0,\"lease_seconds\":1800,\"checks\":[],\"critical_knowledge\":[],\"delivery_requires_confirmation\":true}\n")
+		targets[".ael/executor.example.json"] = []byte(`{"command":[],"codex":false,"workspace":"","session":"","max_steps":20,"timeout_seconds":0}` + "\n")
 		targets[".ael/project.md"] = []byte("# 项目定义\n\n请填写目标、非目标与关键边界。尚未配置自动验收或发布命令。\n")
+	}
+	if refresh && !newProject {
+		// Upgrade only the exact, untouched former defaults. User policy is retained.
+		oldDefaults := map[string]string{
+			".ael/policy.yaml":           "{\"schema\":1,\"max_retries\":3,\"max_seconds\":3600,\"checks\":[],\"critical_knowledge\":[],\"delivery_requires_confirmation\":true}\n",
+			".ael/executor.example.json": `{"command":[],"codex":false,"workspace":"","session":"","max_steps":20,"timeout_seconds":300}` + "\n",
+		}
+		for rel, oldDefault := range oldDefaults {
+			b, e := os.ReadFile(filepath.Join(root, rel))
+			if e != nil {
+				return r, e
+			}
+			if string(b) == oldDefault && manifest[rel] == store.Hash(b) {
+				targets[rel] = []byte(strings.ReplaceAll(strings.ReplaceAll(oldDefault, "\"max_seconds\":3600", "\"max_seconds\":0,\"lease_seconds\":1800"), "\"timeout_seconds\":300", "\"timeout_seconds\":0"))
+			}
+		}
 	}
 	for _, name := range []string{"ael-work", "ael-migrate-legacy"} {
 		b, e := assets.Files.ReadFile("skills/" + name + "/SKILL.md")

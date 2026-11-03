@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -50,22 +51,24 @@ type Plan struct {
 	Approved bool     `json:"approved" yaml:"approved"`
 }
 type Attempt struct {
-	ID        string     `json:"id" yaml:"id"`
-	Unit      string     `json:"unit" yaml:"unit"`
-	Executor  string     `json:"executor" yaml:"executor"`
-	Session   string     `json:"session" yaml:"session"`
-	Workspace string     `json:"workspace" yaml:"workspace"`
-	Input     string     `json:"input_version" yaml:"input_version"`
-	Candidate string     `json:"candidate_version" yaml:"candidate_version"`
-	Started   time.Time  `json:"started" yaml:"started"`
-	Ended     *time.Time `json:"ended" yaml:"ended"`
-	Lease     time.Time  `json:"lease_until" yaml:"lease_until"`
-	Token     string     `json:"token,omitempty" yaml:"token"`
-	Fence     int        `json:"fence" yaml:"fence"`
-	Status    string     `json:"status" yaml:"status"`
-	Reason    string     `json:"reason" yaml:"reason"`
-	Outputs   []string   `json:"outputs" yaml:"outputs"`
-	PID       int        `json:"pid" yaml:"pid"`
+	ID            string     `json:"id" yaml:"id"`
+	Unit          string     `json:"unit" yaml:"unit"`
+	Executor      string     `json:"executor" yaml:"executor"`
+	Session       string     `json:"session" yaml:"session"`
+	Workspace     string     `json:"workspace" yaml:"workspace"`
+	Input         string     `json:"input_version" yaml:"input_version"`
+	Candidate     string     `json:"candidate_version" yaml:"candidate_version"`
+	Started       time.Time  `json:"started" yaml:"started"`
+	Ended         *time.Time `json:"ended" yaml:"ended"`
+	Lease         time.Time  `json:"lease_until" yaml:"lease_until"`
+	Token         string     `json:"token,omitempty" yaml:"token"`
+	Fence         int        `json:"fence" yaml:"fence"`
+	Status        string     `json:"status" yaml:"status"`
+	Reason        string     `json:"reason" yaml:"reason"`
+	Outputs       []string   `json:"outputs" yaml:"outputs"`
+	PID           int        `json:"pid" yaml:"pid"`
+	OwnerPID      int        `json:"owner_pid,omitempty" yaml:"owner_pid,omitempty"`
+	OwnerIdentity string     `json:"owner_identity,omitempty" yaml:"owner_identity,omitempty"`
 }
 type Evidence struct {
 	ArtifactStatus map[string]string `json:"artifact_status,omitempty" yaml:"artifact_status"`
@@ -131,6 +134,8 @@ type Task struct {
 	Delivery           *Delivery      `json:"delivery" yaml:"delivery"`
 	Legacy             map[string]any `json:"legacy,omitempty" yaml:"legacy"`
 	Feedback           []string       `json:"feedback" yaml:"feedback"`
+	History            *RecordHistory `json:"history,omitempty" yaml:"history,omitempty"`
+	TimeLimitSeconds   *int           `json:"time_limit_seconds,omitempty" yaml:"time_limit_seconds,omitempty"`
 }
 type Next struct {
 	Action       string   `json:"next_action" yaml:"next_action"`
@@ -141,6 +146,7 @@ type Next struct {
 	Board        string   `json:"board" yaml:"board"`
 	Task         *Task    `json:"task,omitempty" yaml:"task"`
 	Attempt      *Attempt `json:"attempt,omitempty" yaml:"attempt"`
+	KeeperPID    int      `json:"keeper_pid,omitempty" yaml:"keeper_pid,omitempty"`
 }
 type StepResult struct {
 	Status    string    `json:"status" yaml:"status"`
@@ -162,7 +168,13 @@ func Validate(d Definition) error {
 	if d.Title == "" || len(d.Acceptance) == 0 {
 		return Error("INVALID_DEFINITION", "title and acceptance required")
 	}
-	if !slices.Contains([]string{"feature", "bug", "improvement", "refactor", "research", "docs", "chore"}, d.Type) {
+	if d.ID == "." || d.ID == ".." || strings.ContainsAny(d.ID, "/\\") {
+		return Error("INVALID_TASK_ID", d.ID)
+	}
+	if d.MaxSeconds < -1 {
+		return Error("INVALID_BUDGET", "max_seconds must be -1 (unlimited), 0 (project default), or positive")
+	}
+	if !slices.Contains([]string{"feature", "bug", "improvement", "refactor", "research", "docs", "chore", "test", "qa", "verify"}, d.Type) {
 		return Error("INVALID_TYPE", d.Type)
 	}
 	if !slices.Contains([]string{"analysis", "verified", "merged", "released"}, d.Goal) {
@@ -197,7 +209,7 @@ func MakePlan(d *Definition) Plan {
 	if preset == "" {
 		preset = "standard"
 		reason = "ordinary scoped change"
-		if d.Type == "bug" || d.Type == "chore" || d.Type == "docs" {
+		if slices.Contains([]string{"bug", "chore", "docs", "test", "qa", "verify"}, d.Type) {
 			preset = "fast"
 			reason = "small explicit change"
 		}
@@ -244,9 +256,6 @@ func MakePlan(d *Definition) Plan {
 	}
 	if d.MaxRetries <= 0 {
 		d.MaxRetries = 3
-	}
-	if d.MaxSeconds <= 0 {
-		d.MaxSeconds = 3600
 	}
 	return Plan{1, preset, steps, reason, preset != "strict"}
 }

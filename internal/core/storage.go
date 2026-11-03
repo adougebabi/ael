@@ -178,6 +178,8 @@ func (s *Service) Restore(from string) (any, error) {
 			a := &t.Attempts[j]
 			a.Token = ""
 			a.PID = 0
+			a.OwnerPID = 0
+			a.OwnerIdentity = ""
 			a.Workspace = s.Root
 			if a.Status == "running" {
 				a.Status = "interrupted"
@@ -264,7 +266,7 @@ func (s *Service) Restore(from string) (any, error) {
 			}
 		}
 		var existing int
-		if e := tx.Row("SELECT (SELECT count(*) FROM tasks WHERE json_array_length(json_extract(body,'$.attempts'))>0 OR json_array_length(json_extract(body,'$.approvals'))>0)+(SELECT count(*) FROM events WHERE kind!='definition_recovered')").Scan(&existing); e != nil {
+		if e := tx.Row("SELECT (SELECT count(*) FROM tasks WHERE json_array_length(json_extract(body,'$.attempts'))>0 OR json_array_length(json_extract(body,'$.approvals'))>0)+(SELECT count(*) FROM events WHERE kind NOT IN ('definition_recovered','record_recovered'))").Scan(&existing); e != nil {
 			return e
 		}
 		if existing > 0 {
@@ -279,7 +281,7 @@ func (s *Service) Restore(from string) (any, error) {
 			}
 		}
 		for _, t := range tasks {
-			if e := save(tx, &t); e != nil {
+			if e := s.save(tx, &t); e != nil {
 				return e
 			}
 		}
@@ -347,7 +349,7 @@ func (s *Service) restoreFresh(incoming []Task) error {
 		known[t.Definition.ID] = true
 	}
 	var events int
-	if e := s.Store.DB.QueryRow("SELECT count(*) FROM events WHERE kind!='definition_recovered'").Scan(&events); e != nil {
+	if e := s.Store.DB.QueryRow("SELECT count(*) FROM events WHERE kind NOT IN ('definition_recovered','record_recovered')").Scan(&events); e != nil {
 		return e
 	}
 	if events > 0 {

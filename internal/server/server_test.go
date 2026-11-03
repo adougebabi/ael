@@ -47,3 +47,26 @@ func TestSessionHostOriginAndPaths(t *testing.T) {
 		t.Fatal("symlink artifact exposed")
 	}
 }
+
+func TestWildcardListenerHostAndOrigin(t *testing.T) {
+	h := New(nil, "0.0.0.0:7331")
+	for _, c := range []struct {
+		host, origin string
+		want         int
+	}{
+		{"127.0.0.1:7331", "http://127.0.0.1:7331", 200},
+		{"192.168.10.20:7331", "http://192.168.10.20:7331", 200},
+		{"localhost:7331", "http://localhost:7331", 200},
+		{"evil.example:7331", "", 403},
+		{"192.168.10.20:9999", "", 403},
+		{"192.168.10.20:7331", "http://127.0.0.1:7331", 403},
+	} {
+		r := httptest.NewRequest("GET", "http://"+c.host+"/api/session", nil)
+		r.Header.Set("Origin", c.origin)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != c.want {
+			t.Errorf("host %s origin %s: got %d want %d", c.host, c.origin, w.Code, c.want)
+		}
+	}
+}

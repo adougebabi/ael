@@ -86,7 +86,7 @@
 
 最终运行摘要如下，均来自实际执行产物。
 
-## 最终运行摘要
+## 0.1.0 首轮运行摘要（历史）
 
 - 代码构建提交：`82947e7`；二进制 `ael version` 为0.1.0/build82947e7。
 - `GOCACHE=/tmp/ael-go-cache go test -race -json ./...`：48个测试项通过（含子测试），0失败；`go vet ./...`通过。
@@ -94,7 +94,7 @@
 - 用户级安装前缀/tmp/ael-verified-install：安装、升级、version、卸载均实测；项目及运行库未删除。两个Skill的quick_validate均通过。
 - npm ci/package审计：0漏洞。macOS Mach-O arm64实际运行，Linux ELF x86-64静态二进制仅构建。
 - 真实Codex：最终82947e7在全新隔离任务启动，真实错误为`Error loading config.toml: invalid type: map, expected a boolean in features`；结果wait_environment/interrupted，未冒充模型执行成功。
-- 最终在线夹具工作台：[任务](http://127.0.0.1:7336)、[迁移](http://127.0.0.1:7337)。它们是本机验收数据，不是真实业务项目。
+- 首轮临时夹具地址（服务已停止）：[任务](http://127.0.0.1:7336)、[迁移](http://127.0.0.1:7337)。它们是本机验收数据，不是真实业务项目。
 
 外置持久证据目录：`/Users/vinson/.codex/visualizations/2026/11/03/01a19f63-8ed6-7763-a617-c71ccf2e64df/ael-evidence`。其中run-summary.json汇总结果，go-test-race.jsonl为逐测试原始记录，browser/report.json及PNG为最终浏览器结果，codex-integration.json为真实环境阻塞，doctor/storage-stats/prune-preview/backup-manifest和release-runtime-export记录实际外置运行文件与一致备份。pilot-paths.json记录本轮临时工程实际路径。
 
@@ -104,3 +104,27 @@
 | ael-linux-amd64 | `d3905ee8a307d025c6313dbf2b6738b4705758e5909b4791784b410dc927977d` |
 
 分发包与tar.gz校验清单位于dist/SHA256SUMS；包内含安装/卸载脚本、README、docs和THIRD_PARTY_NOTICES。分发包最后重新封装了本报告，二进制保持上述已验收代码版本。
+
+
+## 0.1.3 实际使用问题修复验收
+
+此增量替代首轮关于默认一小时预算、两分钟租约和loopback监听的行为；原始实施文档保留为历史输入。
+
+| 实际问题 | 实现与验证 |
+|---|---|
+| 默认一小时阻断 | 默认max_seconds=0；显式正数仍有效、-1覆盖项目限制；task budget单独调度调整；有效区间合并、不累计过期后的空等。operational_test.go、budget_test.go回归 |
+| 不能局域网打开 | 默认0.0.0.0；合法IP/本机名端口与同源Origin校验；真实192.168.6.227地址HTTP/Chromium通过 |
+| 换机失去任务现场 | records脱敏检查点/历史、同事务outbox、新clone暂停复核并重新验收；已有运行库更新/活writer冲突保护；完整backup可接续Git记录恢复 |
+| 误建任务不能删除 | CLI/API/真实UI删除、清理owned文件/日志/任务事件和提交，deleted标记跨clone收敛；多任务依赖删除顺序、禁止复用已删稳定ID均有回归 |
+| 验证类型受限 | test/qa/verify原名保存、Fast默认、风险升级Strict；领域创建/编辑和浏览器表单通过 |
+| 排队期间租约过期 | 默认30分钟、owner绑定独立20秒续约、启动握手、PID incarnation核对；活owner禁止ack释放；Managed/verify续约失败取消进程组；未知旧工具仍须核实，不宣称能终止宿主Agent |
+
+已执行：`go test -race -json ./...` 80项通过（含子测试），0失败；`go vet ./...`通过。真实Chromium任务看板5/5通过，包含创建取消/文本安全、失败修复完成、断线stale、五板块/修订/离线、验证类型和永久删除后重载。所有临时看板测试后停止。
+
+原生分发验证以PATH=/usr/bin:/bin运行项目入口：后台keeper握手并在调用方等待时实际续约；活owner阻止resume --ack-stopped；真实sh检查失败→修复→完成；五次Attempt摘要随项目复制恢复，凭据不进入记录；误建probe-x真实删除；旧预算调整保留验收修订；新clone无需init，记录恢复后可继续完整storage restore，恢复不复活token/PID/owner。
+
+四平台产物：macOS ARM64已运行；macOS AMD64、Linux AMD64/ARM64仅交叉构建和校验，未在目标平台执行。未连接或修改用户box；没有远程推送或实际发布。
+
+`teal` 在AEL源码中无对应模块；业务仓库存在Sage Teal主题。具体所指待用户确认，未新增/执行该业务专项测试，通用UI检查不算其覆盖。也未安排后台定期备份：可移植任务记录自动保存，原始日志/截图仍需显式storage backup。
+
+持久证据：`/Users/vinson/.codex/visualizations/2026/11/03/01a19f63-8ed6-7763-a617-c71ccf2e64df/ael-operational-verification/verification.json`；同目录保留逐测试JSONL、浏览器报告与截图、原生分发验证及可重跑脚本。源码/项目提交和最终二进制build信息以该JSON为准，避免把历史二进制hash冒充新版本。

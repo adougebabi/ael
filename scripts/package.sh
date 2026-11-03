@@ -4,7 +4,8 @@ export GOCACHE=${GOCACHE:-/tmp/ael-go-cache}
 (cd web && npm ci --ignore-scripts && npm run build)
 mkdir -p dist
 build_id=$(git rev-parse --short HEAD 2>/dev/null || printf dev)
-version=0.1.2
+if [ -n "$(git status --porcelain 2>/dev/null)" ]; then build_id="$build_id-dirty"; fi
+version=0.1.3
 printf 'version %s\n' "$version" > dist/ael-toolchain.lock
 for target in darwin-arm64 darwin-amd64 linux-amd64 linux-arm64; do
  os=${target%-*}

@@ -97,6 +97,13 @@ func (s *Service) Create(d Definition) (Next, error) {
 	if e != nil {
 		return Next{}, e
 	}
+	if p, e := store.SafePath(s.Root, ".ael/deleted/"+d.ID+".json"); e != nil {
+		return Next{}, e
+	} else if _, e = os.Lstat(p); e == nil {
+		return Next{}, Error("TASK_ID_DELETED", "use a new stable ID")
+	} else if !os.IsNotExist(e) {
+		return Next{}, e
+	}
 	if _, e = os.Lstat(path); e == nil {
 		return Next{}, Error("TASK_EXISTS", d.ID)
 	}
@@ -123,11 +130,11 @@ func (s *Service) Create(d Definition) (Next, error) {
 				return e
 			}
 			old.Feedback = append(old.Feedback, d.ID)
-			if e = save(tx, &old); e != nil {
+			if e = s.save(tx, &old); e != nil {
 				return e
 			}
 		}
-		if e := save(tx, &t); e != nil {
+		if e := s.save(tx, &t); e != nil {
 			return e
 		}
 		if e := tx.File(path, b); e != nil {
@@ -212,6 +219,7 @@ func (s *Service) syncDefinition(old Task, d Definition, raw []byte) (Task, erro
 		t = cur
 		t.PolicyHash = policyHash
 		t.Definition = d
+		t.TimeLimitSeconds = nil
 		t.Plan = plan
 		t.Evidence = nil
 		t.Candidate = ""
@@ -234,7 +242,7 @@ func (s *Service) syncDefinition(old Task, d Definition, raw []byte) (Task, erro
 		if e = tx.File(p, b); e != nil {
 			return e
 		}
-		if e = save(tx, &t); e != nil {
+		if e = s.save(tx, &t); e != nil {
 			return e
 		}
 		return tx.Event(d.ID, "definition_revised", map[string]any{"revision": d.Revision, "source_hash": store.Hash(raw)})
@@ -366,7 +374,7 @@ func (s *Service) Next(id string) (Next, error) {
 				count++
 			}
 		}
-		if count >= t.Definition.MaxRetries || runtimeUsed(&t) > time.Duration(t.Definition.MaxSeconds)*time.Second {
+		if count >= t.Definition.MaxRetries || timeBudgetExhausted(&t) {
 			n.Action = "wait_environment"
 			n.Reasons = append(n.Reasons, "budget exhausted; reviewed definition revision required")
 		}
@@ -386,7 +394,7 @@ func (s *Service) mutate(id, kind string, fn func(*store.Tx, *Task) error) (Next
 		if e = fn(tx, &t); e != nil {
 			return e
 		}
-		if e = save(tx, &t); e != nil {
+		if e = s.save(tx, &t); e != nil {
 			return e
 		}
 		return tx.Event(id, kind, map[string]any{"step": t.Step, "revision": t.Definition.Revision, "failure": t.Failure})
@@ -437,6 +445,10 @@ func (s *Service) Claim(id, unit, executor, workspace, session string) (Next, er
 	if e != nil {
 		return Next{}, e
 	}
+	leaseDuration, e := s.leaseDuration()
+	if e != nil {
+		return Next{}, e
+	}
 	var a Attempt
 	n, e = s.mutate(id, "claimed", func(tx *store.Tx, t *Task) error {
 		if t.Step == "execute" && t.Plan.Preset == "strict" && !t.Plan.Approved {
@@ -483,7 +495,7 @@ func (s *Service) Claim(id, unit, executor, workspace, session string) (Next, er
 				return Error("CLAIM_CONFLICT", "attempt active or expired; resume explicitly")
 			}
 		}
-		if attempts >= t.Definition.MaxRetries || runtimeUsed(t) > time.Duration(t.Definition.MaxSeconds)*time.Second {
+		if attempts >= t.Definition.MaxRetries || timeBudgetExhausted(t) {
 			return Error("BUDGET_EXHAUSTED", "increase budget through a reviewed definition revision")
 		}
 		if t.Step != "verify" {
@@ -504,7 +516,7 @@ func (s *Service) Claim(id, unit, executor, workspace, session string) (Next, er
 				return Error("WORKSPACE_BUSY", workspace)
 			}
 		}
-		a = Attempt{ID: ID("AT-"), Unit: claimUnit, Executor: executor, Session: session, Workspace: workspace, Input: candidate, Started: time.Now().UTC(), Lease: time.Now().UTC().Add(2 * time.Minute), Token: ID("lease-"), Fence: len(t.Attempts) + 1, Status: "running"}
+		a = Attempt{ID: ID("AT-"), Unit: claimUnit, Executor: executor, Session: session, Workspace: workspace, Input: candidate, Started: time.Now().UTC(), Lease: time.Now().UTC().Add(leaseDuration), Token: ID("lease-"), Fence: len(t.Attempts) + 1, Status: "running"}
 		if t.Step != "verify" {
 			_, e := tx.Exec("UPDATE workspace_locks SET attempt=? WHERE workspace=?", a.ID, workspace)
 			if e != nil {
@@ -532,7 +544,11 @@ func findAttempt(t *Task, id, token string) (*Attempt, error) {
 	return nil, Error("ATTEMPT_MISSING", id)
 }
 func (s *Service) Heartbeat(id, attempt, token string) (Next, error) {
-	e := s.Store.Write(func(tx *store.Tx) error {
+	duration, e := s.leaseDuration()
+	if e != nil {
+		return Next{}, e
+	}
+	e = s.Store.Write(func(tx *store.Tx) error {
 		t, e := load(tx, id)
 		if e != nil {
 			return e
@@ -541,7 +557,7 @@ func (s *Service) Heartbeat(id, attempt, token string) (Next, error) {
 		if e != nil {
 			return e
 		}
-		a.Lease = time.Now().UTC().Add(2 * time.Minute)
+		a.Lease = time.Now().UTC().Add(duration)
 		return save(tx, &t)
 	})
 	if e != nil {
@@ -719,7 +735,7 @@ func (s *Service) submit(sub Submission, evidence *Evidence) (Next, error) {
 		if evidence != nil && sub.Result.Status != "pass" {
 			t.Evidence = append(t.Evidence, *evidence)
 		}
-		if e = save(tx, &t); e != nil {
+		if e = s.save(tx, &t); e != nil {
 			return e
 		}
 		if e = tx.Event(sub.Task, "submitted", map[string]any{"attempt": a.ID, "result": sub.Result, "evidence": evidence}); e != nil {
@@ -867,6 +883,15 @@ func (s *Service) Resume(id, returnTo string, ack bool) (Next, error) {
 		for i := range t.Attempts {
 			a := &t.Attempts[i]
 			if a.Status == "running" || a.Status == "interrupted" {
+				if a.OwnerPID > 0 {
+					identity, e := process.Identity(a.OwnerPID)
+					if e == nil && identity == a.OwnerIdentity {
+						return Error("OLD_OWNER_ALIVE", "stop the attached owner before recovering its workspace")
+					}
+					if e != nil && process.Alive(a.OwnerPID) {
+						return Error("OWNER_IDENTITY_UNAVAILABLE", "cannot prove that the old owner stopped")
+					}
+				}
 				if a.PID > 0 && (process.Alive(a.PID) || process.GroupAlive(a.PID)) {
 					return Error("OLD_PROCESS_ALIVE", "stop PID before recovering workspace")
 				}
@@ -979,15 +1004,60 @@ func (s *Service) RecordSession(id, attempt, session string) error {
 }
 
 func runtimeUsed(t *Task) time.Duration {
-	var sum time.Duration
+	type interval struct{ start, end time.Time }
+	var spans []interval
 	for _, a := range t.Attempts {
 		end := time.Now()
 		if a.Ended != nil {
 			end = *a.Ended
 		}
-		sum += end.Sub(a.Started)
+		if !a.Lease.IsZero() && end.After(a.Lease) {
+			end = a.Lease
+		}
+		if end.After(a.Started) {
+			spans = append(spans, interval{a.Started, end})
+		}
+	}
+	slices.SortFunc(spans, func(a, b interval) int { return a.start.Compare(b.start) })
+	var sum time.Duration
+	var last time.Time
+	for _, span := range spans {
+		start := span.start
+		if start.Before(last) {
+			start = last
+		}
+		if span.end.After(start) {
+			sum += span.end.Sub(start)
+		}
+		if span.end.After(last) {
+			last = span.end
+		}
 	}
 	return sum
+}
+func timeBudgetExhausted(t *Task) bool {
+	seconds := t.Definition.MaxSeconds
+	if t.TimeLimitSeconds != nil {
+		seconds = *t.TimeLimitSeconds
+	}
+	return seconds > 0 && runtimeUsed(t) > time.Duration(seconds)*time.Second
+}
+
+// A scheduling budget change does not alter acceptance criteria or approve gates.
+func (s *Service) SetTimeLimit(id string, seconds int, reason string) (Next, error) {
+	if e := s.active(); e != nil {
+		return Next{}, e
+	}
+	if seconds < 0 || strings.TrimSpace(reason) == "" {
+		return Next{}, Error("INVALID_BUDGET", "nonnegative max-seconds and a reason required; 0 means unlimited")
+	}
+	return s.mutate(id, "time_budget_changed", func(tx *store.Tx, t *Task) error {
+		if t.Status != "open" {
+			return Error("TERMINAL_TASK", id)
+		}
+		t.TimeLimitSeconds = &seconds
+		return tx.Event(id, "time_budget_decision", map[string]any{"max_seconds": seconds, "reason": reason})
+	})
 }
 func (s *Service) BindWorkspace(path string) (any, error) {
 	p, e := filepath.Abs(path)

@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -54,7 +55,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'")
-	if r.Host != h.Host {
+	if !h.acceptsHost(r.Host) {
 		http.Error(w, "HOST_REJECTED", 403)
 		return
 	}
@@ -64,7 +65,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if origin := r.Header.Get("Origin"); origin != "" {
 		u, e := url.Parse(origin)
-		if e != nil || u.Host != h.Host || u.Scheme != "http" {
+		if e != nil || u.Host != r.Host || u.Scheme != "http" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
 			http.Error(w, "ORIGIN_REJECTED", 403)
 			return
 		}
@@ -166,6 +167,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				v, e = h.Service.Resume(a.ID, a.Unit, a.Ack)
 			case "cancel":
 				v, e = h.Service.Cancel(a.ID, a.Reason)
+			case "delete":
+				v, e = h.Service.Delete(a.ID, a.Reason)
 			case "edit":
 				v, e = h.Service.Edit(a.ID, a.Definition, a.Reason)
 			default:
@@ -199,13 +202,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	http.FileServer(http.FS(sub)).ServeHTTP(w, r)
 }
 func Listen(s *core.Service, addr string, extra func(http.ResponseWriter, *http.Request) bool) error {
-	host, _, e := net.SplitHostPort(addr)
-	if e != nil {
+	if _, _, e := net.SplitHostPort(addr); e != nil {
 		return e
-	}
-	ip := net.ParseIP(host)
-	if ip == nil || !ip.IsLoopback() {
-		return core.Error("LOOPBACK_REQUIRED", addr)
 	}
 	ln, e := net.Listen("tcp", addr)
 	if e != nil {
@@ -215,4 +213,29 @@ func Listen(s *core.Service, addr string, extra func(http.ResponseWriter, *http.
 	h.Extra = extra
 	fmt.Printf("{\"url\":\"http://%s\"}\n", ln.Addr())
 	return (&http.Server{Handler: h, ReadHeaderTimeout: 5 * time.Second}).Serve(ln)
+}
+
+// A wildcard bind accepts IP authorities on the bound port and local host names.
+// Arbitrary DNS names remain rejected; Origin must match the validated request.
+func (h *Handler) acceptsHost(authority string) bool {
+	if authority == h.Host {
+		return true
+	}
+	bind, port, e := net.SplitHostPort(h.Host)
+	if e != nil {
+		return false
+	}
+	ip := net.ParseIP(bind)
+	if bind != "" && (ip == nil || !ip.IsUnspecified()) {
+		return false
+	}
+	host, p, e := net.SplitHostPort(authority)
+	if e != nil || p != port {
+		return false
+	}
+	if parsed := net.ParseIP(host); parsed != nil {
+		return !parsed.IsUnspecified() && !parsed.IsMulticast()
+	}
+	name, _ := os.Hostname()
+	return strings.EqualFold(host, "localhost") || (name != "" && strings.EqualFold(host, name))
 }
