@@ -60,3 +60,14 @@ func TestShadowAndSymlink(t *testing.T) {
 		t.Fatal("symlink write allowed")
 	}
 }
+
+func TestRuntimeDataCannotEnterBusinessRepository(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("AEL_DATA_DIR", filepath.Join(root, "private-runtime"))
+	if _, e := Init(root, false, false); e == nil {
+		t.Fatal("runtime data allowed inside project")
+	}
+	if _, e := os.Stat(filepath.Join(root, "private-runtime")); !os.IsNotExist(e) {
+		t.Fatal("runtime was created before rejecting")
+	}
+}

@@ -73,6 +73,9 @@ func Init(root string, dry, refresh bool) (Report, error) {
 	if e != nil {
 		return r, e
 	}
+	if e = ValidateDataLocation(root, r.Data); e != nil {
+		return r, e
+	}
 	for _, p := range []string{".trellis", ".agents/notes", "notes", "AGENTS.md", "CLAUDE.md", ".codex", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "go.mod", "pom.xml", "build.gradle", "Cargo.toml"} {
 		if _, e = os.Lstat(filepath.Join(root, p)); e == nil {
 			r.Detected = append(r.Detected, p)
@@ -211,6 +214,9 @@ func Open(root string) (*core.Service, Report, error) {
 	if e != nil {
 		return nil, r, e
 	}
+	if e = ValidateDataLocation(root, r.Data); e != nil {
+		return nil, r, e
+	}
 	c, e := Read(root)
 	r.Config = c
 	if e != nil {
@@ -279,4 +285,36 @@ func DetectChecks(root string) []map[string]any {
 		add("unit", []string{"mvn", "test"}, "pom.xml")
 	}
 	return out
+}
+
+func ValidateDataLocation(root, data string) error {
+	if !filepath.IsAbs(data) {
+		return core.Error("DATA_DIR_ABSOLUTE_REQUIRED", "AEL_DATA_DIR must be an absolute directory")
+	}
+	probe := filepath.Clean(data)
+	suffix := []string{}
+	for {
+		if _, e := os.Lstat(probe); e == nil {
+			break
+		} else if !os.IsNotExist(e) {
+			return e
+		}
+		parent := filepath.Dir(probe)
+		if parent == probe {
+			return core.Error("DATA_DIR_INVALID", data)
+		}
+		suffix = append(suffix, filepath.Base(probe))
+		probe = parent
+	}
+	resolved, e := filepath.EvalSymlinks(probe)
+	if e != nil {
+		return e
+	}
+	for i := len(suffix) - 1; i >= 0; i-- {
+		resolved = filepath.Join(resolved, suffix[i])
+	}
+	if resolved == root || strings.HasPrefix(resolved, root+string(os.PathSeparator)) {
+		return core.Error("DATA_DIR_INSIDE_PROJECT", "runtime data must remain outside the project")
+	}
+	return nil
 }
