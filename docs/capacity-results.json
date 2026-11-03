@@ -1,0 +1,72 @@
+{
+  "at": "2026-11-03T03:17:00.164866Z",
+  "cpus": 16,
+  "go": "go1.26.3",
+  "platform": "darwin/arm64",
+  "samples": [
+    {
+      "after_explicit_prune_vacuum": {
+        "artifacts": 0,
+        "logs": 0,
+        "runtime.db": 3514368,
+        "runtime.db-shm": 32768,
+        "runtime.db-wal": 1977632
+      },
+      "attempts": 3000,
+      "consistent_backup_bytes": 3477504,
+      "dashboard_100_queries_ms": 9,
+      "events": 20000,
+      "files_before_checkpoint": {
+        "artifacts": 0,
+        "logs": 0,
+        "runtime.db": 4096,
+        "runtime.db-shm": 32768,
+        "runtime.db-wal": 3596792
+      },
+      "four_process_claim": [
+        "{\"wins\":100,\"ms\":5.746} \u003cnil\u003e",
+        "{\"wins\":0,\"ms\":9.704} \u003cnil\u003e",
+        "{\"wins\":0,\"ms\":10.947} \u003cnil\u003e",
+        "{\"wins\":0,\"ms\":20.484} \u003cnil\u003e"
+      ],
+      "index_bytes": 401408,
+      "seed_ms": 100,
+      "single_write_p50_ms": 0.006,
+      "single_write_p99_ms": 0.044,
+      "uncommitted_after_kill": 0,
+      "work_items": 1000
+    },
+    {
+      "after_explicit_prune_vacuum": {
+        "artifacts": 0,
+        "logs": 0,
+        "runtime.db": 19640320,
+        "runtime.db-shm": 98304,
+        "runtime.db-wal": 19755432
+      },
+      "attempts": 30000,
+      "consistent_backup_bytes": 34992128,
+      "dashboard_100_queries_ms": 43,
+      "events": 200000,
+      "files_before_checkpoint": {
+        "artifacts": 0,
+        "logs": 0,
+        "runtime.db": 35418112,
+        "runtime.db-shm": 98304,
+        "runtime.db-wal": 35687472
+      },
+      "four_process_claim": [
+        "{\"wins\":100,\"ms\":4.774} \u003cnil\u003e",
+        "{\"wins\":0,\"ms\":9.738} \u003cnil\u003e",
+        "{\"wins\":0,\"ms\":10.947} \u003cnil\u003e",
+        "{\"wins\":0,\"ms\":20.834} \u003cnil\u003e"
+      ],
+      "index_bytes": 4468736,
+      "seed_ms": 1061,
+      "single_write_p50_ms": 0.006,
+      "single_write_p99_ms": 0.056,
+      "uncommitted_after_kill": 0,
+      "work_items": 10000
+    }
+  ]
+}

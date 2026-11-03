@@ -1,0 +1,1 @@
+{"permissions":{"allow":["Read"]},"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"python3 .trellis/scripts/session-start.py"},{"type":"command","command":"echo user-unrelated-hook"}]}]}}

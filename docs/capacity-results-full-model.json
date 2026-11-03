@@ -1,0 +1,72 @@
+{
+  "at": "2026-11-03T03:51:25.058557Z",
+  "cpus": 16,
+  "go": "go1.26.3",
+  "platform": "darwin/arm64",
+  "samples": [
+    {
+      "after_explicit_prune_vacuum": {
+        "artifacts": 600000,
+        "logs": 1104000,
+        "runtime.db": 5754880,
+        "runtime.db-shm": 32768,
+        "runtime.db-wal": 5788632
+      },
+      "attempts": 3000,
+      "consistent_backup_bytes": 7266304,
+      "dashboard_100_queries_ms": 14,
+      "events": 20000,
+      "files_before_checkpoint": {
+        "artifacts": 600000,
+        "logs": 1104000,
+        "runtime.db": 7303168,
+        "runtime.db-shm": 32768,
+        "runtime.db-wal": 7407792
+      },
+      "four_process_claim": [
+        "{\"wins\":100,\"ms\":4.213} \u003cnil\u003e",
+        "{\"wins\":0,\"ms\":9.900} \u003cnil\u003e",
+        "{\"wins\":0,\"ms\":10.882} \u003cnil\u003e",
+        "{\"wins\":0,\"ms\":21.130} \u003cnil\u003e"
+      ],
+      "index_bytes": 401408,
+      "seed_ms": 233,
+      "single_write_p50_ms": 0.008,
+      "single_write_p99_ms": 0.074,
+      "uncommitted_after_kill": 0,
+      "work_items": 1000
+    },
+    {
+      "after_explicit_prune_vacuum": {
+        "artifacts": 6000000,
+        "logs": 11040000,
+        "runtime.db": 57294848,
+        "runtime.db-shm": 163840,
+        "runtime.db-wal": 57630592
+      },
+      "attempts": 30000,
+      "consistent_backup_bytes": 72646656,
+      "dashboard_100_queries_ms": 45,
+      "events": 200000,
+      "files_before_checkpoint": {
+        "artifacts": 6000000,
+        "logs": 11040000,
+        "runtime.db": 73072640,
+        "runtime.db-shm": 163840,
+        "runtime.db-wal": 73562632
+      },
+      "four_process_claim": [
+        "{\"wins\":100,\"ms\":4.909} \u003cnil\u003e",
+        "{\"wins\":0,\"ms\":9.966} \u003cnil\u003e",
+        "{\"wins\":0,\"ms\":11.060} \u003cnil\u003e",
+        "{\"wins\":0,\"ms\":11.846} \u003cnil\u003e"
+      ],
+      "index_bytes": 4468736,
+      "seed_ms": 2418,
+      "single_write_p50_ms": 0.009,
+      "single_write_p99_ms": 0.079,
+      "uncommitted_after_kill": 0,
+      "work_items": 10000
+    }
+  ]
+}

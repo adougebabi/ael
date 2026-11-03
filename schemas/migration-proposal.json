@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "plan_id",
+    "items"
+  ],
+  "properties": {
+    "plan_id": {
+      "type": "string"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_id",
+          "source_hash",
+          "quote",
+          "action",
+          "kind",
+          "status",
+          "target_ref",
+          "reason",
+          "pending"
+        ],
+        "properties": {
+          "source_id": {
+            "type": "string"
+          },
+          "source_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "quote": {
+            "type": "string",
+            "minLength": 1
+          },
+          "action": {
+            "enum": [
+              "classify",
+              "task_status"
+            ]
+          },
+          "kind": {
+            "enum": [
+              "spec",
+              "decision",
+              "research",
+              "reference",
+              "task"
+            ]
+          },
+          "status": {
+            "enum": [
+              "current",
+              "historical",
+              "conflict",
+              "open",
+              "historical_completed",
+              "cancelled"
+            ]
+          },
+          "target_ref": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "pending": {
+            "type": "string"
+          },
+          "superseded_by": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

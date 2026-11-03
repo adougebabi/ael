@@ -1,0 +1,1 @@
+{"id":"legacy-active","name":"中文活动任务","status":"in_progress","parent":"legacy-parent","dependencies":["legacy-completed"],"children":["child-1"],"custom_extension":{"owner":"旧Bot","future":42}}
