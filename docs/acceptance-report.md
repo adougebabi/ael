@@ -125,6 +125,6 @@
 
 四平台产物：macOS ARM64已运行；macOS AMD64、Linux AMD64/ARM64仅交叉构建和校验，未在目标平台执行。未连接或修改用户box；没有远程推送或实际发布。
 
-`teal` 在AEL源码中无对应模块；业务仓库存在Sage Teal主题。具体所指待用户确认，未新增/执行该业务专项测试，通用UI检查不算其覆盖。也未安排后台定期备份：可移植任务记录自动保存，原始日志/截图仍需显式storage backup。
+`teal` 已确认指业务功能；用户明确本轮不再处理。未新增或执行该业务专项测试，通用UI检查不计作其覆盖。也未安排后台定期备份：可移植任务记录自动保存，原始日志/截图仍需显式storage backup。
 
 持久证据：`/Users/vinson/.codex/visualizations/2026/11/03/01a19f63-8ed6-7763-a617-c71ccf2e64df/ael-operational-verification/verification.json`；同目录保留逐测试JSONL、浏览器报告与截图、原生分发验证及可重跑脚本。源码/项目提交和最终二进制build信息以该JSON为准，避免把历史二进制hash冒充新版本。

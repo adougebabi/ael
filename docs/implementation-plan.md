@@ -52,6 +52,6 @@
 | 真删除 | CLI/API/UI；引用/旧writer保护；deleted传播 | 领域与真实 Chromium 删除回归通过 |
 | test/qa/verify | 原名保存、Fast默认、风险Strict | 领域回归通过 |
 | 独立续约 | owner身份绑定、退出停止、managed失效停止 | 真实进程回归通过 |
-| teal专项覆盖 | AEL无此命名；业务中发现Sage Teal主题 | 语义待用户确认，不用通用UI测试冒充 |
+| teal专项覆盖 | 用户已确认指业务中的teal功能 | 用户明确本轮略过，不再作为本轮待办；未新增专项测试 |
 
 本轮收尾：81项Go测试（含子测试）/race及vet通过；真实局域网地址下Chromium 5/5通过；最终分发原生CLI验证包含后台续约握手、独立续约、活owner拒绝ack恢复、失败修复闭环、Git检查点恢复后完整backup restore。无全局AEL/Go/Node/Python的PATH验证通过。持久证据见acceptance-report.md最新增量章节。
