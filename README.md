@@ -1,35 +1,58 @@
 # AEL — Agent Engineering Loop
 
-本机、项目无关的工程闭环工具。Go CLI 与本地 HTTP 服务共用领域内核，Vue 3 + TypeScript 看板随二进制嵌入。一个 Agent 可连续执行，多 Agent 可逐步骤交接；验证失败保留在同一 WorkItem 内。无需数据库服务器、Node 前端服务、模型 API Key 或云基础设施。
+项目可携带、同机进程协作的工程闭环工具。Go CLI 与本地 HTTP 服务共用领域内核，Vue 3 + TypeScript 看板随二进制嵌入。一个 Agent 可连续执行，多 Agent 可逐步骤交接；验证失败保留在同一 WorkItem 内。无需数据库服务器、Node 前端服务、模型 API Key 或云基础设施。
 
 实现状态与实测边界以 [验收报告](docs/acceptance-report.md) 为准。原始需求完整保留在 `AEL-V1-local-implementation-prompt.md`。当前仅在测试夹具和临时项目验证，未迁移摇光、未执行真实生产发布。
 
-## 本地构建、安装与升级
+## 项目内直接使用
 
-开发需要 Go 1.26、Node 24/npm；安装后的项目只需要 AEL 二进制（自动编码另需已有执行器）。依赖锁定在 go.mod/go.sum、web/package-lock.json。
+初始化后的项目自带 `./ael`、`.ael/toolchain.lock` 和 `.ael/bin/<platform>/ael`，全部随Git提交。检出项目后直接运行，不需要全局AEL、Go、Node、Python或下载：
 
 ```sh
-(cd web && npm ci --ignore-scripts && npm run build)
-GOCACHE=/tmp/ael-go-cache go build -o bin/ael ./cmd/ael
-./bin/ael version
-./scripts/install.sh /tmp/ael-install ./bin/ael
-/tmp/ael-install/bin/ael help
+./ael version
+./ael doctor
+./ael task list
+./ael dashboard
 ```
 
-正式用户级安装：`./scripts/install.sh "$HOME/.local" ./bin/ael`，将 `$HOME/.local/bin` 加入 PATH。升级重新构建后运行同一安装脚本，保存上一版本；已被用户替换的未知二进制拒绝覆盖。卸载 `./scripts/uninstall.sh "$HOME/.local"` 只删除已校验的受管二进制与安装摘要，保留项目/知识/数据库/备份。`scripts/package.sh` 构建 macOS arm64、Linux amd64，生成 tar.gz 与 SHA256SUMS。Linux 产物是否实际运行请看验收报告。解开 macOS 分发包后可运行 `./scripts/install.sh "$HOME/.local" ./ael-darwin-arm64`；安装脚本已随包附带。
+启动器检测macOS/Linux与ARM64/AMD64，校验锁定SHA-256后运行对应二进制。不回退到PATH中的其他版本；未知平台、资源缺失或校验失败会明确报错。需要native Windows时不能把此Unix分发标为已支持，可在WSL使用Linux版本。
 
-工具升级与 `ael refresh --project PATH` 更新项目资产分开。后者基于受管哈希，遇到用户修改返回 ASSET_CONFLICT；没有强制覆盖用户内容的开关。
+新机器不重复init、不改变project_id。首次需要运行状态时，在本机仓库外建立SQLite，读取已提交定义和终态摘要；不复活旧租约、PID或审批。原始产物和运行历史需要显式导出/导入。
+
+## 工具构建与首次初始化
+
+开发AEL本身需要Go1.26与Node24/npm。构建完整四平台离线分发：
+
+```sh
+./scripts/package.sh
+```
+
+产物包括四个运行时、`ael-toolchain.lock`、许可证与`ael-0.1.2-unix.tar.gz`。使用适合初始化机器的二进制，例如macOS ARM64：
+
+```sh
+./dist/ael-darwin-arm64 init --project /path/to/project --bundle-dir ./dist
+```
+
+`init`自动向目标写入项目入口和全部锁定运行时；`--bundle-dir`也可指向完整解包目录。缺少完整分发时返回BUNDLE_MISSING，不制造虚构下载URL。
+
+可选用户级安装：
+
+```sh
+./scripts/install.sh "$HOME/.local" ./dist/ael-darwin-arm64 ./dist
+```
+
+安装器同时保留版本化分发资产，后续`ael init --project PATH`可自动发现。项目自带二进制也可`./ael init --project ANOTHER_PATH`，不需要全局安装。升级项目工具使用新版本的完整分发执行`refresh --project PATH --bundle-dir DIR`；用户修改的启动器/受管资产冲突会拒绝覆盖。升级工具、刷新项目资产与迁移/激活保持独立。卸载全局可执行文件不影响已初始化项目内的工具或运行资料。
 
 ## 初始化与查看
 
 ```sh
-ael init --project /path/to/project --dry-run
-ael init --project /path/to/project
-ael doctor --project /path/to/project
-ael dashboard --project /path/to/project --addr 127.0.0.1:7331
+./dist/ael-darwin-arm64 init --project /path/to/project --bundle-dir ./dist --dry-run
+./dist/ael-darwin-arm64 init --project /path/to/project --bundle-dir ./dist
+/path/to/project/ael doctor
+/path/to/project/ael dashboard --addr 127.0.0.1:7331
 ```
 
-初始化不运行安装、构建、旧 hooks 或发布。只生成必要配置、短 AGENTS 受管块与 `.agents/skills/ael-work`、`.agents/skills/ael-migrate-legacy`。已有 Trellis 时进入 shadow，不接管任务。现有构建清单列入检测结果；尚未配置的检查/环境不会被猜测。`project.yaml`、policy.yaml 与任务 frontmatter 使用 JSON（合法 YAML 子集），便于确定解析与审阅。政策也可写标准 YAML；知识 frontmatter 支持 YAML。
+初始化不运行安装、构建、旧 hooks 或发布。生成必要配置、项目启动器、锁定平台二进制、短 AGENTS 受管块与 `.agents/skills/ael-work`、`.agents/skills/ael-migrate-legacy`。已有 Trellis 时进入 shadow，不接管任务。现有构建清单列入检测结果；尚未配置的检查/环境不会被猜测。`project.yaml`、policy.yaml 与任务 frontmatter 使用 JSON（合法 YAML 子集），便于确定解析与审阅。政策也可写标准 YAML；知识 frontmatter 支持 YAML。
 
 运行数据位于用户配置目录 `ael/runtime/<canonical-checkout-hash>/`；可用 `AEL_DATA_DIR` 指定基目录。doctor 显示实际路径。同 project_id 的独立 clone 不自动共享租约；显式绑定 worktree 可共用一个运行实例。运行库、WAL、原始命令输出、截图、备份都在仓库之外。
 
@@ -59,6 +82,8 @@ claim 返回 Attempt ID 与 token。创建 submission.json：
 ```
 
 `ael submit --file /tmp/submission.json --project PATH` 推进 Define。再 claim Execute，实际修改文件，提交 `artifacts:["result.txt"]`。调用 `ael verify --task ID --check content --project PATH` 运行真实命令；失败返回 `repair` / execute；同一任务重新领取修复、再 verify 后完成。看板 2.5 秒内反映外部 CLI 变更。
+
+本文后续的`ael`子命令，在目标项目中均使用项目根的`./ael`调用。
 
 所有输出 JSON；命令参数/状态非法时 stderr JSON、exit 1。exit 0 表示协议调用成功，是否完成必须读 `next_action` 和 evidence；blocked、等待确认或命令执行失败形成的检查点不会被当作成功验收。`ael help` 输出全部实际命令及结构样例。
 

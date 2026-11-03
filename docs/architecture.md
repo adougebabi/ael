@@ -11,3 +11,5 @@ Go 单进程服务/CLI，Vue3/TypeScript 编译并 embed。仅依赖本机文件
 Codex官方 noninteractive/skills 文档核对于2026-11-03；本机0.144.1。exec --json 是事件，--output-last-message 是结果文件，--output-schema 约束最终 JSON。resume 必须精确 session ID，禁止 --last；保留默认安全机制。技能安装路径 .agents/skills。官方入口：https://developers.openai.com/codex/noninteractive 与 https://developers.openai.com/codex/skills。
 
 终态使用专用Outcome投影，排除完整Attempt、租约token、PID和工作区绝对路径；迁移提交文件仅携带相对映射与hash，原始快照在运行目录。项目policy.yaml内容hash绑定任务，变化时生成新定义/计划修订并等待确认；显式轻量预设不能降低风险信号所要求的门禁。
+
+0.1.2项目分发：./ael为POSIX入口，.ael/toolchain.lock绑定平台与SHA-256，四平台独立可执行文件随项目Git提交。工具文件与本机运行状态分离；候选包含启动器和锁文件，.ael/bin不重复作为源码输入。init/refresh通过受管哈希保护与bundle-install恢复记录安装工具资产，平台包不写入SQLite BLOB。

@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-const Version = "0.1.1"
+const Version = "0.1.2"
 
 type Config struct {
 	Schema    int    `json:"schema"`
@@ -21,6 +21,7 @@ type Config struct {
 	Version   string `json:"asset_version"`
 }
 type Report struct {
+	Bundle     *Bundle          `json:"bundle,omitempty"`
 	Candidates []map[string]any `json:"check_candidates"`
 	Root       string           `json:"project"`
 	Data       string           `json:"data_dir"`
@@ -65,7 +66,7 @@ const begin = "<!-- AEL:BEGIN -->"
 const end = "<!-- AEL:END -->"
 
 func block(mode string) string {
-	return begin + "\nAEL project (" + mode + "). Run `ael doctor --project .`, then `ael context --task <id>`.\nUse $ael-work for authorized task execution; $ael-migrate-legacy only for reviewed legacy proposals.\nDo not treat historical imports as current constraints or verified checks.\n" + end
+	return begin + "\nAEL project (" + mode + "). From the project root run `./ael doctor`, then `./ael context --task <id>`.\nUse $ael-work for authorized task execution; $ael-migrate-legacy only for reviewed legacy proposals.\nDo not treat historical imports as current constraints or verified checks.\n" + end
 }
 func Init(root string, dry, refresh bool) (Report, error) {
 	root, e := Canonical(root)

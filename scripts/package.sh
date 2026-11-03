@@ -4,10 +4,17 @@ export GOCACHE=${GOCACHE:-/tmp/ael-go-cache}
 (cd web && npm ci --ignore-scripts && npm run build)
 mkdir -p dist
 build_id=$(git rev-parse --short HEAD 2>/dev/null || printf dev)
-for target in darwin-arm64 linux-amd64; do
+version=0.1.2
+printf 'version %s\n' "$version" > dist/ael-toolchain.lock
+for target in darwin-arm64 darwin-amd64 linux-amd64 linux-arm64; do
  os=${target%-*}
  arch=${target#*-}
  CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -trimpath -ldflags "-s -w -X main.build=$build_id" -o "dist/ael-$target" ./cmd/ael
- tar -czf "dist/ael-0.1.1-$target.tar.gz" -C dist "ael-$target" -C .. THIRD_PARTY_NOTICES.txt README.md docs scripts/install.sh scripts/uninstall.sh
+ digest=$(shasum -a 256 "dist/ael-$target" | awk '{print $1}')
+ printf '%s %s ael-%s\n' "$target" "$digest" "$target" >> dist/ael-toolchain.lock
 done
-(cd dist && shasum -a 256 ael-darwin-arm64 ael-linux-amd64 *.tar.gz > SHA256SUMS)
+cp THIRD_PARTY_NOTICES.txt dist/THIRD_PARTY_NOTICES.txt
+digest=$(shasum -a 256 dist/THIRD_PARTY_NOTICES.txt | awk '{print $1}')
+printf 'notice %s THIRD_PARTY_NOTICES.txt\n' "$digest" >> dist/ael-toolchain.lock
+tar -czf "dist/ael-$version-unix.tar.gz" -C dist ael-darwin-arm64 ael-darwin-amd64 ael-linux-amd64 ael-linux-arm64 ael-toolchain.lock THIRD_PARTY_NOTICES.txt -C .. README.md docs scripts/install.sh scripts/uninstall.sh
+(cd dist && shasum -a 256 ael-darwin-arm64 ael-darwin-amd64 ael-linux-amd64 ael-linux-arm64 "ael-$version-unix.tar.gz" > SHA256SUMS)
