@@ -201,7 +201,11 @@ func (s *Service) RecoverDefinitions() error {
 			continue
 		}
 		plan := MakePlan(&d)
-		t := Task{Legacy: d.Legacy, Definition: d, DefinitionHash: store.Hash(b), Plan: plan, Step: "define", Status: "open", Created: time.Now().UTC(), Failure: "restored definition; no prior leases or evidence"}
+		policyHash, e := s.policyHash()
+		if e != nil {
+			return e
+		}
+		t := Task{PolicyHash: policyHash, Legacy: d.Legacy, Definition: d, DefinitionHash: store.Hash(b), Plan: plan, Step: "define", Status: "open", Created: time.Now().UTC(), Failure: "restored definition; no prior leases or evidence"}
 		outcome, e := os.ReadFile(filepath.Join(s.Root, ".ael/outcomes/"+d.ID+".json"))
 		if e == nil {
 			var historic Outcome
@@ -225,6 +229,11 @@ func (s *Service) RecoverDefinitions() error {
 	return nil
 }
 func (s *Service) ImportTask(t Task) error {
+	policyHash, e := s.policyHash()
+	if e != nil {
+		return e
+	}
+	t.PolicyHash = policyHash
 	p, e := s.taskPath(t.Definition.ID)
 	if e != nil {
 		return e

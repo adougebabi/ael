@@ -587,3 +587,46 @@ func TestRejectedPlanIsNotCancelledTask(t *testing.T) {
 		t.Fatal(n, e)
 	}
 }
+
+func TestRiskSignalCannotBeLoweredByExplicitPreset(t *testing.T) {
+	s := fixture(t)
+	d := bug()
+	d.Preset = "fast"
+	d.Risk = []string{"security contract"}
+	id := create(t, s, d)
+	n, e := s.Next(id)
+	if e != nil || n.Task.Plan.Preset != "strict" || n.Task.Plan.Approved {
+		t.Fatal(n, e)
+	}
+}
+func TestProjectPolicyRevisionInvalidatesExistingPlan(t *testing.T) {
+	s := fixture(t)
+	id := atVerify(t, s, bug())
+	policy, e := s.Policy()
+	if e != nil {
+		t.Fatal(e)
+	}
+	policy.Checks = bug().Checks
+	policy.Checks[0].Command = []string{"sh", "-c", "exit 1"}
+	b, _ := json.Marshal(policy)
+	os.WriteFile(filepath.Join(s.Root, ".ael/policy.yaml"), b, 0644)
+	n, e := s.Next(id)
+	if e != nil || n.Revision != 2 || n.Action != "wait_confirmation" || n.Task.Confirmation == nil || n.Task.Definition.Checks[0].Command[2] != "exit 1" || len(n.Task.Evidence) != 0 {
+		t.Fatal(n, e)
+	}
+	if _, e = s.Verify(id, "test", "checker"); e == nil {
+		t.Fatal("old task silently ignored new policy")
+	}
+}
+
+func TestTerminalAndConfirmationNextActionPrecedence(t *testing.T) {
+	task := core.Task{Status: "cancelled", Paused: true, Failure: "old pause"}
+	if n := task.BaseNext(); n.Action != "cancelled" || n.Board != "cancelled" {
+		t.Fatal(n)
+	}
+	task.Status = "open"
+	task.Confirmation = &core.Confirmation{Kind: "revision", Reason: "approve exact revision"}
+	if n := task.BaseNext(); n.Action != "wait_confirmation" || n.Board != "confirmation" {
+		t.Fatal(n)
+	}
+}

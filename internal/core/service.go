@@ -78,9 +78,17 @@ func (s *Service) Create(d Definition) (Next, error) {
 	if d.Preset != "" && !slices.Contains([]string{"fast", "standard", "strict", "research"}, d.Preset) {
 		return Next{}, Error("INVALID_PRESET", d.Preset)
 	}
+	policyHash, e := s.policyHash()
+	if e != nil {
+		return Next{}, e
+	}
 	if e := s.normalize(&d); e != nil {
 		return Next{}, e
 	}
+	if after, e := s.policyHash(); e != nil || after != policyHash {
+		return Next{}, Error("POLICY_CHANGED_DURING_PLAN", "retry with stable policy")
+	}
+
 	plan := MakePlan(&d)
 	if e := Validate(d); e != nil {
 		return Next{}, e
@@ -94,7 +102,7 @@ func (s *Service) Create(d Definition) (Next, error) {
 	}
 	b := definitionBytes(d)
 	now := time.Now().UTC()
-	t := Task{Definition: d, DefinitionHash: store.Hash(b), Plan: plan, Step: "define", Status: "open", Created: now, Updated: now, Attempts: []Attempt{}, Evidence: []Evidence{}, Approvals: []Approval{}, Feedback: []string{}}
+	t := Task{PolicyHash: policyHash, Definition: d, DefinitionHash: store.Hash(b), Plan: plan, Step: "define", Status: "open", Created: now, Updated: now, Attempts: []Attempt{}, Evidence: []Evidence{}, Approvals: []Approval{}, Feedback: []string{}}
 	e = s.Store.Write(func(tx *store.Tx) error {
 		var n int
 		_ = tx.Row("SELECT count(*) FROM tasks WHERE id=?", d.ID).Scan(&n)
@@ -145,6 +153,13 @@ func (s *Service) Get(id string) (Task, error) {
 	if e = json.Unmarshal([]byte(b), &t); e != nil {
 		return t, e
 	}
+	currentPolicy, e := s.policyHash()
+	if e != nil {
+		return t, e
+	}
+	if t.Status == "open" && t.PolicyHash != currentPolicy {
+		return s.syncPolicy(t)
+	}
 	path, e := s.taskPath(id)
 	if e != nil {
 		return t, e
@@ -169,14 +184,21 @@ func (s *Service) syncDefinition(old Task, d Definition, raw []byte) (Task, erro
 		return old, e
 	}
 	d.Revision = old.Definition.Revision + 1
+	policyHash, e := s.policyHash()
+	if e != nil {
+		return old, e
+	}
 	if e := s.normalize(&d); e != nil {
 		return old, e
+	}
+	if after, e := s.policyHash(); e != nil || after != policyHash {
+		return old, Error("POLICY_CHANGED_DURING_PLAN", "retry with stable policy")
 	}
 	plan := MakePlan(&d)
 	plan.Revision = old.Plan.Revision + 1
 	plan.Approved = false
 	var t Task
-	e := s.Store.Write(func(tx *store.Tx) error {
+	e = s.Store.Write(func(tx *store.Tx) error {
 		cur, e := load(tx, d.ID)
 		if e != nil {
 			return e
@@ -188,6 +210,7 @@ func (s *Service) syncDefinition(old Task, d Definition, raw []byte) (Task, erro
 			return e
 		}
 		t = cur
+		t.PolicyHash = policyHash
 		t.Definition = d
 		t.Plan = plan
 		t.Evidence = nil

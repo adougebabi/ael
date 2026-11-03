@@ -109,6 +109,7 @@ type Delivery struct {
 	Status      string `json:"status" yaml:"status"`
 }
 type Task struct {
+	PolicyHash         string         `json:"policy_hash" yaml:"policy_hash"`
 	CandidateWorkspace string         `json:"candidate_workspace" yaml:"candidate_workspace"`
 	Definition         Definition     `json:"definition" yaml:"definition"`
 	DefinitionHash     string         `json:"definition_hash" yaml:"definition_hash"`
@@ -209,6 +210,10 @@ func MakePlan(d *Definition) Plan {
 			reason = "risk signals require analysis and approval"
 		}
 	}
+	if len(d.Risk) > 0 && preset != "strict" {
+		preset = "strict"
+		reason = "risk signals require analysis and approval; lower preset overridden"
+	}
 	steps := []string{"define"}
 	if preset == "standard" || preset == "strict" {
 		steps = append(steps, "analysis")
@@ -276,6 +281,9 @@ func (t *Task) BaseNext() Next {
 		n.Action = "wait_executor"
 	default:
 		n.Action = "continue"
+	}
+	if n.Board == "completed" || n.Board == "cancelled" || n.Board == "confirmation" {
+		return n
 	}
 	if t.Paused {
 		n.Action = "wait_environment"

@@ -70,3 +70,35 @@ func (s *Service) normalize(d *Definition) error {
 	}
 	return nil
 }
+
+func (s *Service) policyHash() (string, error) {
+	p, e := store.SafePath(s.Root, ".ael/policy.yaml")
+	if e != nil {
+		return "", e
+	}
+	b, e := os.ReadFile(p)
+	if e != nil {
+		return "", e
+	}
+	return store.Hash(b), nil
+}
+func (s *Service) syncPolicy(old Task) (Task, error) {
+	d := old.Definition
+	p, e := s.Policy()
+	if e != nil {
+		return old, e
+	}
+	for _, required := range p.Checks {
+		found := false
+		for i := range d.Checks {
+			if d.Checks[i].ID == required.ID {
+				d.Checks[i] = required
+				found = true
+			}
+		}
+		if !found {
+			d.Checks = append(d.Checks, required)
+		}
+	}
+	return s.syncDefinition(old, d, definitionBytes(d))
+}
