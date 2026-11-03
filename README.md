@@ -91,7 +91,7 @@ ael loop run --task ID --codex --project PATH
 ael loop run --task ID --codex --session EXACT_SESSION_ID --project PATH
 ```
 
-Codex 适配已核对本机 0.144.1 help 与官方文档，不使用 --last、不关闭 sandbox/审批。真实运行可能因 CLI 配置、登录或模型不可用阻塞，Attached 仍可用。当前宿主试点遇到 config.toml features 类型错误，未改写用户配置。Managed 不自主发布；交付目标 merged/released 必须准确候选审批及真实回执 JSON（run_id、幂等键、候选、环境、状态、制品引用），不能仅凭退出码完成。中断交付先核对已有运行，再确认，避免重复副作用。
+Codex 适配已核对本机 0.144.1 help 与官方文档，不使用 --last、不关闭 sandbox/审批。真实运行可能因 CLI 配置、登录或模型不可用阻塞，Attached 仍可用。当前宿主试点遇到 config.toml features 类型错误，未改写用户配置。merged目标在定义中填写target，released目标填写environment，不能结束时临时指定或降低目标。Managed 不自主发布；交付目标 merged/released 必须准确候选审批及真实回执 JSON（run_id、幂等键、候选、环境、状态、制品引用），不能仅凭退出码完成。中断交付先核对已有运行，再确认，避免重复副作用。
 
 ## 知识、修订与恢复
 

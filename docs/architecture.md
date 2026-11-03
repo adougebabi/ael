@@ -9,3 +9,5 @@ Go 单进程服务/CLI，Vue3/TypeScript 编译并 embed。仅依赖本机文件
 参考核查（2026-11-03）：mini-trellis 0.3.2 @ 3b404f59cc8389d6d25e1a2b121a7465093abbcb（AGPL-3.0）；write-notes-like-deepseek 0.1.0 @72573a5b179de7798bbb7c4aeacdc0df6bf62439（未发现 LICENSE，授权未知）；Trellis0.6.17 @f089cb3286071199e84118dee86b6d76aab032f1（AGPL-3.0）。仅借鉴短入口、主题更新/替代、决策理由/时间线，不复制源码或模板。
 
 Codex官方 noninteractive/skills 文档核对于2026-11-03；本机0.144.1。exec --json 是事件，--output-last-message 是结果文件，--output-schema 约束最终 JSON。resume 必须精确 session ID，禁止 --last；保留默认安全机制。技能安装路径 .agents/skills。官方入口：https://developers.openai.com/codex/noninteractive 与 https://developers.openai.com/codex/skills。
+
+终态使用专用Outcome投影，排除完整Attempt、租约token、PID和工作区绝对路径；迁移提交文件仅携带相对映射与hash，原始快照在运行目录。项目policy.yaml内容hash绑定任务，变化时生成新定义/计划修订并等待确认；显式轻量预设不能降低风险信号所要求的门禁。

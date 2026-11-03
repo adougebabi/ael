@@ -84,4 +84,23 @@
 - 自定义旧工作流或歧义自然语言须经proposal/人工审阅；未知集成默认冲突，程序不会强行猜测。运行导出恢复的迁移历史需要重新核查后才可激活。
 - 没有生产部署、没有远程仓库创建、没有推送、没有真实旧工作流停用。缺少真实旧项目路径的试点边界始终保留。
 
-最终运行命令、测试计数、包校验值和外置证据路径在下方运行摘要补录；这些信息以实际执行产物为准。
+最终运行摘要如下，均来自实际执行产物。
+
+## 最终运行摘要
+
+- 代码构建提交：`82947e7`；二进制 `ael version` 为0.1.0/build82947e7。
+- `GOCACHE=/tmp/ael-go-cache go test -race -json ./...`：48个测试项通过（含子测试），0失败；`go vet ./...`通过。
+- 最终发布包启动的真实Chromium：5/5通过，0跳过、0失败、0 flaky，总耗时约11.7秒。覆盖真实闭环、创建取消、断线、准确修订、五板块、离线资源、迁移和知识检索。
+- 用户级安装前缀/tmp/ael-verified-install：安装、升级、version、卸载均实测；项目及运行库未删除。两个Skill的quick_validate均通过。
+- npm ci/package审计：0漏洞。macOS Mach-O arm64实际运行，Linux ELF x86-64静态二进制仅构建。
+- 真实Codex：最终82947e7在全新隔离任务启动，真实错误为`Error loading config.toml: invalid type: map, expected a boolean in features`；结果wait_environment/interrupted，未冒充模型执行成功。
+- 最终在线夹具工作台：[任务](http://127.0.0.1:7336)、[迁移](http://127.0.0.1:7337)。它们是本机验收数据，不是真实业务项目。
+
+外置持久证据目录：`/Users/vinson/.codex/visualizations/2026/11/03/01a19f63-8ed6-7763-a617-c71ccf2e64df/ael-evidence`。其中run-summary.json汇总结果，go-test-race.jsonl为逐测试原始记录，browser/report.json及PNG为最终浏览器结果，codex-integration.json为真实环境阻塞，doctor/storage-stats/prune-preview/backup-manifest和release-runtime-export记录实际外置运行文件与一致备份。pilot-paths.json记录本轮临时工程实际路径。
+
+| 二进制 | SHA-256 |
+|---|---|
+| ael-darwin-arm64 | `76119e8cc5df64c8c8346d8067f5f2326cf5d4b0c655c6597db722edec6e6558` |
+| ael-linux-amd64 | `d3905ee8a307d025c6313dbf2b6738b4705758e5909b4791784b410dc927977d` |
+
+分发包与tar.gz校验清单位于dist/SHA256SUMS；包内含安装/卸载脚本、README、docs和THIRD_PARTY_NOTICES。分发包最后重新封装了本报告，二进制保持上述已验收代码版本。

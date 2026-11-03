@@ -21,9 +21,9 @@
 | P2 | P1 | 四预设、按需检查、依赖/修订/确认/证据失效/交付目标 | 已验证：gates_test.go，修订/候选/依赖/交付回执/预算与反馈 |
 | P3 | P2 | 连续执行/节点交接/Managed、Codex、互斥/幂等/恢复 | 命令执行/交接/互斥与恢复已验证；真实 Codex 因宿主配置错误阻塞 |
 | P4 | P2 | 有预算的上下文、中文/英文/路径/符号检索、工程演进看板 | 已验证：knowledge_test.go + 浏览器中文检索 |
-| P5 | P3,P4 | 单文件分发、init/refresh、短入口和两个技能、冲突恢复 | init/refresh/Skill 已验证；正在完成安装与双平台包验证 |
-| P6 | P5 | 确定性迁移与 proposal、幂等/repair/rollback/shadow/激活、迁移 UI | 夹具程序回归与迁移 UI 已验证；补充源修订保护复核中 |
-| P7 | P0–P6 | 回归1–42、离线二进制、浏览器交互截图、容量/验收报告 | 进行中：race/vet、浏览器5项通过，打包/独立复核/最终报告待收敛 |
+| P5 | P3,P4 | 单文件分发、init/refresh、短入口和两个技能、冲突恢复 | 已验证：init/refresh/Skill、/tmp用户级安装升级卸载、macOS运行/Linux构建 |
+| P6 | P5 | 确定性迁移与 proposal、幂等/repair/rollback/shadow/激活、迁移 UI | 已验证：完整夹具/迁移UI、修订保护、回滚后新计划及确定性inventory |
+| P7 | P0–P6 | 回归1–42、离线二进制、浏览器交互截图、容量/验收报告 | 本机验收完成：48测试项/race/vet、最终包浏览器5项、双平台包；外部环境限制见验收报告 |
 
 ## 决策与实际阻塞
 
@@ -39,3 +39,5 @@
 - P6：完整 testdata/trellis；迁移、激活、回滚只在副本/测试临时目录，不曾接触真实摇光。
 - 环境阻塞：Codex0.144.1 非交互实际启动在读取用户config.toml时失败，features内map/boolean类型错误。没有修改配置或忽略用户安全约束；保留/tmp/ael-codex-runtime下真实process.log和中断Attempt。
 - P0初始简化元数据实测之后，P7改用完整Task/Attempt模型补测并加入真实文件日志/产物；两份结果都保留，避免覆盖原始证据。
+
+最终代码提交82947e7；已补齐政策hash修订、风险门禁不可降级和终态/确认优先级。48项Go测试（含子测试）及最终二进制5项Chromium通过。真实Codex配置阻塞、Linux未运行、未触及真实摇光均准确记录在acceptance-report.md。
