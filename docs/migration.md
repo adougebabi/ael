@@ -64,3 +64,15 @@ ael activate --project PATH --migration ID --approved-digest HASH --ack-drained
 - 只扫描显式来源目录；symlink 越界不读取。大文件只保留/备份，需明确范围再语义整理。
 - Markdown 相对文件链接做映射，缺失/目录/无法确定的链接保留原文并报告，不猜测网页锚点或任意模板语义。
 - 原文与新记录可独立保存；备份和大报告不进入业务 Git。没有完整运行数据备份时，Git clone 不能恢复旧租约和原始产物。
+
+## 0.1.1 mini-trellis 已转换项目
+
+识别已被折叠为research的旧任务，不复活为待办。原始JSON/JSONL/log及二进制保留为历史产物，备份在运行目录，不转成Markdown知识或新验收证据；OS/编译缓存明确忽略并对账。
+
+精确支持Codex的python3 -X utf8 .codex/hooks/session-start.py注册。仅在脚本具有mini-trellis标记、停用开关且来源hash匹配时退休。现有Codex通用配置和Claude权限保留；三个已识别mini-trellis Skill经frontmatter身份核对后备份退役。空session指针与update-check缓存可识别，非空或未知运行状态阻止切换。
+
+退役文件使用可恢复delete outbox；新project.mode最后切为active。activation intent与hash保存在运行目录；repair可恢复已授权的中断切换。rollback比较hash、恢复文件与权限，并先停用AEL；存在活跃AEL Attempt时拒绝回滚控制器。
+
+proposal可声明paths及带references来源ID的review_note，附审阅解释并完整保留原文。规范继承不代表业务实现已经通过验收。文件链接能映射到现存项目文件或保留的历史产物，缺失链接继续明确报告。
+
+项目policy.yaml可明确声明candidate_exclude，避免缓存、虚拟环境和私有运行配置进入源码候选。不能排除policy/knowledge所在.ael或AGENTS入口；政策改变会使任务产生新修订并请求确认。

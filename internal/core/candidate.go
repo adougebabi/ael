@@ -4,6 +4,7 @@ import (
 	"ael/internal/store"
 	"bytes"
 	"encoding/json"
+	"gopkg.in/yaml.v3"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -19,6 +20,22 @@ func Fingerprint(root string) (string, error) {
 		Mode uint32
 		Hash string
 	}
+	var policy struct {
+		Exclude []string `yaml:"candidate_exclude"`
+	}
+	if b, e := os.ReadFile(filepath.Join(root, ".ael/policy.yaml")); e == nil {
+		if e = yaml.Unmarshal(b, &policy); e != nil {
+			return "", e
+		}
+	} else if !os.IsNotExist(e) {
+		return "", e
+	}
+	for _, path := range policy.Exclude {
+		clean := filepath.ToSlash(filepath.Clean(path))
+		if filepath.IsAbs(path) || clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || clean == ".ael" || strings.HasPrefix(clean, ".ael/") || clean == "AGENTS.md" {
+			return "", Error("INVALID_CANDIDATE_EXCLUDE", path)
+		}
+	}
 	var inputs []input
 	e := filepath.WalkDir(root, func(path string, d fs.DirEntry, e error) error {
 		if e != nil {
@@ -30,6 +47,16 @@ func Fingerprint(root string) (string, error) {
 		}
 		if rel == "." {
 			return nil
+		}
+		for _, excluded := range policy.Exclude {
+			excluded = filepath.ToSlash(filepath.Clean(excluded))
+			inputPath := filepath.ToSlash(rel)
+			if inputPath == excluded || strings.HasPrefix(inputPath, excluded+"/") {
+				if d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
 		}
 		if d.IsDir() {
 			if d.Name() == ".git" || d.Name() == "node_modules" || rel == ".ael/work-items" || rel == ".ael/outcomes" || rel == ".ael/imports" {

@@ -630,3 +630,38 @@ func TestTerminalAndConfirmationNextActionPrecedence(t *testing.T) {
 		t.Fatal(n)
 	}
 }
+
+func TestDeclaredCacheExclusionsPreserveRealInputIdentity(t *testing.T) {
+	s := fixture(t)
+	policy, e := s.Policy()
+	if e != nil {
+		t.Fatal(e)
+	}
+	policy.CandidateExclude = []string{".gocache", ".venv", ".env"}
+	b, _ := json.Marshal(policy)
+	os.WriteFile(filepath.Join(s.Root, ".ael/policy.yaml"), b, 0644)
+	os.MkdirAll(filepath.Join(s.Root, ".gocache"), 0755)
+	os.MkdirAll(filepath.Join(s.Root, ".venv"), 0755)
+	os.Symlink("/usr/bin/python3", filepath.Join(s.Root, ".venv/python"))
+	before, e := core.Fingerprint(s.Root)
+	if e != nil {
+		t.Fatal(e)
+	}
+	os.WriteFile(filepath.Join(s.Root, ".gocache/transient"), []byte("cache"), 0644)
+	os.WriteFile(filepath.Join(s.Root, ".env"), []byte("fixture-not-a-real-secret"), 0600)
+	after, e := core.Fingerprint(s.Root)
+	if e != nil || before != after {
+		t.Fatal("declared runtime outputs changed candidate", e)
+	}
+	os.WriteFile(filepath.Join(s.Root, "untracked-source.go"), []byte("package source"), 0644)
+	after, e = core.Fingerprint(s.Root)
+	if e != nil || before == after {
+		t.Fatal("real untracked input excluded", e)
+	}
+	policy.CandidateExclude = []string{".ael"}
+	b, _ = json.Marshal(policy)
+	os.WriteFile(filepath.Join(s.Root, ".ael/policy.yaml"), b, 0644)
+	if _, e = core.Fingerprint(s.Root); e == nil {
+		t.Fatal("policy can exclude itself")
+	}
+}

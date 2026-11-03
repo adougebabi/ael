@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 type Source struct {
@@ -49,22 +50,27 @@ type Plan struct {
 	Created     time.Time         `json:"created"`
 }
 type Suggestion struct {
-	SupersededBy string `json:"superseded_by,omitempty"`
-	SourceID     string `json:"source_id"`
-	SourceHash   string `json:"source_hash"`
-	Quote        string `json:"quote"`
-	Action       string `json:"action"`
-	Kind         string `json:"kind"`
-	Status       string `json:"status"`
-	Target       string `json:"target_ref"`
-	Reason       string `json:"reason"`
-	Pending      string `json:"pending"`
+	Paths        []string `json:"paths,omitempty"`
+	ReviewNote   string   `json:"review_note,omitempty"`
+	References   []string `json:"references,omitempty"`
+	SupersededBy string   `json:"superseded_by,omitempty"`
+	SourceID     string   `json:"source_id"`
+	SourceHash   string   `json:"source_hash"`
+	Quote        string   `json:"quote"`
+	Action       string   `json:"action"`
+	Kind         string   `json:"kind"`
+	Status       string   `json:"status"`
+	Target       string   `json:"target_ref"`
+	Reason       string   `json:"reason"`
+	Pending      string   `json:"pending"`
 }
 type Proposal struct {
 	PlanID string       `json:"plan_id"`
 	Items  []Suggestion `json:"items"`
 }
 type Change struct {
+	Mode         uint32     `json:"mode,omitempty"`
+	Deleted      bool       `json:"deleted,omitempty"`
 	PriorTask    *core.Task `json:"prior_task,omitempty"`
 	PriorOutcome []byte     `json:"prior_outcome,omitempty"`
 	Target       string     `json:"target"`
@@ -75,15 +81,19 @@ type Change struct {
 	TaskID       string     `json:"task_id"`
 }
 type Run struct {
-	ID       string    `json:"id"`
-	State    string    `json:"state"`
-	Count    int       `json:"count"`
-	Plan     Plan      `json:"plan"`
-	Proposal *Proposal `json:"proposal,omitempty"`
-	Changes  []Change  `json:"changes"`
-	Warnings []string  `json:"warnings"`
-	Applied  []string  `json:"applied"`
-	Digest   string    `json:"approved_digest"`
+	PausedConfigHash string    `json:"paused_config_hash,omitempty"`
+	ActivationHash   string    `json:"activation_hash,omitempty"`
+	Activated        bool      `json:"activated,omitempty"`
+	Activating       bool      `json:"activating,omitempty"`
+	ID               string    `json:"id"`
+	State            string    `json:"state"`
+	Count            int       `json:"count"`
+	Plan             Plan      `json:"plan"`
+	Proposal         *Proposal `json:"proposal,omitempty"`
+	Changes          []Change  `json:"changes"`
+	Warnings         []string  `json:"warnings"`
+	Applied          []string  `json:"applied"`
+	Digest           string    `json:"approved_digest"`
 }
 
 func writeJSON(path string, v any) error {
@@ -108,7 +118,7 @@ func Scan(root string) (Inventory, error) {
 	if e != nil {
 		return inv, e
 	}
-	roots := []string{".trellis/spec", ".trellis/tasks", ".trellis/research", ".trellis/workspace", ".trellis/workflow.md", ".trellis/scripts", ".trellis/.runtime", ".agents/notes", "notes", "docs/adr", "AGENTS.md", "CLAUDE.md", ".claude", ".codex", ".agents/skills"}
+	roots := []string{".trellis/spec", ".trellis/tasks", ".trellis/research", ".trellis/workspace", ".trellis/workflow.md", ".trellis/scripts", ".trellis/.runtime", ".trellis/config.yaml", ".trellis/.developer", ".trellis/agents", ".agents/notes", "notes", "docs/adr", "AGENTS.md", "CLAUDE.md", ".claude", ".codex", ".agents/skills"}
 	seen := map[string]bool{}
 	for _, sourceRoot := range roots {
 		p, e := store.SafePath(root, sourceRoot)
@@ -144,6 +154,29 @@ func Scan(root string) (Inventory, error) {
 				return e
 			}
 			src.Size = st.Size()
+			if d.Name() == ".DS_Store" || strings.HasSuffix(d.Name(), ".pyc") {
+				src.Action = "ignore"
+				src.Kind = "cache"
+				src.Hash, e = store.HashFile(path)
+				if e != nil {
+					return e
+				}
+				src.Risks = append(src.Risks, "OS/compiler cache explicitly excluded; source retained")
+				inv.Sources = append(inv.Sources, src)
+				return nil
+			}
+			if strings.HasPrefix(rel, ".trellis/research/") && !strings.HasSuffix(rel, ".md") {
+				src.Kind = "artifact"
+				src.Action = "preserve"
+				src.Hash, e = store.HashFile(path)
+				if e != nil {
+					return e
+				}
+				src.Risks = append(src.Risks, "raw historical evidence retained and backed up outside project knowledge; not an executed check")
+				inv.Sources = append(inv.Sources, src)
+				return nil
+			}
+
 			if st.Size() > 16<<20 {
 				src.Hash, e = store.HashFile(path)
 				if e != nil {
@@ -159,14 +192,25 @@ func Scan(root string) (Inventory, error) {
 				return e
 			}
 			src.Hash = store.Hash(b)
+			if !utf8.Valid(b) {
+				src.Kind = "artifact"
+				src.Action = "preserve"
+				src.Risks = append(src.Risks, "binary/non-UTF8 source preserved without Markdown conversion")
+				inv.Sources = append(inv.Sources, src)
+				return nil
+			}
 			src.Body = string(b)
 			if strings.HasPrefix(rel, ".agents/skills/ael-") {
 				return nil
 			}
-			if (strings.HasPrefix(rel, ".agents/skills/") || strings.HasPrefix(rel, ".claude/") || strings.HasPrefix(rel, ".codex/") || rel == "AGENTS.md" || rel == "CLAUDE.md") && !strings.Contains(strings.ToLower(string(b)), "trellis") {
+			if (strings.HasPrefix(rel, ".agents/skills/") || strings.HasPrefix(rel, ".claude/") || strings.HasPrefix(rel, ".codex/") || rel == "AGENTS.md" || rel == "CLAUDE.md") && rel != "AGENTS.md" && rel != "CLAUDE.md" && rel != ".codex/hooks.json" && rel != ".codex/config.toml" && rel != ".claude/settings.json" && rel != ".claude/settings.local.json" && !strings.HasPrefix(rel, ".agents/skills/mini-trellis-") && !strings.Contains(strings.ToLower(string(b)), "trellis") {
 				return nil
 			}
 			switch {
+			case strings.HasPrefix(rel, ".agents/skills/") || strings.HasPrefix(rel, ".trellis/agents/") || rel == ".trellis/config.yaml" || rel == ".trellis/.developer":
+				src.Kind = "integration"
+				src.Action = "preserve"
+				src.Risks = append(src.Risks, "legacy managed entry retained for reviewed cutover")
 			case strings.HasPrefix(rel, ".trellis/spec/"):
 				src.Kind = "spec"
 				src.Action = "pending"
@@ -365,6 +409,20 @@ func Validate(p Plan, proposal *Proposal) (string, error) {
 				return "", core.Error("INVALID_PROPOSAL_SOURCE", x.SourceID)
 			}
 			seen[x.SourceID] = true
+			for _, scope := range x.Paths {
+				if _, e := store.SafePath(p.Project, scope); e != nil {
+					return "", core.Error("INVALID_PROPOSAL_SCOPE", scope)
+				}
+			}
+			if x.ReviewNote != "" && len(x.References) == 0 {
+				return "", core.Error("REVIEW_REFERENCES_REQUIRED", x.SourceID)
+			}
+			for _, id := range x.References {
+				if _, ok := ids[id]; !ok {
+					return "", core.Error("REVIEW_REFERENCE_MISSING", id)
+				}
+			}
+
 			if x.Action == "task_status" && s.Kind == "task" {
 				if x.Kind != "task" || x.Target != s.Target || !slices.Contains([]string{"open", "historical_completed", "cancelled", "conflict"}, x.Status) {
 					return "", core.Error("INVALID_TASK_PROPOSAL", x.SourceID)
@@ -383,6 +441,32 @@ func Validate(p Plan, proposal *Proposal) (string, error) {
 			if x.Pending != "" && x.Status == "current" {
 				return "", core.Error("UNRESOLVED_PROPOSAL", x.SourceID)
 			}
+		}
+	}
+	current, e := Scan(p.Project)
+	if e != nil {
+		return "", e
+	}
+	expected := map[string]string{}
+	for _, src := range p.Sources {
+		if src.Action != "ignore" {
+			expected[src.Path] = src.Hash
+		}
+	}
+	seenInputs := map[string]bool{}
+	for _, src := range current.Sources {
+		if src.Action == "ignore" {
+			continue
+		}
+		h, ok := expected[src.Path]
+		if !ok || h != src.Hash {
+			return "", core.Error("SOURCE_SET_CHANGED", src.Path)
+		}
+		seenInputs[src.Path] = true
+	}
+	for path := range expected {
+		if !seenInputs[path] {
+			return "", core.Error("SOURCE_SET_CHANGED", path)
 		}
 	}
 	graph := map[string]string{}
@@ -465,7 +549,7 @@ func List(s *core.Service) ([]Run, error) {
 
 var linkPattern = regexp.MustCompile(`\]\(([^)]+)\)`)
 
-func mapLinks(src Source, all []Source) (string, []string) {
+func mapLinks(src Source, all []Source, root string) (string, []string) {
 	warnings := []string{}
 	mapping := map[string]string{}
 	for _, s := range all {
@@ -487,6 +571,17 @@ func mapLinks(src Source, all []Source) (string, []string) {
 					relative += "#" + frag
 				}
 				return "](" + filepath.ToSlash(relative) + ")"
+			}
+		}
+		if path, e := store.SafePath(root, old); e == nil {
+			if _, e = os.Stat(path); e == nil {
+				relative, e := filepath.Rel(filepath.Dir(src.Target), old)
+				if e == nil {
+					if frag != "" {
+						relative += "#" + frag
+					}
+					return "](" + filepath.ToSlash(relative) + ")"
+				}
 			}
 		}
 		warnings = append(warnings, "unresolved link: "+src.Path+" -> "+raw)
@@ -706,11 +801,27 @@ func Apply(s *core.Service, p Plan, proposal *Proposal, approved string) (Run, e
 						status = "superseded"
 					}
 				}
-				text, warnings := mapLinks(src, p.Sources)
+				text, warnings := mapLinks(src, p.Sources, p.Project)
 				run.Warnings = append(run.Warnings, warnings...)
 				paths := []string{}
 				if src.Kind == "spec" {
 					paths = []string{strings.TrimPrefix(filepath.ToSlash(filepath.Dir(src.Path)), ".trellis/spec/")}
+				}
+				if x, ok := suggestions[src.ID]; ok {
+					if len(x.Paths) > 0 {
+						paths = x.Paths
+					}
+					if x.ReviewNote != "" {
+						refs := []string{}
+						for _, id := range x.References {
+							for _, source := range p.Sources {
+								if source.ID == id {
+									refs = append(refs, source.Path+"#sha256="+source.Hash)
+								}
+							}
+						}
+						text = "# 迁移审阅说明\n\n" + x.ReviewNote + "\n\n依据：" + strings.Join(refs, "; ") + "\n\n## 保留的原文\n\n" + text
+					}
 				}
 				body = knowledge.Encode(knowledge.Record{ID: "legacy-" + src.ID, Title: filepath.Base(src.Path), Kind: kind, Status: status, SupersededBy: superseded, Paths: paths, Source: src.Path + "#sha256=" + src.Hash, Body: text})
 			}
@@ -830,10 +941,19 @@ func Verify(s *core.Service, id string) (any, error) {
 			issues = append(issues, e.Error())
 			continue
 		}
+		if c.Deleted {
+			if _, e := os.Lstat(p); !os.IsNotExist(e) {
+				issues = append(issues, "retired entry restored or unreadable: "+c.Target)
+			}
+			continue
+		}
 		b, e := os.ReadFile(p)
 		if e != nil || store.Hash(b) != c.After {
 			issues = append(issues, "target drift: "+c.Target)
 		}
+	}
+	if r.Activating || r.Activated {
+		issues = append(issues, discoveryIssues(s, r)...)
 	}
 	if len(r.Applied) != r.Count {
 		issues = append(issues, "count reconciliation mismatch")
@@ -845,6 +965,22 @@ func Repair(s *core.Service, id string) (Run, error) {
 	if e != nil {
 		return r, e
 	}
+	if r.Activating {
+		if _, e = Activate(s, id, r.Digest, true); e != nil {
+			return r, e
+		}
+		return getRun(s, id)
+	}
+	if r.Activated {
+		v, e := Verify(s, id)
+		if e != nil {
+			return r, e
+		}
+		if !v.(map[string]any)["valid"].(bool) {
+			return r, core.Error("ACTIVATION_DRIFT", id)
+		}
+		return r, nil
+	}
 	return Apply(s, r.Plan, r.Proposal, r.Digest)
 }
 func Rollback(s *core.Service, id string) (Run, error) {
@@ -855,12 +991,87 @@ func Rollback(s *core.Service, id string) (Run, error) {
 	if e != nil {
 		return r, e
 	}
+	if r.Activated || r.Activating {
+		var active int
+		if e = s.Store.DB.QueryRow("SELECT count(*) FROM tasks,json_each(tasks.body,'$.attempts') a WHERE json_extract(a.value,'$.status') IN ('running','interrupted')").Scan(&active); e != nil {
+			return r, e
+		}
+		if active > 0 {
+			return r, core.Error("EXECUTION_NOT_DRAINED", "stop AEL attempts before rolling back controller")
+		}
+		drift := []string{}
+		for _, c := range r.Changes {
+			if !strings.HasPrefix(c.SourceID, "activation:") {
+				continue
+			}
+			path, e := store.SafePath(s.Root, c.Target)
+			if e != nil {
+				return r, e
+			}
+			b, e := os.ReadFile(path)
+			if c.Deleted && os.IsNotExist(e) {
+				continue
+			}
+			if e != nil {
+				drift = append(drift, c.Target)
+				continue
+			}
+			h := store.Hash(b)
+			if h != c.Before && h != c.After {
+				drift = append(drift, c.Target)
+			}
+		}
+		if len(drift) > 0 {
+			r.State = "rollback_conflict"
+			r.Warnings = append(r.Warnings, drift...)
+			if e = saveRun(s, r); e != nil {
+				return r, e
+			}
+			return r, nil
+		}
+		sort.SliceStable(r.Changes, func(i, j int) bool {
+			if r.Changes[i].Target == ".ael/project.yaml" {
+				return false
+			}
+			return r.Changes[j].Target == ".ael/project.yaml"
+		})
+	}
 	conflicts := []string{}
 	for i := len(r.Changes) - 1; i >= 0; i-- {
 		c := r.Changes[i]
 		p, e := store.SafePath(s.Root, c.Target)
 		if e != nil {
 			return r, e
+		}
+		if c.Deleted {
+			if _, e := os.Lstat(p); e == nil {
+				current, e := os.ReadFile(p)
+				if e != nil {
+					return r, e
+				}
+				if store.Hash(current) != c.Before {
+					conflicts = append(conflicts, c.Target)
+				}
+				continue
+			} else if !os.IsNotExist(e) {
+				return r, e
+			}
+			old, e := os.ReadFile(c.Backup)
+			if e != nil {
+				return r, e
+			}
+			if e = s.Store.Write(func(tx *store.Tx) error { return tx.File(p, old) }); e != nil {
+				return r, e
+			}
+			if e = s.Store.Flush(); e != nil {
+				return r, e
+			}
+			if c.Mode != 0 {
+				if e = os.Chmod(p, os.FileMode(c.Mode)); e != nil {
+					return r, e
+				}
+			}
+			continue
 		}
 		b, e := os.ReadFile(p)
 		if os.IsNotExist(e) && c.Before == "" {
@@ -936,6 +1147,13 @@ func Rollback(s *core.Service, id string) (Run, error) {
 		r.State = "rollback_conflict"
 	} else {
 		r.State = "rolled_back"
+	}
+	if r.State == "rolled_back" {
+		r.Activated = false
+		r.Activating = false
+		if config, err := bootstrap.Read(s.Root); err == nil {
+			s.Active = config.Mode == "active"
+		}
 	}
 	e = saveRun(s, r)
 	return r, e

@@ -98,18 +98,18 @@ func (t *Tx) File(path string, body []byte) error {
 
 // Flush uses compare-and-swap and atomic rename. Conflicting user edits are retained.
 func (s *Store) Flush() error {
-	rows, e := s.DB.Query("SELECT path,old_hash,body FROM outbox WHERE state='pending'")
+	rows, e := s.DB.Query("SELECT path,old_hash,body,state FROM outbox WHERE state IN ('pending','delete_pending') ORDER BY CASE WHEN path LIKE '%/.ael/project.yaml' THEN 3 WHEN path LIKE '%/AGENTS.md' THEN 2 WHEN state='delete_pending' THEN 1 ELSE 0 END,rowid")
 	if e != nil {
 		return e
 	}
 	type intent struct {
-		path, old string
-		b         []byte
+		path, old, state string
+		b                []byte
 	}
 	var all []intent
 	for rows.Next() {
 		var i intent
-		if e = rows.Scan(&i.path, &i.old, &i.b); e != nil {
+		if e = rows.Scan(&i.path, &i.old, &i.b, &i.state); e != nil {
 			rows.Close()
 			return e
 		}
@@ -128,11 +128,29 @@ func (s *Store) Flush() error {
 		} else if !os.IsNotExist(err) {
 			return err
 		}
+		if i.state == "delete_pending" {
+			if current != "" {
+				if current != i.old {
+					return fmt.Errorf("FILE_CONFLICT: %s; delete intent retained", i.path)
+				}
+				if e = os.Remove(i.path); e != nil {
+					return e
+				}
+			}
+			if _, e = s.DB.Exec("UPDATE outbox SET state='done' WHERE path=? AND state='delete_pending'", i.path); e != nil {
+				return e
+			}
+			continue
+		}
 		if current != Hash(i.b) && current != i.old {
 			return fmt.Errorf("FILE_CONFLICT: %s; pending intent retained", i.path)
 		}
 		if current != Hash(i.b) {
-			if e = Atomic(i.path, i.b, 0644); e != nil {
+			mode := os.FileMode(0644)
+			if st, err := os.Stat(i.path); err == nil {
+				mode = st.Mode().Perm()
+			}
+			if e = Atomic(i.path, i.b, mode); e != nil {
 				return e
 			}
 		}
@@ -235,4 +253,17 @@ func CopyAtomic(from, to string, mode os.FileMode) error {
 		return e
 	}
 	return os.Rename(out.Name(), to)
+}
+
+// DeleteFile records a recoverable deletion of an owned file, never a directory tree.
+func (t *Tx) DeleteFile(path string) error {
+	old, e := os.ReadFile(path)
+	if os.IsNotExist(e) {
+		return nil
+	}
+	if e != nil {
+		return e
+	}
+	_, e = t.Exec("INSERT INTO outbox(path,old_hash,body,state) VALUES(?,?,?,'delete_pending') ON CONFLICT(path) DO UPDATE SET old_hash=CASE WHEN outbox.state='done' THEN excluded.old_hash ELSE outbox.old_hash END,body=excluded.body,state='delete_pending'", path, Hash(old), []byte{})
+	return e
 }

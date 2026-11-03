@@ -9,6 +9,7 @@ import (
 )
 
 type Policy struct {
+	CandidateExclude             []string `json:"candidate_exclude,omitempty" yaml:"candidate_exclude"`
 	Schema                       int      `json:"schema" yaml:"schema"`
 	MaxRetries                   int      `json:"max_retries" yaml:"max_retries"`
 	MaxSeconds                   int      `json:"max_seconds" yaml:"max_seconds"`
