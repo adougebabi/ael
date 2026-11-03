@@ -242,10 +242,18 @@ func (s *Service) recoverRecords() error {
 			if e = Validate(d); e != nil {
 				return e
 			}
-			if !slices.Contains(r.Plan.Steps, r.Step) && !(r.Step == "done" && r.Status != "open") {
+			// The portable plan is history, not permission to skip responsibilities.
+			// Regenerate its steps from the authoritative definition/risk signals.
+			plan := MakePlan(&d)
+			if r.Plan.Revision < 1 {
+				return Error("INVALID_RECORD_PLAN_REVISION", r.ID)
+			}
+			plan.Revision = r.Plan.Revision
+			plan.Approved = false
+			if !slices.Contains(plan.Steps, r.Step) && !(r.Step == "done" && r.Status != "open") {
 				return Error("INVALID_RECORD_STEP", r.Step)
 			}
-			t := Task{PolicyHash: r.PolicyHash, Definition: d, DefinitionHash: r.DefinitionHash, Plan: r.Plan, Step: r.Step, Status: r.Status, Candidate: r.Candidate, Failure: r.Failure, Result: r.Result, Created: r.Created, Updated: r.Updated, Completed: r.Completed, Feedback: r.Feedback, History: &r.History, Historical: r.Status != "open"}
+			t := Task{PolicyHash: r.PolicyHash, Definition: d, DefinitionHash: r.DefinitionHash, Plan: plan, Step: r.Step, Status: r.Status, Candidate: r.Candidate, Failure: r.Failure, Result: r.Result, Created: r.Created, Updated: r.Updated, Completed: r.Completed, Feedback: r.Feedback, History: &r.History, Historical: r.Status != "open"}
 			t.Plan.Approved = false
 			t.TimeLimitSeconds = r.TimeLimitSeconds
 			if t.Status == "open" {

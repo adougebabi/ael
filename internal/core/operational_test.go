@@ -300,6 +300,44 @@ func TestFullBackupCanFollowProjectRecordRecovery(t *testing.T) {
 	}
 }
 
+func TestPortablePlanCannotRemoveVerificationResponsibilities(t *testing.T) {
+	s := fixture(t)
+	id := create(t, s, bug())
+	clone := copyCheckout(t, s.Root)
+	p := filepath.Join(clone, ".ael/records/"+id+".json")
+	b, e := os.ReadFile(p)
+	if e != nil {
+		t.Fatal(e)
+	}
+	var record core.TaskRecord
+	if e = json.Unmarshal(b, &record); e != nil {
+		t.Fatal(e)
+	}
+	record.Plan.Steps = []string{"define"}
+	record.Plan.Approved = true
+	b, _ = json.Marshal(record)
+	os.WriteFile(p, b, 0644)
+	other, _, e := bootstrap.Open(clone)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer other.Store.Close()
+	n, e := other.Next(id)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = other.Confirm(id, "restore", "approve", "reviewer", "reviewed current files", "", n.Revision, n.PlanRevision); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = other.Resume(id, "", false); e != nil {
+		t.Fatal(e)
+	}
+	n = step(t, other, id, "restored-agent")
+	if n.Action == "completed" || n.Step != "execute" || len(n.Task.Plan.Steps) != 3 {
+		t.Fatal("portable projection bypassed execute/verify", n)
+	}
+}
+
 func TestAttachedKeeperOutlivesModelWaitAndStopsWithOwner(t *testing.T) {
 	s := fixture(t)
 	id := create(t, s, bug())

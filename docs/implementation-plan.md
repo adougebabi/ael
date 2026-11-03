@@ -54,4 +54,4 @@
 | 独立续约 | owner身份绑定、退出停止、managed失效停止 | 真实进程回归通过 |
 | teal专项覆盖 | AEL无此命名；业务中发现Sage Teal主题 | 语义待用户确认，不用通用UI测试冒充 |
 
-本轮收尾：80项Go测试（含子测试）/race及vet通过；真实局域网地址下Chromium 5/5通过；最终分发原生CLI验证包含后台续约握手、独立续约、活owner拒绝ack恢复、失败修复闭环、Git检查点恢复后完整backup restore。无全局AEL/Go/Node/Python的PATH验证通过。持久证据见acceptance-report.md最新增量章节。
+本轮收尾：81项Go测试（含子测试）/race及vet通过；真实局域网地址下Chromium 5/5通过；最终分发原生CLI验证包含后台续约握手、独立续约、活owner拒绝ack恢复、失败修复闭环、Git检查点恢复后完整backup restore。无全局AEL/Go/Node/Python的PATH验证通过。持久证据见acceptance-report.md最新增量章节。

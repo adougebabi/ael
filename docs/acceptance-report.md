@@ -114,12 +114,12 @@
 |---|---|
 | 默认一小时阻断 | 默认max_seconds=0；显式正数仍有效、-1覆盖项目限制；task budget单独调度调整；有效区间合并、不累计过期后的空等。operational_test.go、budget_test.go回归 |
 | 不能局域网打开 | 默认0.0.0.0；合法IP/本机名端口与同源Origin校验；真实192.168.6.227地址HTTP/Chromium通过 |
-| 换机失去任务现场 | records脱敏检查点/历史、同事务outbox、新clone暂停复核并重新验收；已有运行库更新/活writer冲突保护；完整backup可接续Git记录恢复 |
+| 换机失去任务现场 | records脱敏检查点/历史、同事务outbox、新clone暂停复核并重新验收；已有运行库更新/活writer冲突保护；完整backup可接续Git记录恢复；恢复步骤从权威定义重新生成，可移植plan不能删掉Execute/Verify门禁 |
 | 误建任务不能删除 | CLI/API/真实UI删除、清理owned文件/日志/任务事件和提交，deleted标记跨clone收敛；多任务依赖删除顺序、禁止复用已删稳定ID均有回归 |
 | 验证类型受限 | test/qa/verify原名保存、Fast默认、风险升级Strict；领域创建/编辑和浏览器表单通过 |
 | 排队期间租约过期 | 默认30分钟、owner绑定独立20秒续约、启动握手、PID incarnation核对；活owner禁止ack释放；Managed/verify续约失败取消进程组；未知旧工具仍须核实，不宣称能终止宿主Agent |
 
-已执行：`go test -race -json ./...` 80项通过（含子测试），0失败；`go vet ./...`通过。真实Chromium任务看板5/5通过，包含创建取消/文本安全、失败修复完成、断线stale、五板块/修订/离线、验证类型和永久删除后重载。所有临时看板测试后停止。
+已执行：`go test -race -json ./...` 81项通过（含子测试），0失败；`go vet ./...`通过。真实Chromium任务看板5/5通过，包含创建取消/文本安全、失败修复完成、断线stale、五板块/修订/离线、验证类型和永久删除后重载。所有临时看板测试后停止。
 
 原生分发验证以PATH=/usr/bin:/bin运行项目入口：后台keeper握手并在调用方等待时实际续约；活owner阻止resume --ack-stopped；真实sh检查失败→修复→完成；五次Attempt摘要随项目复制恢复，凭据不进入记录；误建probe-x真实删除；旧预算调整保留验收修订；新clone无需init，记录恢复后可继续完整storage restore，恢复不复活token/PID/owner。
 
