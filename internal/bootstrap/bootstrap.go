@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-const Version = "0.1.3"
+const Version = "0.1.8"
 
 type Config struct {
 	Schema    int    `json:"schema"`
@@ -21,14 +21,18 @@ type Config struct {
 	Version   string `json:"asset_version"`
 }
 type Report struct {
-	Bundle     *Bundle          `json:"bundle,omitempty"`
-	Candidates []map[string]any `json:"check_candidates"`
-	Root       string           `json:"project"`
-	Data       string           `json:"data_dir"`
-	Config     Config           `json:"config"`
-	Files      []string         `json:"files"`
-	Detected   []string         `json:"detected"`
-	Warnings   []string         `json:"warnings"`
+	ServiceVersion string           `json:"service_version"`
+	ServiceBuild   string           `json:"service_build"`
+	Executable     string           `json:"executable"`
+	Knowledge      knowledge.Health `json:"knowledge_health"`
+	Bundle         *Bundle          `json:"bundle,omitempty"`
+	Candidates     []map[string]any `json:"check_candidates"`
+	Root           string           `json:"project"`
+	Data           string           `json:"data_dir"`
+	Config         Config           `json:"config"`
+	Files          []string         `json:"files"`
+	Detected       []string         `json:"detected"`
+	Warnings       []string         `json:"warnings"`
 }
 
 func Canonical(root string) (string, error) {
@@ -39,6 +43,9 @@ func Canonical(root string) (string, error) {
 	return filepath.EvalSymlinks(p)
 }
 func DataDir(root string) string {
+	if canonical, e := Canonical(root); e == nil {
+		root = canonical
+	}
 	base := os.Getenv("AEL_DATA_DIR")
 	if base == "" {
 		dir, e := os.UserConfigDir()
@@ -62,13 +69,15 @@ func Read(root string) (Config, error) {
 	return c, e
 }
 
+var Build = "dev"
+
 const begin = "<!-- AEL:BEGIN -->"
 const end = "<!-- AEL:END -->"
 
 func block(mode string) string {
-	return begin + "\nAEL project (" + mode + "). From the project root run `./ael doctor`, then `./ael context --task <id>`.\nUse $ael-work for authorized task execution; $ael-migrate-legacy only for reviewed legacy proposals.\nDo not treat historical imports as current constraints or verified checks.\n" + end
+	return begin + "\nAEL project (" + mode + "). For an engineering work request, use $ael-work; resume an existing task first. From the project root run `./ael doctor` and `./ael task list`; load exact task rules with `./ael context --task <id>`. Discussion/query alone creates no task.\nUse $ael-work for authorized task execution; $ael-migrate-legacy only for reviewed legacy proposals.\nDo not treat historical imports as current constraints or verified checks.\n" + end
 }
-func Init(root string, dry, refresh bool) (Report, error) {
+func Init(root string, dry, updating bool) (Report, error) {
 	root, e := Canonical(root)
 	r := Report{Root: root, Data: DataDir(root), Files: []string{}, Detected: []string{}, Warnings: []string{}}
 	if e != nil {
@@ -97,19 +106,6 @@ func Init(root string, dry, refresh bool) (Report, error) {
 	}
 	r.Config = c
 	r.Candidates = DetectChecks(root)
-	if dry {
-		r.Files = []string{".ael/project.yaml", ".ael/policy.yaml", ".ael/project.md", ".ael/executor.example.json", "AGENTS.md managed block", ".agents/skills/ael-work/SKILL.md", ".agents/skills/ael-migrate-legacy/SKILL.md"}
-		r.Warnings = append(r.Warnings, "dry-run: no project or runtime changes; detected build commands are suggestions only")
-		return r, nil
-	}
-	s, e := store.Open(r.Data)
-	if e != nil {
-		return r, e
-	}
-	defer s.Close()
-	if e = s.Flush(); e != nil {
-		return r, e
-	}
 	var manifest map[string]string
 	manifest = map[string]string{}
 	p, e := store.SafePath(root, ".ael/assets.json")
@@ -132,7 +128,7 @@ func Init(root string, dry, refresh bool) (Report, error) {
 		targets[".ael/executor.example.json"] = []byte(`{"command":[],"codex":false,"workspace":"","session":"","max_steps":20,"timeout_seconds":0}` + "\n")
 		targets[".ael/project.md"] = []byte("# 项目定义\n\n请填写目标、非目标与关键边界。尚未配置自动验收或发布命令。\n")
 	}
-	if refresh && !newProject {
+	if updating && !newProject {
 		// Upgrade only the exact, untouched former defaults. User policy is retained.
 		oldDefaults := map[string]string{
 			".ael/policy.yaml":           "{\"schema\":1,\"max_retries\":3,\"max_seconds\":3600,\"checks\":[],\"critical_knowledge\":[],\"delivery_requires_confirmation\":true}\n",
@@ -147,6 +143,13 @@ func Init(root string, dry, refresh bool) (Report, error) {
 				targets[rel] = []byte(strings.ReplaceAll(strings.ReplaceAll(oldDefault, "\"max_seconds\":3600", "\"max_seconds\":0,\"lease_seconds\":1800"), "\"timeout_seconds\":300", "\"timeout_seconds\":0"))
 			}
 		}
+	}
+	for _, file := range []string{"workflow.md", "commands.md"} {
+		b, e := assets.Files.ReadFile("skills/ael-work/references/" + file)
+		if e != nil {
+			return r, e
+		}
+		targets[".agents/skills/ael-work/references/"+file] = b
 	}
 	for _, name := range []string{"ael-work", "ael-migrate-legacy"} {
 		b, e := assets.Files.ReadFile("skills/" + name + "/SKILL.md")
@@ -175,7 +178,7 @@ func Init(root string, dry, refresh bool) (Report, error) {
 		finish += len(end)
 		oldBlock = text[start:finish]
 		if h, ok := manifest["AGENTS:block"]; !ok || store.Hash([]byte(oldBlock)) != h {
-			return r, core.Error("ASSET_CONFLICT", "user edited AGENTS managed block; review before refresh")
+			return r, core.Error("ASSET_CONFLICT", "user edited AGENTS managed block; review before update")
 		}
 		text = text[:start] + managed + text[finish:]
 	} else {
@@ -196,6 +199,21 @@ func Init(root string, dry, refresh bool) (Report, error) {
 		} else if e != nil && !os.IsNotExist(e) {
 			return r, e
 		}
+	}
+	if dry {
+		for rel := range targets {
+			r.Files = append(r.Files, rel)
+		}
+		r.Warnings = append(r.Warnings, "dry-run: full managed-asset checks completed; no project or runtime changes")
+		return r, nil
+	}
+	s, e := store.Open(r.Data)
+	if e != nil {
+		return r, e
+	}
+	defer s.Close()
+	if e = s.Flush(); e != nil {
+		return r, e
 	}
 	e = s.Write(func(tx *store.Tx) error {
 		for rel, b := range targets {
@@ -222,6 +240,9 @@ func Init(root string, dry, refresh bool) (Report, error) {
 	if e == nil {
 		e = s.Flush()
 	}
+	if e == nil {
+		_, e = knowledge.Index(root)
+	}
 	r.Warnings = append(r.Warnings, "check commands and delivery environment require explicit project configuration")
 	return r, e
 }
@@ -244,6 +265,7 @@ func Open(root string) (*core.Service, Report, error) {
 		return nil, r, e
 	}
 	svc := &core.Service{Store: s, Root: root, Active: c.Mode == "active"}
+	svc.ResolveBasis = func(d core.Definition) ([]core.BasisReference, error) { return knowledge.Basis(root, d) }
 	svc.ConstraintCheck = func(d core.Definition) []string { return knowledge.Conflicts(root, d) }
 	if e = s.Flush(); e == nil {
 		e = svc.RecoverDefinitions()
@@ -260,6 +282,10 @@ func Doctor(root string) (Report, error) {
 	if e != nil {
 		return r, e
 	}
+	r.ServiceVersion = Version
+	r.ServiceBuild = Build
+	r.Executable, _ = os.Executable()
+	r.Knowledge = knowledge.Status(root)
 	r.Candidates = DetectChecks(root)
 	r.Config, e = Read(root)
 	if e != nil {

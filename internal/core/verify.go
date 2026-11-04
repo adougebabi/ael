@@ -5,9 +5,11 @@ import (
 	"ael/internal/store"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 
 	"path/filepath"
 	"runtime"
@@ -22,6 +24,12 @@ func (s *Service) Verify(id, check, executor string) (Next, error) {
 	}
 	a := n.Attempt
 	t := n.Task
+	finished := false
+	defer func() {
+		if !finished {
+			_, _ = s.Interrupt(id, a.ID, a.Token, "checker preparation or result persistence failed; inspect runtime and resume verify")
+		}
+	}()
 	leaseCtx, leaseCancel := context.WithCancel(context.Background())
 	defer leaseCancel()
 	keeper, e := s.KeepLease(leaseCtx, id, a, 20*time.Second, leaseCancel)
@@ -35,10 +43,10 @@ func (s *Service) Verify(id, check, executor string) (Next, error) {
 			c = x
 		}
 	}
-	ev := Evidence{Check: check, Candidate: t.Candidate, Revision: t.Definition.Revision, PlanRevision: t.Plan.Revision, Result: "blocked", Source: "command", Environment: runtime.GOOS + "/" + runtime.GOARCH, At: time.Now().UTC(), ArtifactHashes: map[string]string{}}
+	ev := Evidence{Check: check, Candidate: t.Candidate, Revision: t.Definition.Revision, PlanRevision: t.Plan.Revision, Result: "blocked", Source: "command", Executor: executor, Environment: runtime.GOOS + "/" + runtime.GOARCH, At: time.Now().UTC(), ArtifactHashes: map[string]string{}}
 	b, _ := json.Marshal(c)
 	ev.Config = store.Hash(b)
-	result := StepResult{Status: "blocked", Summary: "no executable checker configured; use explicit human review with artifacts"}
+	result := StepResult{Status: "blocked", Summary: "no executable checker configured; provide the declared model/scenario/human capability with inspected inputs and evidence"}
 	if len(c.Command) > 0 {
 		seconds := c.Timeout
 		if seconds <= 0 {
@@ -89,6 +97,10 @@ func (s *Service) Verify(id, check, executor string) (Next, error) {
 			result.Status = "fail"
 			result.Summary = runErr.Error()
 		}
+		if errors.Is(runErr, exec.ErrNotFound) || errors.Is(runErr, os.ErrNotExist) {
+			result.Status = "blocked"
+			result.Summary = "checker executable unavailable: " + runErr.Error()
+		}
 		if background {
 			result.Status = "blocked"
 			result.Summary = "checker left background processes; workspace requires recovery"
@@ -136,15 +148,40 @@ func (s *Service) Verify(id, check, executor string) (Next, error) {
 	}
 	ev.Result = result.Status
 	ev.Reason = result.Summary
-	return s.submit(Submission{id, a.ID, a.Token, ID("verify-"), result}, &ev)
+	n, e = s.submit(Submission{id, a.ID, a.Token, ID("verify-"), result}, &ev)
+	if e == nil {
+		finished = true
+	}
+	return n, e
 }
 func (s *Service) Review(id, check, actor, reason string, refs []string) (Next, error) {
+	return s.review(id, check, actor, reason, refs, nil)
+}
+
+type ReviewExpectation struct {
+	Candidate          string
+	DefinitionRevision int
+	PlanRevision       int
+}
+
+func (s *Service) ReviewExact(id, check, actor, reason string, refs []string, expected ReviewExpectation) (Next, error) {
+	return s.review(id, check, actor, reason, refs, &expected)
+}
+func (s *Service) review(id, check, actor, reason string, refs []string, expected *ReviewExpectation) (Next, error) {
 	if actor == "" || reason == "" || len(refs) == 0 {
 		return Next{}, Error("HUMAN_EVIDENCE_REQUIRED", "actor, reason, artifact references")
 	}
 	t, e := s.Get(id)
 	if e != nil {
 		return Next{}, e
+	}
+	if expected != nil {
+		if expected.Candidate == "" || expected.DefinitionRevision <= 0 || expected.PlanRevision <= 0 {
+			return Next{}, Error("REVIEW_VERSION_REQUIRED", "refresh the task and review its exact candidate and revisions")
+		}
+		if expected.Candidate != t.Candidate || expected.DefinitionRevision != t.Definition.Revision || expected.PlanRevision != t.Plan.Revision {
+			return Next{}, Error("REVIEW_VERSION_MISMATCH", "review the updated candidate before confirming human pass")
+		}
 	}
 	var c Check
 	for _, x := range t.Definition.Checks {
@@ -154,6 +191,9 @@ func (s *Service) Review(id, check, actor, reason string, refs []string) (Next, 
 	}
 	if c.ID == "" || len(c.Command) > 0 {
 		return Next{}, Error("MANUAL_CHECK_REQUIRED", check)
+	}
+	if c.Method == "model" || c.Method == "scenario" {
+		return Next{}, Error("CHECK_METHOD_MISMATCH", "declared model/scenario capability cannot be replaced with human pass")
 	}
 	workspace := t.CandidateWorkspace
 	if workspace == "" {

@@ -48,6 +48,9 @@ func parse(raw []string) args {
 				continue
 			}
 			a.Flags[key] = "true"
+			if key == "dry-run" || key == "ack-stopped" {
+				continue
+			}
 			if i+1 < len(raw) && !strings.HasPrefix(raw[i+1], "--") {
 				i++
 				a.Flags[key] = raw[i]
@@ -75,6 +78,7 @@ func input(path string, v any) error {
 	return d.Decode(v)
 }
 func run(raw []string) (any, error) {
+	bootstrap.Build = build
 	a := parse(raw)
 	cmd := strings.Join(a.Words, " ")
 	root := a.get("project", ".")
@@ -82,15 +86,39 @@ func run(raw []string) (any, error) {
 	executor := a.get("executor", "attached")
 	switch cmd {
 	case "", "help":
-		return map[string]any{"commands": []string{"version", "doctor", "init [--dry-run] [--bundle-dir DIR]", "refresh", "task create --file definition.json", "task show|plan --task ID", "task list", "task edit --task ID --file definition.json --reason TEXT", "task cancel --task ID --reason TEXT", "task delete --task ID --reason TEXT", "task budget --task ID --max-seconds 0 --reason TEXT", "claim --task ID --executor NAME [--unit CHECK] [--owner-pid PERSISTENT_AGENT_PID]", "heartbeat --task ID --attempt ID --token TOKEN", "context --task ID", "submit --file submission.json", "next --task ID", "resume --task ID [--ack-stopped] [--return-to execute]", "verify --task ID --check ID", "confirm --task ID --kind plan|revision|delivery --decision approve|adjust|reject --revision N --plan-revision N --candidate HASH --reason TEXT --executor PERSON", "confirm --kind review --task ID --check ID --artifacts report.md --reason TEXT --executor PERSON", "dashboard [--addr 0.0.0.0:7331]", "loop run --task ID --config executor.json | --codex [--session EXACT_ID]", "executor probe", "workspace bind --path WORKTREE", "knowledge search --query TEXT", "knowledge read --id ID", "migrate scan --out REPORT", "migrate plan --inventory REPORT/inventory.json --out REPORT", "migrate validate --plan REPORT/plan.json [--proposal proposal.json]", "migrate apply --plan REPORT/plan.json --approved-digest HASH [--proposal proposal.json]", "migrate verify|repair|rollback --migration ID", "activate --migration ID --approved-digest HASH --ack-drained", "storage stats", "storage backup --out NEW_DIR", "storage restore --from EXPORT_DIR", "storage prune [--before RFC3339] [--apply]", "repair"}, "global": "--project PATH; all output JSON; errors stderr exit 1", "definition": core.Definition{}, "submission": core.Submission{}, "step_result": core.StepResult{}}, nil
+		return map[string]any{"commands": []string{"version", "doctor", "init [--dry-run] [--bundle-dir DIR]", "upgrade [--from DIR] [--prefix DIR] [--dry-run]", "update [--project PATH] [--from DIR] [--prefix DIR] [--dry-run] [--ack-stopped]", "task create --file definition.json", "task show|plan --task ID", "task list", "task edit --task ID --file definition.json --reason TEXT", "task cancel --task ID --reason TEXT", "task delete --task ID --reason TEXT", "task budget --task ID --max-seconds 0 --reason TEXT", "claim --task ID --executor NAME [--unit CHECK] [--owner-pid PERSISTENT_AGENT_PID]", "heartbeat --task ID --attempt ID --token TOKEN", "context --task ID", "progress --task ID --attempt ID --token TOKEN --file progress.json", "assess --file assessment.json", "knowledge status", "knowledge index", "submit --file submission.json", "next --task ID", "resume --task ID [--ack-stopped] [--return-to execute]", "verify --task ID --check ID", "confirm --task ID --kind plan|revision|delivery --decision approve|adjust|reject --revision N --plan-revision N --candidate HASH --reason TEXT --executor PERSON", "confirm --kind review --task ID --check ID --artifacts report.md --reason TEXT --executor PERSON", "dashboard [--addr 0.0.0.0:7331]", "loop run --task ID --config executor.json | --codex [--session EXACT_ID]", "executor probe", "workspace bind --path WORKTREE", "knowledge search --query TEXT", "knowledge read --id ID", "migrate scan --out REPORT", "migrate plan --inventory REPORT/inventory.json --out REPORT", "migrate validate --plan REPORT/plan.json [--proposal proposal.json]", "migrate apply --plan REPORT/plan.json --approved-digest HASH [--proposal proposal.json]", "migrate verify|repair|rollback --migration ID", "activate --migration ID --approved-digest HASH --ack-drained", "storage stats", "storage backup --out NEW_DIR", "storage restore --from EXPORT_DIR", "storage prune [--before RFC3339] [--apply]", "repair"}, "global": "--project PATH; all output JSON; errors stderr exit 1", "definition": core.Definition{}, "submission": core.Submission{}, "step_result": core.StepResult{}}, nil
 	case "version":
 		return map[string]string{"version": bootstrap.Version, "build": build}, nil
 	case "doctor":
 		return bootstrap.Doctor(root)
 	case "init":
 		return bootstrap.InitProject(root, a.has("dry-run"), false, a.get("bundle-dir", ""))
+	case "upgrade", "update":
+		for flag, value := range a.Flags {
+			if flag != "project" && flag != "prefix" && flag != "from" && flag != "bundle-dir" && flag != "dry-run" && flag != "ack-stopped" {
+				return nil, core.Error("UNKNOWN_FLAG", flag)
+			}
+			if flag != "dry-run" && flag != "ack-stopped" && value == "true" {
+				return nil, core.Error("FLAG_VALUE_REQUIRED", flag)
+			}
+			if (flag == "dry-run" || flag == "ack-stopped") && value != "true" && value != "false" {
+				return nil, core.Error("INVALID_FLAG_VALUE", flag)
+			}
+		}
+		if cmd == "upgrade" && (a.Flags["project"] != "" || a.Flags["ack-stopped"] != "") {
+			return nil, core.Error("INVALID_UPDATE_SCOPE", "upgrade updates the local installation; use update --project PATH for a project")
+		}
+		from := a.get("from", a.get("bundle-dir", ""))
+		if a.Flags["from"] != "" && a.Flags["bundle-dir"] != "" && a.Flags["from"] != a.Flags["bundle-dir"] {
+			return nil, core.Error("CONFLICTING_SOURCE", "use a single distribution source")
+		}
+		options := bootstrap.UpdateOptions{From: from, Prefix: a.get("prefix", ""), DryRun: a.has("dry-run"), AckStopped: a.has("ack-stopped")}
+		if cmd == "upgrade" {
+			return bootstrap.Upgrade(options)
+		}
+		return bootstrap.UpdateProject(root, options)
 	case "refresh":
-		return bootstrap.InitProject(root, a.has("dry-run"), true, a.get("bundle-dir", ""))
+		return nil, core.Error("UNKNOWN_COMMAND", "refresh was removed; use update for the current project, or upgrade for the local AEL installation")
 	}
 	if cmd == "migrate scan" {
 		inv, e := migration.Scan(root)
@@ -294,11 +322,34 @@ func run(raw []string) (any, error) {
 		c.Codex = c.Codex || a.has("codex")
 		c.Session = a.get("session", c.Session)
 		return execution.Run(svc, id, c)
+	case "progress":
+		var p core.Progress
+		if e = input(a.get("file", ""), &p); e != nil {
+			return nil, e
+		}
+		return svc.Progress(id, a.get("attempt", ""), a.get("token", ""), p)
+	case "assess":
+		var r core.Assessment
+		if e = input(a.get("file", ""), &r); e != nil {
+			return nil, e
+		}
+		return svc.Assess(r)
+	case "knowledge index":
+		c, e := knowledge.Index(svc.Root)
+		if e == nil {
+			e = knowledge.Sync(svc)
+		}
+		return c, e
+	case "knowledge status":
+		return knowledge.Status(svc.Root), nil
 	case "context":
 		return knowledge.Context(svc, id, a.get("query", ""), 12000)
 	case "knowledge search":
 		return knowledge.Search(svc.Root, a.get("query", ""))
 	case "knowledge read":
+		if version := a.get("version", ""); version != "" {
+			return knowledge.ReadVersion(svc, a.get("id", ""), version)
+		}
 		all, e := knowledge.ReadAll(svc.Root)
 		if e != nil {
 			return nil, e

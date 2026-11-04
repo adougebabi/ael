@@ -38,15 +38,23 @@ func TestPlansAndNoAutomaticPass(t *testing.T) {
 	d.UI = true
 	d.UX = true
 	d.Type = "feature"
+	if _, e := s.Create(d); e == nil || !strings.Contains(e.Error(), "CHECK_COVERAGE_REQUIRED") {
+		t.Fatal("UI flags invented coverage", e)
+	}
+	d.Acceptance = append(d.Acceptance, "visual layout correct", "interaction flow correct")
+	d.Checks = append(d.Checks, core.Check{ID: "visual", Kind: "ui", Covers: []string{"visual layout correct"}}, core.Check{ID: "interaction", Kind: "ux", Covers: []string{"interaction flow correct"}})
 	id = create(t, s, d)
 	n, _ = s.Next(id)
 	if len(n.Task.Definition.Checks) != 3 || n.Task.Plan.Preset != "standard" {
 		t.Fatal(n)
 	}
+	if len(n.Task.Definition.Checks[1].Covers) != 1 || n.Task.Definition.Checks[1].Method != "scenario" {
+		t.Fatal("visual gate repeated functional coverage")
+	}
 	d = bug()
 	d.Type = "research"
 	d.Goal = "analysis"
-	d.Checks = nil
+	d.Checks = []core.Check{{ID: "review", Kind: "manual", Method: "human", Covers: d.Acceptance, Required: true}}
 	id = create(t, s, d)
 	step(t, s, id, "one")
 	os.WriteFile(filepath.Join(s.Root, "conclusion.md"), []byte("evidence-backed conclusion"), 0644)
@@ -164,15 +172,15 @@ func TestClaimsIdempotencyAndFencing(t *testing.T) {
 		t.Fatal("old token heartbeated")
 	}
 }
-func TestWorkspaceMutexDependenciesAndCancellation(t *testing.T) {
+func TestConcurrentTasksDependenciesAndCancellation(t *testing.T) {
 	s := fixture(t)
 	first := create(t, s, bug())
 	second := create(t, s, bug())
 	if _, e := s.Claim(first, "", "A", "", ""); e != nil {
 		t.Fatal(e)
 	}
-	if _, e := s.Claim(second, "", "B", "", ""); e == nil {
-		t.Fatal("same workspace double writer")
+	if _, e := s.Claim(second, "", "B", "", ""); e != nil {
+		t.Fatal("independent task in same workspace rejected", e)
 	}
 	s.Resume(first, "", true)
 	s.Cancel(first, "user cancelled")
@@ -208,8 +216,8 @@ func TestParallelIndependentChecks(t *testing.T) {
 		t.Fatal("checks cross candidate")
 	}
 	newid := create(t, s, bug())
-	if _, e = s.Claim(newid, "", "writer", "", ""); e == nil {
-		t.Fatal("writer while verification")
+	if _, e = s.Claim(newid, "", "writer", "", ""); e != nil {
+		t.Fatal("independent task during verification rejected", e)
 	}
 	s.Resume(id, "", true)
 	n, e = s.Verify(id, "test", "C")
@@ -219,6 +227,97 @@ func TestParallelIndependentChecks(t *testing.T) {
 	n, e = s.Verify(id, "contract", "D")
 	if e != nil || n.Action != "completed" {
 		t.Fatal(n, e)
+	}
+}
+
+func TestConcurrentClaimsAcrossStoresInSameWorkspace(t *testing.T) {
+	s := fixture(t)
+	other, _, err := bootstrap.Open(s.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Store.Close()
+	ids := []string{create(t, s, bug()), create(t, s, bug())}
+	type result struct {
+		n   core.Next
+		err error
+	}
+	start := make(chan struct{})
+	results := make(chan result, len(ids))
+	for i, svc := range []*core.Service{s, other} {
+		id := ids[i]
+		go func(svc *core.Service) {
+			<-start
+			n, e := svc.Claim(id, "", "independent-executor", "", "")
+			results <- result{n, e}
+		}(svc)
+	}
+	close(start)
+	claims := map[string]core.Next{}
+	for range ids {
+		r := <-results
+		if r.err != nil {
+			t.Fatal("concurrent claim failed", r.err)
+		}
+		claims[r.n.Task.Definition.ID] = r.n
+	}
+	if len(claims) != 2 || claims[ids[0]].Attempt.ID == claims[ids[1]].Attempt.ID {
+		t.Fatal("attempts not isolated", claims)
+	}
+	if _, err = other.Submit(core.Submission{Task: ids[1], Attempt: claims[ids[0]].Attempt.ID, Token: claims[ids[0]].Attempt.Token, Key: "wrong-task", Result: core.StepResult{Status: "pass", Summary: "wrong task"}}); err == nil {
+		t.Fatal("accepted another task's attempt")
+	}
+	for _, id := range ids {
+		a := claims[id].Attempt
+		if _, err = s.Submit(core.Submission{Task: id, Attempt: a.ID, Token: a.Token, Key: a.ID, Result: core.StepResult{Status: "pass", Summary: "independent definition"}}); err != nil {
+			t.Fatal("could not submit independent task", id, err)
+		}
+	}
+}
+
+func TestInterruptedTaskAndLegacyLockDoNotBlockOtherTasks(t *testing.T) {
+	s := fixture(t)
+	first := create(t, s, bug())
+	second := create(t, s, bug())
+	n, err := s.Claim(first, "", "old-executor", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := n.Attempt
+	// A project upgraded from an older version may still contain a legacy lock.
+	if _, err = s.Store.DB.Exec("INSERT INTO workspace_locks(workspace,attempt,task) VALUES(?,?,?)", s.Root, a.ID, first); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Interrupt(first, a.ID, a.Token, "test interrupted executor"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Claim(second, "", "other-executor", "", ""); err != nil {
+		t.Fatal("interrupted task or legacy lock blocked another task", err)
+	}
+	if _, err = s.Claim(first, "", "replacement", "", ""); err == nil {
+		t.Fatal("interrupted task resumed without acknowledgement")
+	}
+	var locks int
+	if err = s.Store.DB.QueryRow("SELECT count(*) FROM workspace_locks WHERE task=?", first).Scan(&locks); err != nil || locks != 1 {
+		t.Fatal("legacy lock removed before its owner's recovery", locks, err)
+	}
+	if _, err = s.Resume(first, "", true); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Store.DB.QueryRow("SELECT count(*) FROM workspace_locks WHERE task=?", first).Scan(&locks); err != nil || locks != 0 {
+		t.Fatal("legacy lock not released by task recovery", locks, err)
+	}
+}
+
+func TestVerificationCanStartWhileAnotherTaskRuns(t *testing.T) {
+	s := fixture(t)
+	checked := atVerify(t, s, bug())
+	other := create(t, s, bug())
+	if _, err := s.Claim(other, "", "other-writer", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Claim(checked, "test", "checker", "", ""); err != nil {
+		t.Fatal("verification blocked by independent task", err)
 	}
 }
 func TestBudgetsAndFeedback(t *testing.T) {

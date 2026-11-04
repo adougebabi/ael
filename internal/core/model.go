@@ -9,6 +9,7 @@ import (
 )
 
 type Check struct {
+	Method    string   `json:"method,omitempty" yaml:"method,omitempty"`
 	ID        string   `json:"id" yaml:"id"`
 	Kind      string   `json:"kind" yaml:"kind"`
 	Command   []string `json:"command" yaml:"command"`
@@ -17,31 +18,55 @@ type Check struct {
 	Timeout   int      `json:"timeout_seconds" yaml:"timeout_seconds"`
 	Artifacts []string `json:"artifacts" yaml:"artifacts"`
 }
+
+// BasisReference identifies the exact authoritative input supplied to an executor.
+type BasisReference struct {
+	ID      string `json:"id"`
+	Source  string `json:"source"`
+	Version string `json:"version"`
+	Status  string `json:"status"`
+	Reason  string `json:"reason"`
+}
+type KnowledgeOutcome struct {
+	Status    string   `json:"status"`
+	Reason    string   `json:"reason"`
+	Artifacts []string `json:"artifacts"`
+}
+type Blocker struct {
+	Category string   `json:"category"`
+	Reason   string   `json:"reason"`
+	Scope    []string `json:"scope"`
+	Tried    string   `json:"tried"`
+	Recovery string   `json:"recovery"`
+	ResumeAt string   `json:"resume_at"`
+}
 type Definition struct {
-	Legacy       map[string]any `json:"legacy,omitempty" yaml:"legacy,omitempty"`
-	Target       string         `json:"target" yaml:"target"`
-	ID           string         `json:"id" yaml:"id"`
-	Title        string         `json:"title" yaml:"title"`
-	Type         string         `json:"type" yaml:"type"`
-	Source       string         `json:"source" yaml:"source"`
-	Scope        []string       `json:"scope" yaml:"scope"`
-	NonGoals     []string       `json:"non_goals" yaml:"non_goals"`
-	Acceptance   []string       `json:"acceptance" yaml:"acceptance"`
-	Priority     int            `json:"priority" yaml:"priority"`
-	Dependencies []string       `json:"dependencies" yaml:"dependencies"`
-	Parent       string         `json:"parent" yaml:"parent"`
-	Goal         string         `json:"goal" yaml:"goal"`
-	Environment  string         `json:"environment" yaml:"environment"`
-	Preset       string         `json:"preset" yaml:"preset"`
-	Risk         []string       `json:"risk" yaml:"risk"`
-	UI           bool           `json:"ui" yaml:"ui"`
-	UX           bool           `json:"ux" yaml:"ux"`
-	Checks       []Check        `json:"checks" yaml:"checks"`
-	Knowledge    []string       `json:"knowledge" yaml:"knowledge"`
-	FeedbackOf   string         `json:"feedback_of" yaml:"feedback_of"`
-	Revision     int            `json:"definition_revision" yaml:"definition_revision"`
-	MaxRetries   int            `json:"max_retries" yaml:"max_retries"`
-	MaxSeconds   int            `json:"max_seconds" yaml:"max_seconds"`
+	Intent          string         `json:"intent,omitempty" yaml:"intent,omitempty"`
+	OriginalRequest string         `json:"original_request,omitempty" yaml:"original_request,omitempty"`
+	Legacy          map[string]any `json:"legacy,omitempty" yaml:"legacy,omitempty"`
+	Target          string         `json:"target" yaml:"target"`
+	ID              string         `json:"id" yaml:"id"`
+	Title           string         `json:"title" yaml:"title"`
+	Type            string         `json:"type" yaml:"type"`
+	Source          string         `json:"source" yaml:"source"`
+	Scope           []string       `json:"scope" yaml:"scope"`
+	NonGoals        []string       `json:"non_goals" yaml:"non_goals"`
+	Acceptance      []string       `json:"acceptance" yaml:"acceptance"`
+	Priority        int            `json:"priority" yaml:"priority"`
+	Dependencies    []string       `json:"dependencies" yaml:"dependencies"`
+	Parent          string         `json:"parent" yaml:"parent"`
+	Goal            string         `json:"goal" yaml:"goal"`
+	Environment     string         `json:"environment" yaml:"environment"`
+	Preset          string         `json:"preset" yaml:"preset"`
+	Risk            []string       `json:"risk" yaml:"risk"`
+	UI              bool           `json:"ui" yaml:"ui"`
+	UX              bool           `json:"ux" yaml:"ux"`
+	Checks          []Check        `json:"checks" yaml:"checks"`
+	Knowledge       []string       `json:"knowledge" yaml:"knowledge"`
+	FeedbackOf      string         `json:"feedback_of" yaml:"feedback_of"`
+	Revision        int            `json:"definition_revision" yaml:"definition_revision"`
+	MaxRetries      int            `json:"max_retries" yaml:"max_retries"`
+	MaxSeconds      int            `json:"max_seconds" yaml:"max_seconds"`
 }
 type Plan struct {
 	Revision int      `json:"revision" yaml:"revision"`
@@ -51,26 +76,31 @@ type Plan struct {
 	Approved bool     `json:"approved" yaml:"approved"`
 }
 type Attempt struct {
-	ID            string     `json:"id" yaml:"id"`
-	Unit          string     `json:"unit" yaml:"unit"`
-	Executor      string     `json:"executor" yaml:"executor"`
-	Session       string     `json:"session" yaml:"session"`
-	Workspace     string     `json:"workspace" yaml:"workspace"`
-	Input         string     `json:"input_version" yaml:"input_version"`
-	Candidate     string     `json:"candidate_version" yaml:"candidate_version"`
-	Started       time.Time  `json:"started" yaml:"started"`
-	Ended         *time.Time `json:"ended" yaml:"ended"`
-	Lease         time.Time  `json:"lease_until" yaml:"lease_until"`
-	Token         string     `json:"token,omitempty" yaml:"token"`
-	Fence         int        `json:"fence" yaml:"fence"`
-	Status        string     `json:"status" yaml:"status"`
-	Reason        string     `json:"reason" yaml:"reason"`
-	Outputs       []string   `json:"outputs" yaml:"outputs"`
-	PID           int        `json:"pid" yaml:"pid"`
-	OwnerPID      int        `json:"owner_pid,omitempty" yaml:"owner_pid,omitempty"`
-	OwnerIdentity string     `json:"owner_identity,omitempty" yaml:"owner_identity,omitempty"`
+	DefinitionRevision int        `json:"definition_revision,omitempty"`
+	PlanRevision       int        `json:"plan_revision,omitempty"`
+	ID                 string     `json:"id" yaml:"id"`
+	Unit               string     `json:"unit" yaml:"unit"`
+	Executor           string     `json:"executor" yaml:"executor"`
+	Session            string     `json:"session" yaml:"session"`
+	Workspace          string     `json:"workspace" yaml:"workspace"`
+	Input              string     `json:"input_version" yaml:"input_version"`
+	Candidate          string     `json:"candidate_version" yaml:"candidate_version"`
+	Started            time.Time  `json:"started" yaml:"started"`
+	Ended              *time.Time `json:"ended" yaml:"ended"`
+	Lease              time.Time  `json:"lease_until" yaml:"lease_until"`
+	Token              string     `json:"token,omitempty" yaml:"token"`
+	Fence              int        `json:"fence" yaml:"fence"`
+	Status             string     `json:"status" yaml:"status"`
+	Reason             string     `json:"reason" yaml:"reason"`
+	Outputs            []string   `json:"outputs" yaml:"outputs"`
+	PID                int        `json:"pid" yaml:"pid"`
+	OwnerPID           int        `json:"owner_pid,omitempty" yaml:"owner_pid,omitempty"`
+	OwnerIdentity      string     `json:"owner_identity,omitempty" yaml:"owner_identity,omitempty"`
 }
 type Evidence struct {
+	ReusedFrom     string            `json:"reused_from,omitempty"`
+	Executor       string            `json:"executor,omitempty"`
+	Inputs         []string          `json:"inputs,omitempty"`
 	ArtifactStatus map[string]string `json:"artifact_status,omitempty" yaml:"artifact_status"`
 	Check          string            `json:"check" yaml:"check"`
 	Candidate      string            `json:"candidate" yaml:"candidate"`
@@ -112,30 +142,37 @@ type Delivery struct {
 	Status      string `json:"status" yaml:"status"`
 }
 type Task struct {
-	PolicyHash         string         `json:"policy_hash" yaml:"policy_hash"`
-	CandidateWorkspace string         `json:"candidate_workspace" yaml:"candidate_workspace"`
-	Definition         Definition     `json:"definition" yaml:"definition"`
-	DefinitionHash     string         `json:"definition_hash" yaml:"definition_hash"`
-	Plan               Plan           `json:"plan" yaml:"plan"`
-	Step               string         `json:"current_step" yaml:"current_step"`
-	Status             string         `json:"status" yaml:"status"`
-	Attempts           []Attempt      `json:"attempts" yaml:"attempts"`
-	Evidence           []Evidence     `json:"evidence" yaml:"evidence"`
-	Confirmation       *Confirmation  `json:"confirmation" yaml:"confirmation"`
-	Approvals          []Approval     `json:"approvals" yaml:"approvals"`
-	Candidate          string         `json:"candidate" yaml:"candidate"`
-	Failure            string         `json:"failure" yaml:"failure"`
-	Paused             bool           `json:"paused" yaml:"paused"`
-	Created            time.Time      `json:"created" yaml:"created"`
-	Updated            time.Time      `json:"updated" yaml:"updated"`
-	Completed          *time.Time     `json:"completed" yaml:"completed"`
-	Historical         bool           `json:"historical" yaml:"historical"`
-	Result             string         `json:"result" yaml:"result"`
-	Delivery           *Delivery      `json:"delivery" yaml:"delivery"`
-	Legacy             map[string]any `json:"legacy,omitempty" yaml:"legacy"`
-	Feedback           []string       `json:"feedback" yaml:"feedback"`
-	History            *RecordHistory `json:"history,omitempty" yaml:"history,omitempty"`
-	TimeLimitSeconds   *int           `json:"time_limit_seconds,omitempty" yaml:"time_limit_seconds,omitempty"`
+	InspectionCandidate string            `json:"inspection_candidate,omitempty"`
+	Basis               []BasisReference  `json:"applicable_knowledge"`
+	ContextAttempt      string            `json:"context_attempt,omitempty"`
+	KnowledgeOutcome    *KnowledgeOutcome `json:"knowledge_outcome,omitempty"`
+	Blocker             *Blocker          `json:"blocker,omitempty"`
+	Route               string            `json:"route,omitempty"`
+	PolicyHash          string            `json:"policy_hash" yaml:"policy_hash"`
+	CandidateWorkspace  string            `json:"candidate_workspace" yaml:"candidate_workspace"`
+	Definition          Definition        `json:"definition" yaml:"definition"`
+	DefinitionHash      string            `json:"definition_hash" yaml:"definition_hash"`
+	Plan                Plan              `json:"plan" yaml:"plan"`
+	Step                string            `json:"current_step" yaml:"current_step"`
+	Status              string            `json:"status" yaml:"status"`
+	Attempts            []Attempt         `json:"attempts" yaml:"attempts"`
+	EvidenceHistory     []Evidence        `json:"evidence_history,omitempty"`
+	Evidence            []Evidence        `json:"evidence" yaml:"evidence"`
+	Confirmation        *Confirmation     `json:"confirmation" yaml:"confirmation"`
+	Approvals           []Approval        `json:"approvals" yaml:"approvals"`
+	Candidate           string            `json:"candidate" yaml:"candidate"`
+	Failure             string            `json:"failure" yaml:"failure"`
+	Paused              bool              `json:"paused" yaml:"paused"`
+	Created             time.Time         `json:"created" yaml:"created"`
+	Updated             time.Time         `json:"updated" yaml:"updated"`
+	Completed           *time.Time        `json:"completed" yaml:"completed"`
+	Historical          bool              `json:"historical" yaml:"historical"`
+	Result              string            `json:"result" yaml:"result"`
+	Delivery            *Delivery         `json:"delivery" yaml:"delivery"`
+	Legacy              map[string]any    `json:"legacy,omitempty" yaml:"legacy"`
+	Feedback            []string          `json:"feedback" yaml:"feedback"`
+	History             *RecordHistory    `json:"history,omitempty" yaml:"history,omitempty"`
+	TimeLimitSeconds    *int              `json:"time_limit_seconds,omitempty" yaml:"time_limit_seconds,omitempty"`
 }
 type Next struct {
 	Action       string   `json:"next_action" yaml:"next_action"`
@@ -149,11 +186,13 @@ type Next struct {
 	KeeperPID    int      `json:"keeper_pid,omitempty" yaml:"keeper_pid,omitempty"`
 }
 type StepResult struct {
-	Status    string    `json:"status" yaml:"status"`
-	Summary   string    `json:"summary" yaml:"summary"`
-	Artifacts []string  `json:"artifacts" yaml:"artifacts"`
-	ReturnTo  string    `json:"return_to" yaml:"return_to"`
-	Delivery  *Delivery `json:"delivery" yaml:"delivery"`
+	Knowledge *KnowledgeOutcome `json:"knowledge,omitempty"`
+	Blocker   *Blocker          `json:"blocker,omitempty"`
+	Status    string            `json:"status" yaml:"status"`
+	Summary   string            `json:"summary" yaml:"summary"`
+	Artifacts []string          `json:"artifacts" yaml:"artifacts"`
+	ReturnTo  string            `json:"return_to" yaml:"return_to"`
+	Delivery  *Delivery         `json:"delivery" yaml:"delivery"`
 }
 type Submission struct {
 	Task    string     `json:"task" yaml:"task"`
@@ -177,7 +216,7 @@ func Validate(d Definition) error {
 	if !slices.Contains([]string{"feature", "bug", "improvement", "refactor", "research", "docs", "chore", "test", "qa", "verify"}, d.Type) {
 		return Error("INVALID_TYPE", d.Type)
 	}
-	if !slices.Contains([]string{"analysis", "verified", "merged", "released"}, d.Goal) {
+	if !slices.Contains([]string{"analysis", "report", "verified", "merged", "released"}, d.Goal) {
 		return Error("INVALID_GOAL", d.Goal)
 	}
 	if d.Goal == "merged" && d.Target == "" {
@@ -186,12 +225,24 @@ func Validate(d Definition) error {
 	if d.Goal == "released" && d.Environment == "" {
 		return Error("ENVIRONMENT_REQUIRED", "release target")
 	}
+	if d.Intent != "" && d.Intent != "inspect" && d.Intent != "change" {
+		return Error("INVALID_INTENT", d.Intent)
+	}
+	if d.Intent == "inspect" && d.Goal != "report" && d.Goal != "analysis" {
+		return Error("INSPECTION_GOAL_REQUIRED", "inspection delivers a report or analysis; it cannot authorize source modification")
+	}
 	ids := map[string]bool{}
 	for _, c := range d.Checks {
 		if c.ID == "" || ids[c.ID] {
 			return errors.New("INVALID_CHECK_ID")
 		}
 		ids[c.ID] = true
+		if c.Method != "" && !slices.Contains([]string{"command", "scenario", "model", "human"}, c.Method) {
+			return Error("INVALID_CHECK_METHOD", c.Method)
+		}
+		if len(c.Command) > 0 && (c.Method == "model" || c.Method == "human") {
+			return Error("CHECK_METHOD_CONFLICT", c.ID)
+		}
 		if len(c.Covers) == 0 {
 			return Error("CHECK_COVERAGE_REQUIRED", c.ID)
 		}
@@ -235,7 +286,7 @@ func MakePlan(d *Definition) Plan {
 		steps = append(steps, "delivery")
 	}
 	if len(d.Checks) == 0 {
-		d.Checks = []Check{{ID: "review", Kind: "manual", Covers: d.Acceptance, Required: true}}
+		d.Checks = []Check{{ID: "review", Kind: "review", Method: "model", Covers: d.Acceptance, Required: true}}
 	}
 	for _, x := range []struct {
 		required bool
@@ -246,11 +297,16 @@ func MakePlan(d *Definition) Plan {
 			for i := range d.Checks {
 				if d.Checks[i].Kind == x.id {
 					d.Checks[i].Required = true
+					if d.Checks[i].Method == "" {
+						d.Checks[i].Method = "scenario"
+					}
 					found = true
 				}
 			}
 			if !found {
-				d.Checks = append(d.Checks, Check{ID: x.id, Kind: x.id, Covers: d.Acceptance, Required: true})
+				// Scope cannot be inferred from a UI flag. Reject an incomplete plan
+				// instead of assigning every functional criterion to every checker.
+				d.Checks = append(d.Checks, Check{ID: x.id, Kind: x.id, Method: "scenario", Required: true})
 			}
 		}
 	}
@@ -290,6 +346,9 @@ func (t *Task) BaseNext() Next {
 		n.Action = "wait_executor"
 	default:
 		n.Action = "continue"
+		if t.Route == "repair" {
+			n.Action = "repair"
+		}
 	}
 	if n.Board == "completed" || n.Board == "cancelled" || n.Board == "confirmation" {
 		return n

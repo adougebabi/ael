@@ -13,6 +13,11 @@ func Sync(s *core.Service) error {
 	if e != nil {
 		return e
 	}
+	for _, r := range all {
+		if e = captureVersion(s, r); e != nil {
+			return e
+		}
+	}
 	return s.Store.Write(func(tx *store.Tx) error {
 		old := map[string]string{}
 		var raw string

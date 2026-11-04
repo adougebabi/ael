@@ -4,8 +4,10 @@ export GOCACHE=${GOCACHE:-/tmp/ael-go-cache}
 (cd web && npm ci --ignore-scripts && npm run build)
 mkdir -p dist
 build_id=$(git rev-parse --short HEAD 2>/dev/null || printf dev)
-if [ -n "$(git status --porcelain 2>/dev/null)" ]; then build_id="$build_id-dirty"; fi
-version=0.1.3
+source_digest=$(git ls-files -co --exclude-standard -- internal cmd assets web/src web/package.json web/package-lock.json web/vite.config.ts scripts go.mod go.sum | LC_ALL=C sort -u | while IFS= read -r source_file; do if [ -f "$source_file" ]; then shasum -a 256 "$source_file"; fi; done | shasum -a 256 | cut -c 1-12)
+build_id="$build_id-$source_digest"
+version=$(sed -n 's/^const Version = "\(.*\)"/\1/p' internal/bootstrap/bootstrap.go)
+[ -n "$version" ] || { echo "Missing source version" >&2; exit 1; }
 printf 'version %s\n' "$version" > dist/ael-toolchain.lock
 for target in darwin-arm64 darwin-amd64 linux-amd64 linux-arm64; do
  os=${target%-*}
@@ -14,6 +16,8 @@ for target in darwin-arm64 darwin-amd64 linux-amd64 linux-arm64; do
  digest=$(shasum -a 256 "dist/ael-$target" | awk '{print $1}')
  printf '%s %s ael-%s\n' "$target" "$digest" "$target" >> dist/ael-toolchain.lock
 done
+native_platform="$(go env GOOS)-$(go env GOARCH)"
+"./dist/ael-$native_platform" version | rg -q "\"version\":\"$version\"" || { echo 'Binary/lock version mismatch' >&2; exit 1; }
 cp THIRD_PARTY_NOTICES.txt dist/THIRD_PARTY_NOTICES.txt
 digest=$(shasum -a 256 dist/THIRD_PARTY_NOTICES.txt | awk '{print $1}')
 printf 'notice %s THIRD_PARTY_NOTICES.txt\n' "$digest" >> dist/ael-toolchain.lock

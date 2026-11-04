@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -29,6 +30,48 @@ func TestCLISubprocess(t *testing.T) {
 	}
 	json.NewEncoder(os.Stdout).Encode(v)
 	os.Exit(0)
+}
+
+func TestUpdateCommandScopesAndRemovedRefresh(t *testing.T) {
+	parsed := parse([]string{"--dry-run", "upgrade"})
+	if strings.Join(parsed.Words, " ") != "upgrade" || !parsed.has("dry-run") {
+		t.Fatal("boolean flag consumed command", parsed)
+	}
+	for _, args := range [][]string{{"refresh"}, {"upgrade", "--project", "."}, {"update", "--from"}, {"update", "--dry-run=invalid"}, {"upgrade", "--unknown"}} {
+		if _, e := run(args); e == nil {
+			t.Fatalf("invalid command accepted: %v", args)
+		}
+	}
+	help, e := run([]string{"help"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	b, _ := json.Marshal(help)
+	if strings.Contains(string(b), `"refresh"`) || !strings.Contains(string(b), `upgrade [`) || !strings.Contains(string(b), `update [`) {
+		t.Fatal(string(b))
+	}
+	old, e := os.Getwd()
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer os.Chdir(old)
+	root := t.TempDir()
+	if e = os.Chdir(root); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = run([]string{"update"}); e == nil || !strings.Contains(e.Error(), "NOT_INITIALIZED") {
+		t.Fatal(e)
+	}
+	if _, e = os.Stat(filepath.Join(root, ".ael")); !os.IsNotExist(e) {
+		t.Fatal("update initialized current directory")
+	}
+	t.Setenv("AEL_DATA_DIR", t.TempDir())
+	if _, e = bootstrap.Init(root, false, false); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = run([]string{"update", "--from", filepath.Join(root, "missing")}); e == nil || strings.Contains(e.Error(), "NOT_INITIALIZED") {
+		t.Fatal("update did not detect current project", e)
+	}
 }
 func TestMultiProcessProtocol(t *testing.T) {
 	root := t.TempDir()

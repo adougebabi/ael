@@ -121,8 +121,11 @@ func TestReadOnlyInventoryAndLosslessIdempotentApply(t *testing.T) {
 		t.Fatal(e)
 	}
 	for _, k := range all {
-		if k.Kind == "spec" && k.Status != "conflict" {
-			t.Fatal("spec automatically current")
+		if k.Kind == "spec" && strings.Contains(k.Source, "spec/backend/api.md") && k.Status != "conflict" {
+			t.Fatal("mixed spec promoted")
+		}
+		if k.Kind == "spec" && strings.Contains(k.Source, "spec/frontend/api.md") && k.Status != "current" {
+			t.Fatal("unambiguous inherited baseline blocked")
 		}
 		if k.Source == "" || k.Body == "" {
 			t.Fatal("lost original/source")

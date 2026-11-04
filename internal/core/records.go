@@ -72,7 +72,7 @@ func recordOf(t Task) TaskRecord {
 	for _, a := range t.Attempts {
 		r.History.Attempts = append(r.History.Attempts, RecordAttempt{a.ID, a.Unit, a.Executor, a.Input, a.Candidate, a.Started, a.Ended, a.Status, a.Reason})
 	}
-	for _, e := range t.Evidence {
+	for _, e := range append(slices.Clone(t.EvidenceHistory), t.Evidence...) {
 		hashes := map[string]string{}
 		for ref, hash := range e.ArtifactHashes {
 			if !filepath.IsAbs(ref) && !strings.Contains(ref, "..") {

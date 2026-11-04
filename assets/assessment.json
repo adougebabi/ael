@@ -1,0 +1,64 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "task",
+    "check",
+    "candidate",
+    "method",
+    "executor",
+    "result",
+    "reason",
+    "inputs",
+    "artifacts",
+    "return_to"
+  ],
+  "properties": {
+    "task": {
+      "type": "string"
+    },
+    "check": {
+      "type": "string"
+    },
+    "candidate": {
+      "type": "string"
+    },
+    "method": {
+      "type": "string",
+      "enum": [
+        "model",
+        "scenario",
+        "human"
+      ]
+    },
+    "executor": {
+      "type": "string"
+    },
+    "result": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "fail",
+        "blocked"
+      ]
+    },
+    "reason": {
+      "type": "string"
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "return_to": {
+      "type": "string"
+    }
+  }
+}

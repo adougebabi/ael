@@ -85,25 +85,148 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/migrations":
 			h.migrations(w, r)
-		case "/api/timeline":
-			if e := knowledge.Sync(h.Service); e != nil {
-				reply(w, nil, e)
-				return
+		case "/api/migration-view":
+			h.migrationView(w, r)
+		case "/api/project-status":
+			h.projectStatus(w, r)
+		case "/api/executor-probe":
+			h.executorProbe(w, r)
+		case "/api/sources":
+			health := knowledge.Status(h.Service.Root)
+			limit, offset := bounds(r)
+			total := len(health.Sources)
+			sources := []knowledge.Source{}
+			if offset < total {
+				sources = health.Sources[offset:min(offset+limit, total)]
 			}
-			v, e := h.Service.Timeline(100, 0)
+			health.Sources = nil
+			reply(w, map[string]any{"health": health, "items": sources, "total": total, "limit": limit, "offset": offset}, nil)
+		case "/api/timeline":
+			// Diagnostics are a read-only view; opening them must not manufacture
+			// new observations or alter the apparent project history.
+			limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+			offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+			v, e := h.Service.Timeline(limit, offset)
+			reply(w, v, e)
+		case "/api/knowledge-page":
+			q := r.URL.Query()
+			limit, _ := strconv.Atoi(q.Get("limit"))
+			offset, _ := strconv.Atoi(q.Get("offset"))
+			v, e := knowledge.Browse(h.Service.Root, knowledge.BrowseQuery{Text: q.Get("q"), View: q.Get("view"), Scope: q.Get("scope"), Limit: limit, Offset: offset})
+			reply(w, v, e)
+		case "/api/knowledge-record":
+			h.knowledgeRecord(w, r)
+		case "/api/knowledge-link":
+			v, e := knowledge.ResolveLink(h.Service, r.URL.Query().Get("id"), r.URL.Query().Get("href"))
+			reply(w, v, e)
+		case "/api/evolution":
+			q := r.URL.Query()
+			limit, _ := strconv.Atoi(q.Get("limit"))
+			offset, _ := strconv.Atoi(q.Get("offset"))
+			v, e := knowledge.Changes(h.Service, knowledge.BrowseQuery{Text: q.Get("q"), Scope: q.Get("scope"), Limit: limit, Offset: offset}, q.Get("kind"), q.Get("from"), q.Get("to"))
+			if q.Get("id") != "" && e == nil {
+				// Stable object lookup is independent of the currently visible page.
+				v, e = knowledge.Changes(h.Service, knowledge.BrowseQuery{Limit: 100}, "", "", "")
+				for offset := 0; e == nil; offset += 100 {
+					if offset > 0 {
+						v, e = knowledge.Changes(h.Service, knowledge.BrowseQuery{Limit: 100, Offset: offset}, "", "", "")
+					}
+					for _, c := range v.Items {
+						if c.ID == q.Get("id") {
+							reply(w, c, nil)
+							return
+						}
+					}
+					if offset+100 >= v.Total {
+						break
+					}
+				}
+				if e == nil {
+					e = core.Error("CHANGE_NOT_FOUND", q.Get("id"))
+				}
+			}
+			reply(w, v, e)
+		case "/api/knowledge-status":
+			reply(w, knowledge.Status(h.Service.Root), nil)
+		case "/api/task-knowledge":
+			v, e := knowledge.TaskView(h.Service, r.URL.Query().Get("id"))
+			if r.URL.Query().Get("compact") == "1" && e == nil {
+				m := v.(map[string]any)
+				records := []knowledge.Record{}
+				next, err := h.Service.Next(r.URL.Query().Get("id"))
+				if err != nil {
+					reply(w, nil, err)
+					return
+				}
+				t := next.Task
+				for _, k := range m["records"].([]knowledge.Record) {
+					explicit := false
+					for _, b := range t.Basis {
+						if b.ID == k.ID {
+							explicit = true
+						}
+					}
+					for _, id := range t.Definition.Knowledge {
+						if id == k.ID {
+							explicit = true
+						}
+					}
+					for _, id := range k.Tasks {
+						if id == t.Definition.ID {
+							explicit = true
+						}
+					}
+					blocking := false
+					for _, reason := range next.Reasons {
+						if reason == "unresolved knowledge conflict: "+k.ID {
+							blocking = true
+						}
+					}
+					if explicit || blocking {
+						k.Title = knowledge.Title(k)
+						k.Body = ""
+						records = append(records, k)
+					}
+				}
+				m["records"] = records
+				health := knowledge.Status(h.Service.Root)
+				health.Sources = nil
+				m["health"] = health
+			}
 			reply(w, v, e)
 		case "/api/knowledge":
-			v, e := knowledge.Search(h.Service.Root, r.URL.Query().Get("q"))
+			v, e := knowledge.WithUsage(h.Service, r.URL.Query().Get("q"))
 			reply(w, v, e)
 		case "/api/info":
 			v, e := bootstrap.Doctor(h.Service.Root)
-			reply(w, v, e)
+			v.Knowledge.Sources = nil
+			reply(w, map[string]any{"project": v.Root, "data_dir": v.Data, "config": v.Config, "service_version": v.ServiceVersion, "service_build": v.ServiceBuild, "executable": v.Executable, "instance_id": h.Token[len(h.Token)-12:], "knowledge_health": v.Knowledge, "warnings": v.Warnings}, e)
 		case "/api/tasks":
 			if r.Method == "GET" {
 				limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 				offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 				days, _ := strconv.Atoi(r.URL.Query().Get("days"))
-				v, e := h.Service.QueryPage(core.Query{Limit: limit, Offset: offset, Days: days, Text: r.URL.Query().Get("q"), Board: r.URL.Query().Get("board")})
+				offsets := map[string]int{}
+				for _, board := range []string{"active", "pending", "confirmation", "completed", "cancelled"} {
+					if raw := r.URL.Query().Get("offset_" + board); raw != "" {
+						value, _ := strconv.Atoi(raw)
+						offsets[board] = max(0, value)
+					}
+				}
+				v, e := h.Service.QueryPage(core.Query{Limit: limit, Offset: offset, Offsets: offsets, Days: days, Text: r.URL.Query().Get("q"), Board: r.URL.Query().Get("board")})
+				if r.URL.Query().Get("compact") == "1" && e == nil {
+					items := []core.TaskSummary{}
+					for _, n := range v.Items {
+						summary, err := h.Service.Summarize(n)
+						if err != nil {
+							reply(w, nil, err)
+							return
+						}
+						items = append(items, summary)
+					}
+					reply(w, map[string]any{"items": items, "counts": v.Counts, "total": v.Total, "limit": v.Limit, "offset": v.Offset, "offsets": v.Offsets}, nil)
+					return
+				}
 				reply(w, v, e)
 			} else if r.Method == "POST" {
 				var d core.Definition
@@ -119,6 +242,23 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		case "/api/task":
 			v, e := h.Service.Next(r.URL.Query().Get("id"))
+			if e == nil {
+				summary, err := h.Service.Summarize(v)
+				checks := map[string]*core.Evidence{}
+				for _, c := range v.Task.Definition.Checks {
+					checks[c.ID] = core.CurrentEvidence(v.Task, c)
+				}
+				reply(w, struct {
+					core.Next
+					Summary core.TaskSummary               `json:"summary"`
+					Checks  map[string]*core.Evidence      `json:"current_checks"`
+					Runs    map[string]core.CheckExecution `json:"current_runs"`
+				}{v, summary, checks, summary.CurrentRuns}, err)
+				return
+			}
+			reply(w, v, e)
+		case "/api/context":
+			v, e := knowledge.Context(h.Service, r.URL.Query().Get("id"), "", 12000)
 			reply(w, v, e)
 		case "/api/events":
 			v, e := h.Service.Events(r.URL.Query().Get("id"))
@@ -143,6 +283,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				Submission   core.Submission `json:"submission"`
 				Definition   core.Definition `json:"definition"`
 				Artifacts    []string        `json:"artifacts"`
+				Assessment   core.Assessment `json:"assessment"`
 			}
 			e := decode(r, &a)
 			if e != nil {
@@ -157,8 +298,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				v, e = h.Service.Submit(a.Submission)
 			case "verify":
 				v, e = h.Service.Verify(a.ID, a.Unit, "dashboard")
+			case "assess":
+				v, e = h.Service.Assess(a.Assessment)
 			case "review":
-				v, e = h.Service.Review(a.ID, a.Unit, a.Executor, a.Reason, a.Artifacts)
+				v, e = h.Service.ReviewExact(a.ID, a.Unit, a.Executor, a.Reason, a.Artifacts, core.ReviewExpectation{Candidate: a.Candidate, DefinitionRevision: a.Revision, PlanRevision: a.PlanRevision})
 			case "confirm":
 				v, e = h.Service.Confirm(a.ID, a.Kind, a.Decision, a.Executor, a.Reason, a.Candidate, a.Revision, a.PlanRevision)
 			case "pause":
@@ -185,6 +328,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			if e != nil {
 				reply(w, nil, e)
+				return
+			}
+			if r.URL.Query().Get("format") == "image" {
+				contentType := http.DetectContentType(b)
+				if contentType != "image/png" && contentType != "image/jpeg" {
+					reply(w, nil, core.Error("UNSUPPORTED_IMAGE", "only PNG/JPEG evidence can be displayed"))
+					return
+				}
+				w.Header().Set("Content-Type", contentType)
+				w.Write(b)
 				return
 			}
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")

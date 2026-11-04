@@ -1,0 +1,85 @@
+package core
+
+import (
+	"ael/internal/store"
+	"encoding/json"
+	"net/http"
+	"runtime"
+	"slices"
+	"strings"
+	"time"
+)
+
+type Assessment struct {
+	Task      string   `json:"task"`
+	Check     string   `json:"check"`
+	Candidate string   `json:"candidate"`
+	Method    string   `json:"method"`
+	Executor  string   `json:"executor"`
+	Result    string   `json:"result"`
+	Reason    string   `json:"reason"`
+	Inputs    []string `json:"inputs"`
+	Artifacts []string `json:"artifacts"`
+	ReturnTo  string   `json:"return_to"`
+}
+
+func (s *Service) Assess(r Assessment) (Next, error)                  { return s.assess(r, nil) }
+func (s *Service) AssessClaim(r Assessment, a *Attempt) (Next, error) { return s.assess(r, a) }
+func (s *Service) assess(r Assessment, a *Attempt) (Next, error) {
+	t, e := s.Get(r.Task)
+	if e != nil {
+		return Next{}, e
+	}
+	if t.Step != "verify" || r.Candidate != t.Candidate || r.Executor == "" || strings.TrimSpace(r.Reason) == "" {
+		return Next{}, Error("ASSESSMENT_INPUT_REQUIRED", "exact candidate, executor and findings/reason required")
+	}
+	if !slices.Contains([]string{"pass", "fail", "blocked"}, r.Result) || !slices.Contains([]string{"model", "scenario", "human"}, r.Method) {
+		return Next{}, Error("INVALID_ASSESSMENT", "method/result")
+	}
+	var c Check
+	for _, x := range t.Definition.Checks {
+		if x.ID == r.Check {
+			c = x
+		}
+	}
+	if c.ID == "" || len(c.Command) > 0 || (c.Method != "" && c.Method != r.Method) {
+		return Next{}, Error("CHECK_METHOD_MISMATCH", r.Check)
+	}
+	if r.Result != "blocked" && (len(r.Inputs) == 0 || len(r.Artifacts) == 0) {
+		return Next{}, Error("ASSESSMENT_EVIDENCE_REQUIRED", "specific inspected inputs and a findings report/trace are required")
+	}
+	workspace := t.CandidateWorkspace
+	if workspace == "" {
+		workspace = s.Root
+	}
+	hashes := map[string]string{}
+	screenshot := false
+	for _, ref := range append(slices.Clone(r.Inputs), r.Artifacts...) {
+		b, e := s.artifactAt(workspace, ref)
+		if e != nil {
+			return Next{}, e
+		}
+		hashes[ref] = store.Hash(b)
+		mime := http.DetectContentType(b)
+		if mime == "image/png" || mime == "image/jpeg" {
+			screenshot = true
+		}
+	}
+	if c.Kind == "ui" && r.Result != "blocked" && !screenshot {
+		return Next{}, Error("SCREENSHOT_REQUIRED", r.Check)
+	}
+	if a == nil {
+		n, e := s.Claim(r.Task, r.Check, r.Executor, "", "")
+		if e != nil {
+			return n, e
+		}
+		a = n.Attempt
+	}
+	if a.Unit != "check:"+r.Check {
+		return Next{}, Error("WRONG_UNIT", a.Unit)
+	}
+	config, _ := json.Marshal(c)
+	source := r.Method + ":" + r.Executor
+	ev := Evidence{Check: c.ID, Candidate: t.Candidate, Revision: t.Definition.Revision, PlanRevision: t.Plan.Revision, Config: store.Hash(config), Result: r.Result, Source: source, Executor: r.Executor, Inputs: r.Inputs, Environment: runtime.GOOS + "/" + runtime.GOARCH, Artifacts: r.Artifacts, ArtifactHashes: hashes, Reason: r.Reason, At: time.Now().UTC()}
+	return s.submit(Submission{Task: r.Task, Attempt: a.ID, Token: a.Token, Key: a.ID + "-assessment", Result: StepResult{Status: r.Result, Summary: r.Reason, Artifacts: r.Artifacts, ReturnTo: r.ReturnTo}}, &ev)
+}

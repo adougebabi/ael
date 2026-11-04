@@ -19,13 +19,16 @@ type RuntimeAsset struct {
 	Path     string `json:"path"`
 }
 type Bundle struct {
-	Version string         `json:"version"`
-	Root    string         `json:"source"`
-	Assets  []RuntimeAsset `json:"platforms"`
-	Notice  string         `json:"notice"`
+	Version      string         `json:"version"`
+	Root         string         `json:"source"`
+	Assets       []RuntimeAsset `json:"platforms"`
+	Notice       string         `json:"notice"`
+	NoticeSHA256 string         `json:"notice_sha256"`
 }
 
-func ReadBundle(dir string) (Bundle, error) {
+func ReadBundle(dir string) (Bundle, error) { return readBundle(dir, Version) }
+
+func readBundle(dir, expectedVersion string) (Bundle, error) {
 	var b Bundle
 	root, e := filepath.Abs(dir)
 	if e != nil {
@@ -78,6 +81,7 @@ func ReadBundle(dir string) (Bundle, error) {
 		seen[fields[0]] = true
 		if fields[0] == "notice" {
 			b.Notice = fields[2]
+			b.NoticeSHA256 = fields[1]
 		} else {
 			if fields[0] != "darwin-arm64" && fields[0] != "darwin-amd64" && fields[0] != "linux-amd64" && fields[0] != "linux-arm64" {
 				return b, core.Error("UNSUPPORTED_BUNDLE_PLATFORM", fields[0])
@@ -99,8 +103,8 @@ func ReadBundle(dir string) (Bundle, error) {
 	if e = scan.Err(); e != nil {
 		return b, e
 	}
-	if b.Version != Version {
-		return b, core.Error("BUNDLE_VERSION_MISMATCH", b.Version+" != "+Version)
+	if expectedVersion != "" && b.Version != expectedVersion {
+		return b, core.Error("BUNDLE_VERSION_MISMATCH", b.Version+" != "+expectedVersion)
 	}
 	if len(b.Assets) == 0 || b.Notice == "" {
 		return b, core.Error("INCOMPLETE_BUNDLE", "binaries and notices required")
@@ -151,7 +155,7 @@ func bundleTargets(b Bundle) map[string]string {
 func bundleText(b Bundle) map[string][]byte {
 	launcher, _ := assets.Files.ReadFile("project-launcher.sh")
 	notice, _ := os.ReadFile(filepath.Join(b.Root, b.Notice))
-	return map[string][]byte{"ael": launcher, ".ael/toolchain.lock": projectLock(b), ".ael/THIRD_PARTY_NOTICES.txt": notice, ".ael/.gitignore": []byte("# Versioned AEL runtime assets travel with the project.\n!bin/\n!bin/**\n")}
+	return map[string][]byte{"ael": launcher, ".ael/toolchain.lock": projectLock(b), ".ael/THIRD_PARTY_NOTICES.txt": notice, ".ael/.gitignore": []byte("# Versioned AEL runtime assets travel with the project.\n!bin/\n!bin/**\ntool-update.lock/\n")}
 }
 func bundlePreflight(root string, b Bundle) error {
 	manifest := map[string]string{}
@@ -196,7 +200,7 @@ func bundlePreflight(root string, b Bundle) error {
 
 // InitProject adds a complete, version-locked runtime bundle to the metadata initializer.
 // Internal state-machine fixtures can still use Init without copying executables.
-func InitProject(root string, dry, refresh bool, source string) (Report, error) {
+func InitProject(root string, dry, updating bool, source string) (Report, error) {
 	canonical, e := Canonical(root)
 	if e != nil {
 		return Report{}, e
@@ -208,7 +212,7 @@ func InitProject(root string, dry, refresh bool, source string) (Report, error) 
 	if e = bundlePreflight(canonical, b); e != nil {
 		return Report{}, e
 	}
-	report, e := Init(canonical, dry, refresh)
+	report, e := Init(canonical, dry, updating)
 	if e != nil {
 		return report, e
 	}
@@ -273,13 +277,20 @@ func InitProject(root string, dry, refresh bool, source string) (Report, error) 
 			manifest[rel] = store.Hash(data)
 			report.Files = append(report.Files, rel)
 		}
-		config, e := Read(canonical)
-		if e != nil {
-			return e
+		path, err := store.SafePath(canonical, ".ael/project.yaml")
+		if err != nil {
+			return err
 		}
-		config.Version = Version
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		config := map[string]json.RawMessage{}
+		if err = json.Unmarshal(raw, &config); err != nil {
+			return err
+		}
+		config["asset_version"], _ = json.Marshal(Version)
 		data, _ := json.MarshalIndent(config, "", "  ")
-		path, _ := store.SafePath(canonical, ".ael/project.yaml")
 		if e = tx.File(path, data); e != nil {
 			return e
 		}

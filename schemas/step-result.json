@@ -1,1 +1,155 @@
-{"type":"object","additionalProperties":false,"required":["status","summary","artifacts","return_to","delivery"],"properties":{"status":{"type":"string","enum":["pass","fail","blocked"]},"summary":{"type":"string","minLength":1},"artifacts":{"type":"array","items":{"type":"string"}},"return_to":{"type":"string"},"delivery":{"anyOf":[{"type":"null"},{"type":"object","additionalProperties":false,"required":["run_id","idempotency_key","candidate","artifact","environment","target","status"],"properties":{"run_id":{"type":"string"},"idempotency_key":{"type":"string"},"candidate":{"type":"string"},"artifact":{"type":"string"},"environment":{"type":"string"},"target":{"type":"string"},"status":{"type":"string"}}}]}}}
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "status",
+    "summary",
+    "artifacts",
+    "return_to",
+    "delivery",
+    "knowledge",
+    "blocker"
+  ],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "fail",
+        "blocked"
+      ]
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "return_to": {
+      "type": "string"
+    },
+    "delivery": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "run_id",
+            "idempotency_key",
+            "candidate",
+            "artifact",
+            "environment",
+            "target",
+            "status"
+          ],
+          "properties": {
+            "run_id": {
+              "type": "string"
+            },
+            "idempotency_key": {
+              "type": "string"
+            },
+            "candidate": {
+              "type": "string"
+            },
+            "artifact": {
+              "type": "string"
+            },
+            "environment": {
+              "type": "string"
+            },
+            "target": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "knowledge": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "reason",
+            "artifacts"
+          ],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "updated",
+                "unchanged"
+              ]
+            },
+            "reason": {
+              "type": "string"
+            },
+            "artifacts": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "blocker": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "category",
+            "reason",
+            "scope",
+            "tried",
+            "recovery",
+            "resume_at"
+          ],
+          "properties": {
+            "category": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "scope": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "tried": {
+              "type": "string"
+            },
+            "recovery": {
+              "type": "string"
+            },
+            "resume_at": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

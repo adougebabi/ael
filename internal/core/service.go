@@ -19,6 +19,7 @@ type Service struct {
 	Store           *store.Store
 	Root            string
 	Active          bool
+	ResolveBasis    func(Definition) ([]BasisReference, error)
 	ConstraintCheck func(Definition) []string
 }
 
@@ -54,6 +55,11 @@ func save(tx *store.Tx, t *Task) error {
 	return e
 }
 func (s *Service) active() error {
+	if _, e := os.Lstat(filepath.Join(s.Root, ".ael/tool-update.lock")); e == nil {
+		return Error("PROJECT_UPDATING", "wait for the tool update to finish before starting a writer")
+	} else if !os.IsNotExist(e) {
+		return e
+	}
 	if !s.Active {
 		return Error("SHADOW_MODE", "activate after reviewed migration; read-only functions remain available")
 	}
@@ -68,6 +74,12 @@ func (s *Service) Create(d Definition) (Next, error) {
 	}
 	if d.Type == "" {
 		d.Type = "feature"
+	}
+	if d.Intent == "" && (d.Type == "qa" || d.Type == "verify") && (d.Goal == "" || d.Goal == "report" || d.Goal == "analysis") {
+		d.Intent = "inspect"
+		if d.Goal == "" {
+			d.Goal = "report"
+		}
 	}
 	if d.Goal == "" {
 		d.Goal = "verified"
@@ -175,6 +187,9 @@ func (s *Service) Get(id string) (Task, error) {
 	if e != nil {
 		return t, e
 	}
+	if store.Hash(raw) != t.DefinitionHash && equivalent(semantic(d), semantic(t.Definition)) {
+		return s.displayEdit(t, d, raw)
+	}
 	if store.Hash(raw) != t.DefinitionHash && (t.Status == "completed" || t.Status == "cancelled") {
 		return t, Error("TERMINAL_DEFINITION_CHANGED", "restore original definition and create linked feedback task")
 	}
@@ -190,6 +205,10 @@ func (s *Service) syncDefinition(old Task, d Definition, raw []byte) (Task, erro
 	if e := Validate(d); e != nil {
 		return old, e
 	}
+	d.Revision = old.Definition.Revision
+	if equivalent(semantic(d), semantic(old.Definition)) && old.PolicyHash == func() string { h, _ := s.policyHash(); return h }() {
+		return s.displayEdit(old, d, definitionBytes(d))
+	}
 	d.Revision = old.Definition.Revision + 1
 	policyHash, e := s.policyHash()
 	if e != nil {
@@ -203,7 +222,26 @@ func (s *Service) syncDefinition(old Task, d Definition, raw []byte) (Task, erro
 	}
 	plan := MakePlan(&d)
 	plan.Revision = old.Plan.Revision + 1
-	plan.Approved = false
+	boundary := d.Goal != old.Definition.Goal || !equivalent(d.Acceptance, old.Definition.Acceptance) || !equivalent(d.Risk, old.Definition.Risk) || old.PolicyHash != policyHash
+	boundary = boundary || d.Intent != old.Definition.Intent || d.Target != old.Definition.Target || d.Environment != old.Definition.Environment || !equivalent(d.NonGoals, old.Definition.NonGoals)
+	beforeChecks, afterChecks := semantic(old.Definition), semantic(d)
+	beforeChecks.Checks = nil
+	afterChecks.Checks = nil
+	checksOnly := equivalent(beforeChecks, afterChecks) && !hasWriter(old) && old.Candidate != "" && old.Step == "verify" && old.PolicyHash == policyHash
+	for _, c := range old.Definition.Checks {
+		if c.Required {
+			found := false
+			for _, newCheck := range d.Checks {
+				if newCheck.ID == c.ID && newCheck.Required {
+					found = true
+				}
+			}
+			if !found {
+				boundary = true
+			}
+		}
+	}
+	plan.Approved = !boundary && old.Plan.Approved
 	var t Task
 	e = s.Store.Write(func(tx *store.Tx) error {
 		cur, e := load(tx, d.ID)
@@ -221,6 +259,7 @@ func (s *Service) syncDefinition(old Task, d Definition, raw []byte) (Task, erro
 		t.Definition = d
 		t.TimeLimitSeconds = nil
 		t.Plan = plan
+		t.EvidenceHistory = append(t.EvidenceHistory, t.Evidence...)
 		t.Evidence = nil
 		t.Candidate = ""
 		t.Step = "define"
@@ -230,9 +269,49 @@ func (s *Service) syncDefinition(old Task, d Definition, raw []byte) (Task, erro
 				t.Attempts[i].Reason = "definition changed; resume requires stopped-process acknowledgement"
 			}
 		}
-		t.Paused = true
-		t.Failure = "definition changed; acknowledge stopped writer before resume"
-		t.Confirmation = &Confirmation{"revision", "definition changed; review exact revision", d.Revision, plan.Revision, ""}
+		t.Paused = hasWriter(old)
+		t.Failure = "definition revised; relevant inputs and acceptance require revalidation"
+		t.KnowledgeOutcome = nil
+		t.ContextAttempt = ""
+		t.Route = ""
+		if boundary {
+			t.Confirmation = &Confirmation{"revision", "acceptance, authorization or policy boundary changed; review exact revision and definition diff", d.Revision, plan.Revision, ""}
+		} else {
+			t.Confirmation = nil
+			t.Step = "execute"
+			if slices.Contains(plan.Steps, "analysis") {
+				t.Step = "analysis"
+			}
+		}
+		if checksOnly && !boundary {
+			workspace := old.CandidateWorkspace
+			if workspace == "" {
+				workspace = s.Root
+			}
+			fp, err := Fingerprint(workspace)
+			if err != nil {
+				return err
+			}
+			if fp == old.Candidate {
+				t.Candidate = old.Candidate
+				t.CandidateWorkspace = workspace
+				t.Step = "verify"
+				for _, c := range d.Checks {
+					for _, prior := range old.Definition.Checks {
+						if equivalent(c, prior) {
+							if ev := CurrentEvidence(&old, prior); ev != nil {
+								reused := *ev
+								reused.Revision = d.Revision
+								reused.PlanRevision = plan.Revision
+								reused.ReusedFrom = fmt.Sprintf("definition:%d/plan:%d", ev.Revision, ev.PlanRevision)
+								t.Evidence = append(t.Evidence, reused)
+							}
+						}
+					}
+				}
+				t.KnowledgeOutcome = old.KnowledgeOutcome
+			}
+		}
 		b := definitionBytes(d)
 		t.DefinitionHash = store.Hash(b)
 		p, e := s.taskPath(d.ID)
@@ -245,7 +324,7 @@ func (s *Service) syncDefinition(old Task, d Definition, raw []byte) (Task, erro
 		if e = s.save(tx, &t); e != nil {
 			return e
 		}
-		return tx.Event(d.ID, "definition_revised", map[string]any{"revision": d.Revision, "source_hash": store.Hash(raw)})
+		return tx.Event(d.ID, "definition_revised", map[string]any{"revision": d.Revision, "source_hash": store.Hash(raw), "previous": old.Definition, "proposed": d, "checks_only": checksOnly, "approval_required": boundary, "impact": "changed input/coverage revalidated; unchanged checks reused only for the identical candidate"})
 	})
 	if e == nil {
 		e = s.Store.Flush()
@@ -348,9 +427,19 @@ func (s *Service) Next(id string) (Next, error) {
 		}
 	}
 	n := t.BaseNext()
+	if s.ResolveBasis != nil && t.Status == "open" && (t.Step == "verify" || t.Step == "delivery") {
+		refs, err := s.ResolveBasis(t.Definition)
+		if err == nil && !sameBasis(t.Basis, refs) {
+			n.Action = "wait_environment"
+			n.Reasons = append(n.Reasons, "applicable knowledge changed after execution; return to execute, load current basis and revalidate affected candidate")
+		}
+	}
 	if s.ConstraintCheck != nil && t.Status == "open" {
 		for _, reason := range s.ConstraintCheck(t.Definition) {
-			n.Action = "wait_confirmation"
+			n.Action = "wait_environment"
+			if strings.Contains(reason, "unresolved knowledge conflict") {
+				n.Action = "wait_confirmation"
+			}
 			n.Reasons = append(n.Reasons, reason)
 		}
 	}
@@ -367,14 +456,14 @@ func (s *Service) Next(id string) (Next, error) {
 			}
 		}
 	}
-	if n.Action == "continue" {
+	if n.Action == "continue" || n.Action == "repair" {
 		count := 0
 		for _, a := range t.Attempts {
 			if a.Unit == t.Step {
 				count++
 			}
 		}
-		if count >= t.Definition.MaxRetries || timeBudgetExhausted(&t) {
+		if timeBudgetExhausted(&t) {
 			n.Action = "wait_environment"
 			n.Reasons = append(n.Reasons, "budget exhausted; reviewed definition revision required")
 		}
@@ -411,11 +500,15 @@ func (s *Service) Claim(id, unit, executor, workspace, session string) (Next, er
 	if e := s.active(); e != nil {
 		return Next{}, e
 	}
+	var generation string
+	if err := s.Store.DB.QueryRow("SELECT body FROM metadata WHERE key='tool-generation'").Scan(&generation); err != nil && err != sql.ErrNoRows {
+		return Next{}, err
+	}
 	n, e := s.Next(id)
 	if e != nil {
 		return n, e
 	}
-	if n.Action != "continue" && !(n.Step == "verify" && n.Action == "wait_executor") {
+	if n.Action != "continue" && n.Action != "repair" && !(n.Step == "verify" && n.Action == "wait_executor") {
 		return n, Error("NOT_RUNNABLE", strings.Join(n.Reasons, ";"))
 	}
 	if executor == "" {
@@ -451,6 +544,22 @@ func (s *Service) Claim(id, unit, executor, workspace, session string) (Next, er
 	}
 	var a Attempt
 	n, e = s.mutate(id, "claimed", func(tx *store.Tx, t *Task) error {
+		var current string
+		err := tx.Row("SELECT body FROM metadata WHERE key='tool-generation'").Scan(&current)
+		if err != nil && err != sql.ErrNoRows {
+			return err
+		}
+		var maintenance int
+		if e := tx.Row("SELECT count(*) FROM metadata WHERE key='tool-update'").Scan(&maintenance); e != nil {
+			return e
+		}
+		if maintenance > 0 {
+			return Error("PROJECT_UPDATING", "tool maintenance active")
+		}
+		if current != generation {
+			return Error("PROJECT_CHANGED", "toolchain changed while preparing this claim; reload and retry")
+		}
+
 		if t.Step == "execute" && t.Plan.Preset == "strict" && !t.Plan.Approved {
 			return Error("PLAN_APPROVAL_REQUIRED", "strict plan must be approved before execution")
 		}
@@ -482,6 +591,14 @@ func (s *Service) Claim(id, unit, executor, workspace, session string) (Next, er
 		} else if unit != t.Step {
 			return Error("WRONG_UNIT", unit)
 		}
+		if t.Definition.Intent == "inspect" {
+			if t.InspectionCandidate == "" {
+				t.InspectionCandidate = candidate
+			}
+			if candidate != t.InspectionCandidate {
+				return Error("INSPECTION_WRITE_DETECTED", "restore the original inspected candidate; retry cannot authorize a changed source baseline")
+			}
+		}
 		claimUnit := unit
 		if t.Step == "verify" {
 			claimUnit = "check:" + unit
@@ -495,34 +612,13 @@ func (s *Service) Claim(id, unit, executor, workspace, session string) (Next, er
 				return Error("CLAIM_CONFLICT", "attempt active or expired; resume explicitly")
 			}
 		}
-		if attempts >= t.Definition.MaxRetries || timeBudgetExhausted(t) {
+		if timeBudgetExhausted(t) {
 			return Error("BUDGET_EXHAUSTED", "increase budget through a reviewed definition revision")
 		}
-		if t.Step != "verify" {
-			var readers int
-			if e := tx.Row("SELECT count(*) FROM tasks, json_each(tasks.body, '$.attempts') a WHERE json_extract(a.value,'$.workspace')=? AND json_extract(a.value,'$.status') IN ('running','interrupted')", workspace).Scan(&readers); e != nil {
-				return e
-			}
-			if readers > 0 {
-				return Error("WORKSPACE_BUSY", "verification or writer active")
-			}
-			if _, e := tx.Exec("INSERT INTO workspace_locks(workspace,attempt,task) VALUES(?,?,?)", workspace, "reserved", id); e != nil {
-				return Error("WORKSPACE_BUSY", workspace)
-			}
-		} else {
-			var count int
-			_ = tx.Row("SELECT count(*) FROM workspace_locks WHERE workspace=?", workspace).Scan(&count)
-			if count > 0 {
-				return Error("WORKSPACE_BUSY", workspace)
-			}
-		}
-		a = Attempt{ID: ID("AT-"), Unit: claimUnit, Executor: executor, Session: session, Workspace: workspace, Input: candidate, Started: time.Now().UTC(), Lease: time.Now().UTC().Add(leaseDuration), Token: ID("lease-"), Fence: len(t.Attempts) + 1, Status: "running"}
-		if t.Step != "verify" {
-			_, e := tx.Exec("UPDATE workspace_locks SET attempt=? WHERE workspace=?", a.ID, workspace)
-			if e != nil {
-				return e
-			}
-		}
+		// Distinct tasks may use the same workspace concurrently. The attempt
+		// guard above is task-scoped; candidate checks still invalidate evidence
+		// when any process changes the workspace under verification.
+		a = Attempt{DefinitionRevision: t.Definition.Revision, PlanRevision: t.Plan.Revision, ID: ID("AT-"), Unit: claimUnit, Executor: executor, Session: session, Workspace: workspace, Input: candidate, Started: time.Now().UTC(), Lease: time.Now().UTC().Add(leaseDuration), Token: ID("lease-"), Fence: len(t.Attempts) + 1, Status: "running"}
 		t.Attempts = append(t.Attempts, a)
 		return nil
 	})
@@ -600,6 +696,10 @@ func (s *Service) submit(sub Submission, evidence *Evidence) (Next, error) {
 		if t.Status != "open" {
 			return Error("TERMINAL_TASK", sub.Task)
 		}
+		if (t.Step == "verify" && !strings.HasPrefix(a.Unit, "check:")) || (t.Step != "verify" && a.Unit != t.Step) || (a.DefinitionRevision > 0 && a.DefinitionRevision != t.Definition.Revision) || (a.PlanRevision > 0 && a.PlanRevision != t.Plan.Revision) {
+			return Error("STALE_EXECUTION_UNIT", "attempt is not for the current responsibility and revisions")
+		}
+
 		if sub.Result.Summary == "" {
 			return Error("RESULT_REQUIRED", "summary")
 		}
@@ -622,17 +722,63 @@ func (s *Service) submit(sub Submission, evidence *Evidence) (Next, error) {
 		if sub.Result.Status == "blocked" && a.PID > 0 {
 			a.Status = "interrupted"
 		} else {
+			// Release a legacy lock only for this attempt. New claims no longer
+			// create workspace-wide locks, but upgraded projects can contain them.
 			if _, e = tx.Exec("DELETE FROM workspace_locks WHERE attempt=?", a.ID); e != nil {
 				return e
 			}
 		}
+		if t.Definition.Intent == "inspect" && (candidate != a.Input || (t.InspectionCandidate != "" && candidate != t.InspectionCandidate)) {
+			return Error("INSPECTION_WRITE_DETECTED", "inspection may write reports only into runtime; source candidate must remain unchanged")
+		}
+		if sub.Result.Status == "pass" && t.Step == "execute" {
+			if e = s.validateContext(&t, a, sub.Result); e != nil {
+				return e
+			}
+		}
 		if sub.Result.Status == "blocked" {
+			t.Blocker = sub.Result.Blocker
+			if t.Blocker == nil {
+				t.Blocker = &Blocker{Category: "environment", Reason: sub.Result.Summary, Scope: t.Definition.Scope, Tried: sub.Result.Summary, Recovery: "restore the missing capability or dependency; verify any old writer stopped then resume", ResumeAt: t.Step}
+			}
 			t.Paused = true
 			t.Failure = sub.Result.Summary
 		} else if sub.Result.Status == "fail" {
 			t.Failure = sub.Result.Summary
-			if t.Step == "verify" || sub.Result.ReturnTo == "execute" {
+			if (t.Definition.Goal == "report" || (t.Definition.Goal == "analysis" && t.Definition.Intent == "inspect")) && t.Step == "verify" {
+				if evidence.Candidate != t.Candidate || candidate != t.Candidate {
+					return Error("CANDIDATE_CHANGED", "report check input changed")
+				}
+				t.Evidence = append(t.Evidence, *evidence)
+				evidence = nil
+				if ChecksComplete(&t) {
+					if e = s.advance(tx, &t); e != nil {
+						return e
+					}
+				}
+			} else if sub.Result.ReturnTo == "define" || sub.Result.ReturnTo == "analysis" {
+				t.Step = sub.Result.ReturnTo
+				t.Plan.Revision++
+				t.Plan.Approved = false
+				t.Candidate = ""
+				t.EvidenceHistory = append(t.EvidenceHistory, t.Evidence...)
+				t.Evidence = nil
+				if !slices.Contains(t.Plan.Steps, t.Step) {
+					t.Step = "define"
+				}
+				t.Failure = "premise conflict: " + sub.Result.Summary
+				for i := range t.Attempts {
+					if t.Attempts[i].Status == "running" {
+						t.Attempts[i].Status = "interrupted"
+						t.Attempts[i].Reason = "peer changed responsibility or plan version"
+						t.Paused = true
+						t.Blocker = &Blocker{Category: "recovery", Reason: t.Attempts[i].Reason, Scope: t.Definition.Scope, Tried: sub.Result.Summary, Recovery: "verify all prior check processes stopped, then resume the new analysis/definition responsibility", ResumeAt: t.Step}
+					}
+				}
+			} else if t.Step == "verify" || sub.Result.ReturnTo == "execute" {
+				t.Route = "repair"
 				t.Step = "execute"
+				t.EvidenceHistory = append(t.EvidenceHistory, t.Evidence...)
 				t.Evidence = nil
 				t.Candidate = ""
 				for i := range t.Attempts {
@@ -643,12 +789,6 @@ func (s *Service) submit(sub Submission, evidence *Evidence) (Next, error) {
 						t.Failure = "peer check failed; acknowledge all old processes stopped before repair"
 					}
 				}
-			} else if sub.Result.ReturnTo == "define" || sub.Result.ReturnTo == "analysis" {
-				t.Step = sub.Result.ReturnTo
-				t.Plan.Revision++
-				t.Plan.Approved = false
-				t.Evidence = nil
-				t.Confirmation = &Confirmation{"revision", "failed premise requires revised plan approval", t.Definition.Revision, t.Plan.Revision, candidate}
 			}
 		} else {
 			switch t.Step {
@@ -657,7 +797,7 @@ func (s *Service) submit(sub Submission, evidence *Evidence) (Next, error) {
 					return Error("CANDIDATE_CHANGED", "check result rejected")
 				}
 				t.Evidence = append(t.Evidence, *evidence)
-				if gates(&t) {
+				if gates(&t) || ((t.Definition.Goal == "report" || (t.Definition.Goal == "analysis" && t.Definition.Intent == "inspect")) && ChecksComplete(&t)) {
 					if e = s.advance(tx, &t); e != nil {
 						return e
 					}
@@ -671,8 +811,12 @@ func (s *Service) submit(sub Submission, evidence *Evidence) (Next, error) {
 						return e
 					}
 				}
+				t.Route = ""
+				t.Blocker = nil
+				t.Failure = ""
 				t.Candidate = candidate
 				t.CandidateWorkspace = a.Workspace
+				t.EvidenceHistory = append(t.EvidenceHistory, t.Evidence...)
 				t.Evidence = nil
 				t.Step = "verify"
 			case "analysis":
@@ -727,7 +871,7 @@ func (s *Service) submit(sub Submission, evidence *Evidence) (Next, error) {
 					break
 				}
 			}
-			if repeated >= 3 {
+			if repeated >= t.Definition.MaxRetries {
 				t.Paused = true
 				t.Failure = "repeated failure detected; checkpoint retained: " + sub.Result.Summary
 			}
@@ -742,7 +886,7 @@ func (s *Service) submit(sub Submission, evidence *Evidence) (Next, error) {
 			return e
 		}
 		response = t.BaseNext()
-		if sub.Result.Status == "fail" && t.Step == "execute" {
+		if sub.Result.Status == "fail" && t.Step == "execute" && !t.Paused {
 			response.Action = "repair"
 		}
 		response.Task = &t
@@ -767,14 +911,7 @@ func gates(t *Task) bool {
 		if !c.Required {
 			continue
 		}
-		found := false
-		config, _ := json.Marshal(c)
-		for _, e := range t.Evidence {
-			if e.Check == c.ID && e.Result == "pass" && e.Candidate == t.Candidate && e.Revision == t.Definition.Revision && e.PlanRevision == t.Plan.Revision && e.Config == store.Hash(config) {
-				found = true
-			}
-		}
-		if !found {
+		if ev := CurrentEvidence(t, c); ev == nil || ev.Result != "pass" {
 			return false
 		}
 		for _, a := range c.Covers {
@@ -802,6 +939,15 @@ func (s *Service) advance(tx *store.Tx, t *Task) error {
 			t.Status = "completed"
 			t.Completed = &now
 			t.Result = "verified"
+			if t.Definition.Goal == "report" {
+				t.Result = "report_delivered"
+				if !gates(t) {
+					t.Result = "report_delivered_with_findings"
+				}
+			}
+			if t.Definition.Goal == "analysis" {
+				t.Result = "analysis_delivered"
+			}
 			if t.Delivery != nil {
 				t.Result = t.Definition.Goal
 			}
@@ -865,6 +1011,7 @@ func (s *Service) Confirm(id, kind, decision, actor, reason, candidate string, r
 		} else {
 			t.Plan.Approved = false
 			t.Plan.Revision++
+			t.EvidenceHistory = append(t.EvidenceHistory, t.Evidence...)
 			t.Evidence = nil
 			t.Step = "analysis"
 			if !slices.Contains(t.Plan.Steps, "analysis") {
@@ -914,6 +1061,7 @@ func (s *Service) Resume(id, returnTo string, ack bool) (Next, error) {
 				return Error("INVALID_RETURN", returnTo)
 			}
 			t.Step = returnTo
+			t.EvidenceHistory = append(t.EvidenceHistory, t.Evidence...)
 			t.Evidence = nil
 			t.Candidate = ""
 		}
@@ -921,6 +1069,7 @@ func (s *Service) Resume(id, returnTo string, ack bool) (Next, error) {
 			t.Confirmation = &Confirmation{"delivery", "unknown delivery outcome: reconcile existing run before retry", t.Definition.Revision, t.Plan.Revision, t.Candidate}
 		}
 		t.Paused = false
+		t.Blocker = nil
 		return nil
 	})
 }

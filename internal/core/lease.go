@@ -82,7 +82,7 @@ func (s *Service) KeepLease(ctx context.Context, id string, a *Attempt, interval
 	return k, nil
 }
 
-// Interrupt retains the workspace fence until the previous writer is checked.
+// Interrupt pauses this task until its previous executor is checked.
 func (s *Service) Interrupt(id, attempt, token, reason string) (Next, error) {
 	return s.mutate(id, "interrupted", func(tx *store.Tx, t *Task) error {
 		for i := range t.Attempts {
@@ -97,6 +97,7 @@ func (s *Service) Interrupt(id, attempt, token, reason string) (Next, error) {
 			a.Reason = reason
 			t.Paused = true
 			t.Failure = reason
+			t.Blocker = &Blocker{Category: "recovery", Reason: reason, Scope: t.Definition.Scope, Tried: reason, Recovery: "inspect failed execution and confirm old processes stopped, then resume", ResumeAt: t.Step}
 			return nil
 		}
 		return Error("ATTEMPT_MISSING", attempt)
@@ -104,7 +105,7 @@ func (s *Service) Interrupt(id, attempt, token, reason string) (Next, error) {
 }
 
 // WatchLease is the attached-mode keeper. It is explicitly bound to the Agent's
-// long-lived process; owner loss stops renewal and retains the writer fence.
+// long-lived process; owner loss stops renewal and pauses the affected task.
 func (s *Service) WatchLease(ctx context.Context, id, attempt, token string, owner int, identity string, interval time.Duration) error {
 	if interval <= 0 {
 		return Error("INVALID_HEARTBEAT_INTERVAL", "")
@@ -114,7 +115,7 @@ func (s *Service) WatchLease(ctx context.Context, id, attempt, token string, own
 	for {
 		t, e := s.Get(id)
 		if e != nil {
-			_, _ = s.Interrupt(id, attempt, token, "attached keeper could not read task; workspace remains fenced")
+			_, _ = s.Interrupt(id, attempt, token, "attached keeper could not read task; check the previous executor before resuming")
 			return e
 		}
 		var a *Attempt

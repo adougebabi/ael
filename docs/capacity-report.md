@@ -1,5 +1,7 @@
 # SQLite P0 实测
 
+> 0.1.7 复核更正：下方历史基准的“外部命令不持事务”不适用于当前 Submit 指纹计算；该路径会在写事务中调用 `git rev-parse HEAD`。隔离故障注入已复现另一个任务的心跳等待，详见 [并发检查报告](concurrency-report.md)。
+
 2026-11-03，darwin/arm64，Go1.26.3，16 logical CPU。命令：`go build -o /tmp/aelbench ./cmd/aelbench && /tmp/aelbench /tmp/ael-p0-capacity`。原始数据见 capacity-results.json，数据库在仓库外 /tmp/ael-p0-capacity。每项含3个 Attempt 元数据与20条关键事件。无截图或外部执行的基准样本中日志/产物均为0，不能据此推算真实执行日志容量。
 
 | 工作项 | 事件 | backup bytes | index bytes | 写入 P50/P99 ms | 100组分页/计数/历史查询 ms |

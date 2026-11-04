@@ -2,6 +2,9 @@ package server
 
 import (
 	"ael/internal/bootstrap"
+	"ael/internal/core"
+	"ael/internal/knowledge"
+	"encoding/json"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -45,6 +48,40 @@ func TestSessionHostOriginAndPaths(t *testing.T) {
 	h.ServeHTTP(w, r)
 	if w.Code != 409 {
 		t.Fatal("symlink artifact exposed")
+	}
+}
+
+func TestKnowledgeLinksUseExistingTaskTitlesAndKeepMissingReferencesUnlinked(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("AEL_DATA_DIR", t.TempDir())
+	if _, e := bootstrap.Init(root, false, false); e != nil {
+		t.Fatal(e)
+	}
+	s, _, e := bootstrap.Open(root)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer s.Store.Close()
+	n, e := s.Create(core.Definition{ID: "real-task", Title: "可读任务标题", Type: "bug", Goal: "verified", Acceptance: []string{"真实关联"}})
+	if e != nil {
+		t.Fatal(e)
+	}
+	dir := filepath.Join(root, ".ael/knowledge")
+	os.MkdirAll(dir, 0755)
+	os.WriteFile(filepath.Join(dir, "rule.md"), knowledge.Encode(knowledge.Record{ID: "rule", Title: "规则", Kind: "spec", Status: "current", Tasks: []string{n.Task.Definition.ID, "missing"}, Body: "# 规则正文"}), 0644)
+	h := New(s, "127.0.0.1:7331")
+	r := httptest.NewRequest("GET", "http://"+h.Host+"/api/knowledge-record?id=rule", nil)
+	r.Header.Set("Authorization", "Bearer "+h.Token)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	var result struct {
+		Links []knowledgeTaskLink `json:"related_tasks"`
+	}
+	if e = json.Unmarshal(w.Body.Bytes(), &result); e != nil {
+		t.Fatal(e)
+	}
+	if w.Code != 200 || len(result.Links) != 2 || result.Links[0].Title != "可读任务标题" || !result.Links[0].Available || result.Links[1].Available {
+		t.Fatal(w.Code, w.Body.String())
 	}
 }
 

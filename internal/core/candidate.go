@@ -59,7 +59,7 @@ func Fingerprint(root string) (string, error) {
 			}
 		}
 		if d.IsDir() {
-			if d.Name() == ".git" || d.Name() == "node_modules" || rel == ".ael/work-items" || rel == ".ael/outcomes" || rel == ".ael/records" || rel == ".ael/deleted" || rel == ".ael/imports" || rel == ".ael/bin" {
+			if d.Name() == ".git" || d.Name() == "node_modules" || rel == ".ael/work-items" || rel == ".ael/outcomes" || rel == ".ael/records" || rel == ".ael/deleted" || rel == ".ael/imports" || rel == ".ael/bin" || rel == ".ael/tool-update.lock" {
 				return filepath.SkipDir
 			}
 			return nil
@@ -76,6 +76,16 @@ func Fingerprint(root string) (string, error) {
 		b, e := os.ReadFile(path)
 		if e != nil {
 			return e
+		}
+		if filepath.ToSlash(rel) == ".ael/policy.yaml" {
+			var parsed any
+			if e = yaml.Unmarshal(b, &parsed); e != nil {
+				return e
+			}
+			b, e = json.Marshal(parsed)
+			if e != nil {
+				return e
+			}
 		}
 		st, e := d.Info()
 		if e != nil {

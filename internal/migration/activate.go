@@ -3,6 +3,7 @@ package migration
 import (
 	"ael/internal/bootstrap"
 	"ael/internal/core"
+	"ael/internal/knowledge"
 	"ael/internal/store"
 	"encoding/json"
 	"gopkg.in/yaml.v3"
@@ -202,6 +203,9 @@ func Activate(s *core.Service, id, digest string, ack bool) (any, error) {
 		return nil, e
 	}
 	s.Active = true
+	if _, e = knowledge.Index(s.Root); e != nil {
+		return nil, e
+	}
 	e = s.Store.Write(func(tx *store.Tx) error {
 		return tx.Event("", "workflow_activated", map[string]any{"migration": id, "digest": digest, "retired": intent.Deletes})
 	})

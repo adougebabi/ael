@@ -65,7 +65,7 @@ func TestDirectedSessionParse(t *testing.T) {
 	}
 }
 
-func TestBackgroundProcessNeverReleasesWorkspaceAsSuccess(t *testing.T) {
+func TestBackgroundProcessPausesOnlyItsTask(t *testing.T) {
 	s, id := managedFixture(t)
 	script := `(sleep 5; printf late > result.txt) &
 printf '%s' '{"status":"pass","summary":"parent exited","artifacts":[],"return_to":"","delivery":null}' > "$AEL_RESULT"`
@@ -80,7 +80,52 @@ printf '%s' '{"status":"pass","summary":"parent exited","artifacts":[],"return_t
 	if e != nil {
 		t.Fatal(e)
 	}
-	if _, e = s.Claim(other.Task.Definition.ID, "", "writer", "", ""); e == nil {
-		t.Fatal("workspace released with unacknowledged background group")
+	if _, e = s.Claim(id, "", "replacement", "", ""); e == nil {
+		t.Fatal("interrupted task resumed without recovery")
+	}
+	if _, e = s.Claim(other.Task.Definition.ID, "", "writer", "", ""); e != nil {
+		t.Fatal("independent task blocked by interrupted executor", e)
+	}
+}
+
+func TestManagedReviewFailuresPersistBlocked(t *testing.T) {
+	for _, script := range []string{"exit 1", "exit 0", "printf invalid > \"$AEL_RESULT\""} {
+		t.Run(script, func(t *testing.T) {
+			s, id := managedFixture(t)
+			// Prepare an actual candidate, then test only the review executor failure.
+			for i := 0; i < 2; i++ {
+				n, e := s.Claim(id, "", "fixture", "", "")
+				if e != nil {
+					t.Fatal(e)
+				}
+				refs := []string{}
+				if i == 1 {
+					os.WriteFile(filepath.Join(s.Root, "result.txt"), []byte("fixed"), 0644)
+					refs = []string{"result.txt"}
+				}
+				if _, e = s.Submit(core.Submission{Task: id, Attempt: n.Attempt.ID, Token: n.Attempt.Token, Key: n.Attempt.ID, Result: core.StepResult{Status: "pass", Summary: "fixture preparation", Artifacts: refs}}); e != nil {
+					t.Fatal(e)
+				}
+			}
+			n, _ := s.Next(id)
+			d := n.Task.Definition
+			d.Checks = []core.Check{{ID: "functional", Kind: "review", Method: "model", Covers: d.Acceptance, Required: true}}
+			n, e := s.Edit(id, d, "review capability fixture")
+			if e != nil || n.Step != "verify" {
+				t.Fatal(n, e)
+			}
+			n, e = Run(s, id, Config{Command: []string{"sh", "-c", script}})
+			if e != nil || n.Action != "wait_environment" || n.Task.Blocker == nil {
+				t.Fatal(n, e)
+			}
+			if len(n.Task.Evidence) == 0 || n.Task.Evidence[len(n.Task.Evidence)-1].Result != "blocked" {
+				t.Fatal("review failure has no blocked evidence")
+			}
+			for _, a := range n.Task.Attempts {
+				if a.Status == "running" {
+					t.Fatal("failed child left live attempt")
+				}
+			}
+		})
 	}
 }

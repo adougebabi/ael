@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"slices"
 	"time"
 )
 
@@ -35,7 +36,7 @@ type OutcomeDelivery struct {
 
 func OutcomeDocument(t Task) []byte {
 	o := Outcome{ID: t.Definition.ID, DefinitionRevision: t.Definition.Revision, PlanRevision: t.Plan.Revision, Status: t.Status, Result: t.Result, Candidate: t.Candidate, Completed: t.Completed, Historical: t.Historical, Checks: []OutcomeCheck{}}
-	for _, e := range t.Evidence {
+	for _, e := range append(slices.Clone(t.EvidenceHistory), t.Evidence...) {
 		o.Checks = append(o.Checks, OutcomeCheck{e.Check, e.Result, e.Source, e.Config, e.At, e.ArtifactHashes})
 	}
 	if t.Delivery != nil {

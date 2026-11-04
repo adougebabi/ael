@@ -213,12 +213,18 @@ func Scan(root string) (Inventory, error) {
 				src.Risks = append(src.Risks, "legacy managed entry retained for reviewed cutover")
 			case strings.HasPrefix(rel, ".trellis/spec/"):
 				src.Kind = "spec"
-				src.Action = "pending"
-				src.Risks = append(src.Risks, "spec baseline requires explicit classification; mixed plans are not current facts")
+				src.Action = "inherit"
+				if knowledge.InheritedStatus(rel, b) == "conflict" {
+					src.Action = "pending"
+				}
+				src.Risks = append(src.Risks, "inherited contract baseline; implementation compliance is not yet verified; mixed premises remain scoped conflicts")
 			case strings.HasPrefix(rel, ".trellis/research/"):
 				src.Kind = "research"
 			case strings.HasPrefix(rel, "docs/adr/"):
 				src.Kind = "decision"
+				if status := knowledge.InheritedStatus(rel, b); status == "accepted" || status == "current" {
+					src.Action = "inherit"
+				}
 			case strings.HasPrefix(rel, ".trellis/scripts/") || strings.HasPrefix(rel, ".trellis/.runtime/") || rel == ".trellis/workflow.md" || strings.HasPrefix(rel, ".claude/") || rel == "AGENTS.md" || rel == "CLAUDE.md" || strings.HasPrefix(rel, ".codex/"):
 				src.Kind = "integration"
 				src.Action = "preserve"
@@ -789,6 +795,9 @@ func Apply(s *core.Service, p Plan, proposal *Proposal, approved string) (Run, e
 				body = core.DefinitionDocument(t.Definition)
 			} else {
 				kind, status := src.Kind, "historical"
+				if src.Action == "inherit" {
+					status = knowledge.InheritedStatus(src.Path, []byte(src.Body))
+				}
 				superseded := ""
 				if src.Action == "pending" {
 					status = "conflict"
@@ -920,6 +929,9 @@ func Apply(s *core.Service, p Plan, proposal *Proposal, approved string) (Run, e
 	}
 	summary := map[string]any{"id": run.ID, "sources": len(p.Sources), "mapping": mapping, "warnings": run.Warnings, "digest": run.Digest}
 	e = writeJSON(filepath.Join(s.Root, ".ael/imports", run.ID+".json"), summary)
+	if e == nil {
+		_, e = knowledge.Index(s.Root)
+	}
 	return run, e
 }
 func Verify(s *core.Service, id string) (any, error) {
@@ -1156,5 +1168,8 @@ func Rollback(s *core.Service, id string) (Run, error) {
 		}
 	}
 	e = saveRun(s, r)
+	if e == nil && r.State == "rolled_back" {
+		_, e = knowledge.Index(s.Root)
+	}
 	return r, e
 }

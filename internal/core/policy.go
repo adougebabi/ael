@@ -89,11 +89,11 @@ func (s *Service) leaseDuration() (time.Duration, error) {
 }
 
 func (s *Service) policyHash() (string, error) {
-	p, e := store.SafePath(s.Root, ".ael/policy.yaml")
+	p, e := s.Policy()
 	if e != nil {
 		return "", e
 	}
-	b, e := os.ReadFile(p)
+	b, e := json.Marshal(p)
 	if e != nil {
 		return "", e
 	}
