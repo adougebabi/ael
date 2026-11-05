@@ -100,6 +100,7 @@ type Attempt struct {
 type Evidence struct {
 	ReusedFrom     string            `json:"reused_from,omitempty"`
 	Executor       string            `json:"executor,omitempty"`
+	Recovery       string            `json:"recovery,omitempty"`
 	Inputs         []string          `json:"inputs,omitempty"`
 	ArtifactStatus map[string]string `json:"artifact_status,omitempty" yaml:"artifact_status"`
 	Check          string            `json:"check" yaml:"check"`

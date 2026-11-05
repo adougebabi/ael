@@ -497,6 +497,9 @@ func (s *Service) mutate(id, kind string, fn func(*store.Tx, *Task) error) (Next
 	return s.Next(id)
 }
 func (s *Service) Claim(id, unit, executor, workspace, session string) (Next, error) {
+	return s.claim(id, unit, executor, workspace, session, nil)
+}
+func (s *Service) claim(id, unit, executor, workspace, session string, expected *ReviewExpectation) (Next, error) {
 	if e := s.active(); e != nil {
 		return Next{}, e
 	}
@@ -580,6 +583,14 @@ func (s *Service) Claim(id, unit, executor, workspace, session string) (Next, er
 			for _, c := range t.Definition.Checks {
 				if c.ID == unit {
 					found = true
+					if expected != nil {
+						if expected.Candidate != t.Candidate || expected.DefinitionRevision != t.Definition.Revision || expected.PlanRevision != t.Plan.Revision {
+							return Error("REVIEW_VERSION_MISMATCH", "review the current candidate and revisions")
+						}
+						if access := ReviewAccess(Next{Task: t, Action: "continue"}, c); !access.CanReview {
+							return Error("REVIEW_NOT_ALLOWED", access.Reason)
+						}
+					}
 				}
 			}
 			if !found {
@@ -664,11 +675,17 @@ func (s *Service) Heartbeat(id, attempt, token string) (Next, error) {
 
 func (s *Service) Submit(sub Submission) (Next, error) { return s.submit(sub, nil) }
 func (s *Service) submit(sub Submission, evidence *Evidence) (Next, error) {
+	return s.submitWithHash(sub, evidence, "")
+}
+func (s *Service) submitWithHash(sub Submission, evidence *Evidence, requestHash string) (Next, error) {
 	if sub.Key == "" {
 		return Next{}, Error("IDEMPOTENCY_KEY_REQUIRED", "")
 	}
 	b, _ := json.Marshal(sub)
 	hash := store.Hash(b)
+	if requestHash != "" {
+		hash = requestHash
+	}
 	var response Next
 	if _, e := s.Get(sub.Task); e != nil {
 		return Next{}, e
@@ -717,6 +734,30 @@ func (s *Service) submit(sub Submission, evidence *Evidence) (Next, error) {
 		candidate, e := Fingerprint(a.Workspace)
 		if e != nil {
 			return e
+		}
+		if t.Step == "verify" && evidence != nil && strings.HasPrefix(evidence.Source, "human:") {
+			var check Check
+			for _, c := range t.Definition.Checks {
+				if c.ID == evidence.Check {
+					check = c
+				}
+			}
+			config, _ := json.Marshal(check)
+			if check.ID == "" || EffectiveCheckMethod(check) != "human" || len(check.Command) != 0 || a.Unit != "check:"+check.ID {
+				return Error("CHECK_METHOD_MISMATCH", evidence.Check)
+			}
+			if evidence.Candidate != t.Candidate || evidence.Revision != t.Definition.Revision || evidence.PlanRevision != t.Plan.Revision || evidence.Config != store.Hash(config) {
+				return Error("REVIEW_VERSION_MISMATCH", "candidate, revisions or check configuration changed")
+			}
+			if candidate != t.Candidate || a.Input != t.Candidate {
+				return Error("CANDIDATE_CHANGED", "human review candidate changed")
+			}
+			for ref, hash := range evidence.ArtifactHashes {
+				data, err := s.artifactAt(a.Workspace, ref)
+				if err != nil || store.Hash(data) != hash {
+					return Error("REVIEW_EVIDENCE_CHANGED", ref)
+				}
+			}
 		}
 		a.Candidate = candidate
 		if sub.Result.Status == "blocked" && a.PID > 0 {

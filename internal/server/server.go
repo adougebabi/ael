@@ -213,7 +213,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 						offsets[board] = max(0, value)
 					}
 				}
-				v, e := h.Service.QueryPage(core.Query{Limit: limit, Offset: offset, Offsets: offsets, Days: days, Text: r.URL.Query().Get("q"), Board: r.URL.Query().Get("board")})
+				v, e := h.Service.QueryPage(core.Query{Limit: limit, Offset: offset, Offsets: offsets, Days: days, Text: r.URL.Query().Get("q"), Type: r.URL.Query().Get("type"), Board: r.URL.Query().Get("board")})
 				if r.URL.Query().Get("compact") == "1" && e == nil {
 					items := []core.TaskSummary{}
 					for _, n := range v.Items {
@@ -240,20 +240,30 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			} else {
 				http.Error(w, "METHOD", 405)
 			}
+		case "/api/attention":
+			if r.Method != "GET" {
+				http.Error(w, "METHOD", 405)
+				return
+			}
+			v, e := h.Service.Attention()
+			reply(w, v, e)
 		case "/api/task":
 			v, e := h.Service.Next(r.URL.Query().Get("id"))
 			if e == nil {
 				summary, err := h.Service.Summarize(v)
 				checks := map[string]*core.Evidence{}
+				access := map[string]core.CheckAccess{}
 				for _, c := range v.Task.Definition.Checks {
 					checks[c.ID] = core.CurrentEvidence(v.Task, c)
+					access[c.ID] = core.ReviewAccess(v, c)
 				}
 				reply(w, struct {
 					core.Next
 					Summary core.TaskSummary               `json:"summary"`
 					Checks  map[string]*core.Evidence      `json:"current_checks"`
 					Runs    map[string]core.CheckExecution `json:"current_runs"`
-				}{v, summary, checks, summary.CurrentRuns}, err)
+					Access  map[string]core.CheckAccess    `json:"check_access"`
+				}{v, summary, checks, summary.CurrentRuns, access}, err)
 				return
 			}
 			reply(w, v, e)
@@ -275,6 +285,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				Executor     string          `json:"executor"`
 				Reason       string          `json:"reason"`
 				Decision     string          `json:"decision"`
+				Result       string          `json:"result"`
+				Recovery     string          `json:"recovery"`
+				RequestKey   string          `json:"request_key"`
 				Kind         string          `json:"kind"`
 				Candidate    string          `json:"candidate"`
 				Revision     int             `json:"revision"`
@@ -302,6 +315,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				v, e = h.Service.Assess(a.Assessment)
 			case "review":
 				v, e = h.Service.ReviewExact(a.ID, a.Unit, a.Executor, a.Reason, a.Artifacts, core.ReviewExpectation{Candidate: a.Candidate, DefinitionRevision: a.Revision, PlanRevision: a.PlanRevision})
+			case "review_result":
+				v, e = h.Service.ReviewResultExact(a.ID, a.Unit, a.Executor, a.Reason, a.Recovery, a.Result, a.Artifacts, a.RequestKey, core.ReviewExpectation{Candidate: a.Candidate, DefinitionRevision: a.Revision, PlanRevision: a.PlanRevision})
 			case "confirm":
 				v, e = h.Service.Confirm(a.ID, a.Kind, a.Decision, a.Executor, a.Reason, a.Candidate, a.Revision, a.PlanRevision)
 			case "pause":

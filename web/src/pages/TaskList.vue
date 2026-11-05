@@ -13,17 +13,19 @@ import {
 } from "../display";
 import LoadState from "../components/LoadState.vue";
 import Pagination from "../components/Pagination.vue";
-const r = useResource<any>({ groups: {}, counts: {}, total: 0 });
+import AttentionCard from "../components/AttentionCard.vue";
+import ManualReviewDialog from "../components/ManualReviewDialog.vue";
+const r = useResource<any>({ groups: {}, counts: {}, total: 0, attention: [] });
 const { data, loading, error, last } = r;
 const search = ref(route.value.query.get("q") || "");
 const board = computed(() => route.value.query.get("board") || "");
+const taskType = computed(() => route.value.query.get("type") || "");
 const days = computed(() => route.value.query.get("days") || "30");
-const closed = ref<Record<string, boolean>>(
-  JSON.parse(
-    sessionStorage.getItem("ael-closed-groups") ||
-      '{"completed":true,"cancelled":true}',
-  ),
-);
+let savedClosed: Record<string, boolean> = { completed: true, cancelled: true };
+try { savedClosed = { ...savedClosed, ...JSON.parse(sessionStorage.getItem("ael-closed-groups") || "{}") }; } catch {}
+const closed = ref<Record<string, boolean>>(savedClosed);
+const manualTarget = ref<{ id: string; check: string } | null>(null);
+const attention = computed(() => data.value.attention || []);
 watch(
   closed,
   (value) => sessionStorage.setItem("ael-closed-groups", JSON.stringify(value)),
@@ -43,7 +45,8 @@ function filter(values: Record<string, string>) {
 async function load(quiet = false) {
   const query = route.value.query.toString();
   await r.load(async () => {
-    const page = await api(
+    const [page, attentionResult] = await Promise.all([
+      api(
       "/api/tasks?" +
         params({
           compact: 1,
@@ -53,9 +56,12 @@ async function load(quiet = false) {
           ),
           days: days.value === "all" ? 0 : days.value,
           q: route.value.query.get("q") || "",
+          type: taskType.value,
           board: board.value,
         }),
-    );
+      ),
+      api('/api/attention').then((value) => ({ value, error: '' })).catch((error) => ({ value: null, error: String(error) })),
+    ]);
     if (query !== route.value.query.toString())
       throw new Error("请求已由新筛选替代");
     return {
@@ -67,6 +73,9 @@ async function load(quiet = false) {
       ),
       counts: page.counts || {},
       total: page.total || 0,
+      attention: attentionResult.value?.items || [],
+      attentionTruncated: !!attentionResult.value?.truncated,
+      attentionError: attentionResult.error,
     };
   }, quiet);
 }
@@ -93,6 +102,7 @@ onUnmounted(() => {
 });
 </script>
 <template>
+  <section v-if="attention.length || data.attentionTruncated || data.attentionError" class="attention-section"><div class="section-heading"><h2>需要你处理 <span class="count">{{ attention.length }}</span></h2><small>优先显示每类最近需要处理的事项</small></div><div class="attention-grid"><AttentionCard v-for="item in attention" :key="item.kind" :kind="item.kind" :task="item.task" @review="(id, check) => manualTarget = { id, check }" /></div><p v-if="data.attentionTruncated" class="secondary">待处理事项较多，此处仅检查了最近的部分任务；请使用下方分组查看全部任务。</p><p v-if="data.attentionError" class="secondary">暂时无法读取待处理事项，请刷新工作台重试。</p></section>
   <div class="toolbar">
     <label class="search"
       >搜索任务<input
@@ -110,6 +120,8 @@ onUnmounted(() => {
           {{ title }}
         </option>
       </select></label
+    ><label
+      >任务类型<select :value="taskType" @change="filter({ type: ($event.target as HTMLSelectElement).value })"><option value="">全部类型</option><option v-for="kind in ['feature', 'bug', 'improvement', 'refactor', 'research', 'docs', 'chore', 'test', 'qa', 'verify']" :key="kind" :value="kind">{{ kind }}</option></select></label
     ><label
       >完成历史<select
         :value="days"
@@ -172,7 +184,7 @@ onUnmounted(() => {
           <div class="task-result">
             <p
               :class="{
-                failure: s.blocker_reason || s.blocking_reasons?.length,
+                'blocked-reason': s.blocker_reason || s.blocking_reasons?.length,
               }"
             >
               {{
@@ -227,4 +239,5 @@ onUnmounted(() => {
       </template>
     </section>
   </div>
+  <ManualReviewDialog v-if="manualTarget" :task-id="manualTarget.id" :check-id="manualTarget.check" @close="manualTarget = null" @saved="load(true)" />
 </template>

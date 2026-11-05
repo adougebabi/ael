@@ -8,7 +8,7 @@
 
 0.1.8 已修正同版本分发内容冲突并完成本机升级与授权看板重启，核查见 [updating.md](docs/updating.md)。完整页面验收记录仍对应已验证的 0.1.7 构建。
 
-当前分发版本为 0.1.8，不同任务可在同一工作区并行领取；任务自身的租约和结果校验仍有效。工作台保留五个权威分组，默认使用紧凑任务列表，每组独立分页；任务完整详情使用可直达的宽页面，分为概览、执行与验收、规范与决策、技术记录。列表搜索、分页、浏览器往返与滚动位置随导航保留。
+当前源码版本为 0.1.9；本次构建与隔离验收不代表已升级任何真实项目或重启实际服务。不同任务可在同一工作区并行领取；任务自身的租约和结果校验仍有效。工作台保留五个权威分组，默认使用紧凑任务列表，每组独立分页；任务完整详情使用可直达的宽页面，分为概览、检查与验收、执行过程、规范与决策和技术记录。列表搜索、分页、浏览器往返与滚动位置随导航保留。
 
 “规范与决策”默认查看现行规范，决策与历史资料分别浏览；分页列表不传输全文，正文按需使用本地 Markdown 阅读器打开。项目演进来自真实任务结果及明确的规范/决策记录，资料观察与进程事件在项目设置的运行诊断中保留。资料可读取、迁移已应用、工作流已激活与执行器能力分别表达。详情地址使用 `#/tasks/<id>`、`#/knowledge/<id>`、`#/evolution/<id>`，适用于内嵌离线页面。
 
@@ -122,7 +122,7 @@ claim 返回 Attempt ID 与 token。创建 submission.json：
 
 所有输出 JSON；命令参数/状态非法时 stderr JSON、exit 1。exit 0 表示协议调用成功，是否完成必须读 `next_action` 和 evidence；blocked、等待确认或命令执行失败形成的检查点不会被当作成功验收。`ael help` 输出全部实际命令及结构样例。
 
-Fast/Standard/Strict/Research 为同一有序步骤引擎的预设。后端不带 UI/UX；界面影响独立增加视觉/交互门禁。未配置命令时生成 method=model 的语义审查，不会自动通过；由真实 Agent 读取具体输入、产出报告，再用 `assess --file assessment.json` 提交准确候选。明确声明 method=human 的检查才使用人工入口：
+Fast/Standard/Strict/Research 为同一有序步骤引擎的预设。后端不带 UI/UX；界面影响独立增加视觉/交互门禁。未配置命令时生成 method=model 的语义审查，不会自动通过；由真实 Agent 读取具体输入、产出报告，再用 `assess --file assessment.json` 提交准确候选。明确声明 method=human 的检查，以及旧记录中未指定方法且没有命令的检查，可使用人工入口；显式 model、scenario 或 command 不会被替换为人工判断：
 
 ```sh
 ael confirm --kind review --task ID --check review --executor person --reason '审阅结论与证据' --artifacts report.md --project PATH

@@ -1,11 +1,16 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import { api, notices } from "../api";
 import { navigate, taskHref, back } from "../router";
 import { readableError } from "../display";
 const busy = ref(false),
   error = ref(""),
   checks = ref("[]");
+const dialog = ref<HTMLDialogElement>();
+const previous = document.activeElement as HTMLElement | null;
+onMounted(() => dialog.value?.showModal());
+onUnmounted(() => previous?.focus({ preventScroll: true }));
+function close() { if (!busy.value) back('/tasks'); }
 const f = ref({
   title: "",
   type: "bug",
@@ -44,10 +49,9 @@ async function create() {
 }
 </script>
 <template>
-  <div class="readable">
-    <button @click="back('/tasks')">← 返回工作台</button>
+  <dialog ref="dialog" class="action-dialog create-task-dialog" @cancel.prevent="close">
+    <div class="section-heading"><h2>创建任务</h2><button type="button" class="dialog-close" aria-label="关闭创建任务" :disabled="busy" @click="close">×</button></div>
     <form class="creation" @submit.prevent="create">
-      <h2>创建任务</h2>
       <label>标题<input v-model="f.title" required autofocus /></label
       ><label
         >工作目标与背景<textarea
@@ -135,5 +139,5 @@ async function create() {
         </button>
       </div>
     </form>
-  </div>
+  </dialog>
 </template>

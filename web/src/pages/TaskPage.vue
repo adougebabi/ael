@@ -22,6 +22,7 @@ import {
 } from "../display";
 import LoadState from "../components/LoadState.vue";
 import ActionDialog from "../components/ActionDialog.vue";
+import ManualReviewDialog from "../components/ManualReviewDialog.vue";
 import MarkdownBody from "../components/MarkdownBody.vue";
 const props = defineProps<{ id: string }>();
 const r = useResource<any>(null),
@@ -30,7 +31,8 @@ const t = computed(() => n.value?.task),
   section = computed(() => route.value.query.get("section") || "overview");
 const sections = [
   ["overview", "概览"],
-  ["execution", "执行与验收"],
+  ["checks", "检查与验收"],
+  ["execution", "执行过程"],
   ["basis", "规范与决策"],
   ["technical", "技术记录"],
 ];
@@ -62,8 +64,11 @@ const busy = ref(false),
   reason = ref(""),
   ack = ref(false),
   resumeTarget = ref(""),
-  refs = ref(""),
   edit = ref("");
+const manualCheck = ref("");
+const availableHumanChecks = computed(() =>
+  (t.value?.definition.checks || []).filter((c: any) => n.value?.check_access?.[c.id]?.can_review),
+);
 const claimed = ref<any>(null),
   result = ref({
     status: "pass",
@@ -119,6 +124,7 @@ watch(
     contextReader.clear();
     receiptReader.clear();
     claimed.value = null;
+    manualCheck.value = "";
     load();
   },
 );
@@ -200,7 +206,6 @@ function start(action: string, title: string, extra: any = {}) {
     )
       ? "execute"
       : "";
-  refs.value = "";
   if (action === "edit")
     edit.value = JSON.stringify(t.value.definition, null, 2);
 }
@@ -213,17 +218,6 @@ async function perform() {
     let extra = current.extra || {};
     if (current.action === "edit")
       extra = { definition: JSON.parse(edit.value) };
-    if (current.action === "review")
-      extra = {
-        unit: current.unit,
-        candidate: current.candidate,
-        revision: current.revision,
-        plan_revision: current.plan_revision,
-        artifacts: refs.value
-          .split(",")
-          .map((x) => x.trim())
-          .filter(Boolean),
-      };
     if (current.action === "resume") extra = { unit: resumeTarget.value };
     const v = await api("/api/action", {
       action: current.action,
@@ -403,19 +397,21 @@ function priorCheck(c: any) {
 }
 function canCheck(c: any) {
   return (
+    t.value.status === "open" && !t.value.paused && !t.value.confirmation &&
     t.value.current_step === "verify" &&
     ["continue", "repair", "wait_executor"].includes(n.value.next_action) &&
     !t.value.attempts?.some(
       (a: any) =>
         (a.unit === c.id || a.unit === "check:" + c.id) &&
-        a.status === "running" &&
-        Date.parse(a.lease_until) > Date.now(),
+        a.status === "running",
     )
   );
 }
 function checkReason(c: any) {
+  if (n.value?.check_access?.[c.id]?.effective_method === "human" && !n.value?.check_access?.[c.id]?.can_review)
+    return "当前检查不可验收，请核对任务状态、候选或已有执行。";
   if (!canCheck(c)) return "当前未到此检查的可执行节点，或检查已在运行。";
-  if (!c.command?.length && c.method !== "human")
+  if (!c.command?.length && n.value?.check_access?.[c.id]?.effective_method !== "human")
     return "需要具备对应能力的执行者提交真实输入与报告。";
   return "";
 }
@@ -441,10 +437,9 @@ function checkReason(c: any) {
             }}</span>
           </p>
         </div>
-        <a :href="href('/evolution', { q: t.definition.title })"
-          >查看相关演进</a
-        >
+        <div class="task-heading-actions"><button v-if="availableHumanChecks.length" class="primary" @click="manualCheck = availableHumanChecks[0].id">开始人工验收</button><a :href="href('/evolution', { q: t.definition.title })">查看相关演进</a></div>
       </header>
+      <ol class="stage-track" aria-label="任务流程位置"><li v-for="step in t.plan.steps" :key="step" :class="{ current: step === t.current_step }"><span>{{ step === t.current_step ? '●' : '○' }}</span>{{ label(step) }}</li></ol>
       <nav class="tabs" aria-label="任务详情分区">
         <button
           v-for="[id, title] in sections"
@@ -456,18 +451,20 @@ function checkReason(c: any) {
           {{ title }}
         </button>
       </nav>
+      <div class="task-detail-layout"><div class="task-detail-main">
       <section v-if="section === 'overview'" class="overview">
         <div class="conclusion">
           <h2>当前结论与下一步</h2>
           <p>{{ label(n.summary.last_result) }}</p>
-          <p v-if="t.status === 'open' && t.blocker?.reason" class="failure">
+          <p v-if="t.status === 'open' && t.blocker?.reason" class="blocked-reason">
             {{ blockerText(t.blocker.reason) }}
           </p>
+          <details v-if="t.blocker?.reason?.length > 180"><summary>查看完整阻塞信息</summary><pre>{{ t.blocker.reason }}</pre></details>
           <p
             v-for="b in n.blocking_reasons.filter(
               (b: string) => b !== t.blocker?.reason,
             )"
-            class="failure"
+            class="blocked-reason"
           >
             {{ blockerText(b) }}
           </p>
@@ -487,24 +484,14 @@ function checkReason(c: any) {
         </div>
         <div class="actions primary-actions">
           <button
-            v-if="runnable"
+            v-if="availableHumanChecks.length"
             class="primary"
-            :disabled="busy"
-            @click="start('claim', '接手当前工作')"
-          >
-            接手当前工作</button
-          ><button
-            v-if="t.current_step === 'verify'"
-            @click="setQuery({ section: 'execution' })"
+            @click="manualCheck = availableHumanChecks[0].id"
+          >记录人工验收</button><button
+            v-else-if="t.current_step === 'verify'"
+            @click="setQuery({ section: 'checks' })"
           >
             查看验收与运行检查</button
-          ><button
-            v-if="recoverable"
-            class="primary"
-            :disabled="busy"
-            @click="start('resume', '恢复任务')"
-          >
-            恢复任务</button
           ><button
             v-if="t.confirmation"
             class="primary"
@@ -722,8 +709,8 @@ function checkReason(c: any) {
           </div>
         </section>
       </section>
-      <section v-if="section === 'execution'">
-        <section class="content-section">
+      <section v-if="section === 'execution' || section === 'checks'">
+        <section v-if="section === 'execution'" class="content-section">
           <h2>执行计划</h2>
           <ol class="plan">
             <li
@@ -738,7 +725,7 @@ function checkReason(c: any) {
             >计划修订 {{ t.plan.revision }} · 计划节点不代表完成百分比</small
           >
         </section>
-        <section class="content-section">
+        <section v-if="section === 'checks'" class="content-section check-list">
           <h2>检查与验收</h2>
           <p>
             有效结果通过 {{ n.summary.checks.passed }} 项；必需
@@ -773,7 +760,7 @@ function checkReason(c: any) {
               ><span
                 >{{ c.required ? "必需" : "非必需" }} ·
                 {{
-                  label(c.method || (c.command?.length ? "command" : "human"))
+                  label(n.check_access?.[c.id]?.effective_method || c.method)
                 }}</span
               >
             </div>
@@ -818,12 +805,12 @@ function checkReason(c: any) {
               >
                 运行真实检查</button
               ><button
-                v-else-if="c.method === 'human'"
-                :disabled="busy || !canCheck(c)"
+                v-else-if="n.check_access?.[c.id]?.effective_method === 'human'"
+                :disabled="busy || !n.check_access?.[c.id]?.can_review"
                 :title="checkReason(c)"
-                @click="start('review', '记录人工验收通过', { unit: c.id })"
+                @click="manualCheck = c.id"
               >
-                记录人工验收通过</button
+                记录人工验收</button
               ><span v-else class="secondary"
                 >需要{{ label(c.method) }}能力；请由执行者提交真实报告。</span
               >
@@ -878,7 +865,7 @@ function checkReason(c: any) {
             </div>
           </article>
         </section>
-        <section class="content-section">
+        <section v-if="section === 'execution'" class="content-section">
           <h2>实际工作进展</h2>
           <p v-if="!work.length" class="empty">
             尚未接手；没有已提交的实际工作结果。
@@ -1113,6 +1100,7 @@ function checkReason(c: any) {
           活动或未核实停止的执行会阻止删除；入向依赖与引用仍由内核保护。
         </p>
       </section>
+      </div><aside class="next-panel"><h2>下一步</h2><p>{{ nextAction(n.summary) }}</p><button v-if="availableHumanChecks.length" class="primary" @click="manualCheck = availableHumanChecks[0].id">开始人工验收</button><button v-else-if="recoverable" @click="start('resume', '恢复任务')">恢复任务</button><button v-else-if="t.confirmation" @click="setQuery({ section: 'basis' })">审阅当前方案</button><button v-else-if="runnable" @click="start('claim', '接手当前工作')">接手当前工作</button><button v-else-if="t.current_step === 'verify'" @click="setQuery({ section: 'checks' })">查看检查与验收</button><div class="next-panel-facts"><h3>工作信息</h3><p>交付目标：{{ goalLabel(t.definition.goal) }}</p><p>当前候选：{{ t.candidate ? t.candidate.slice(0, 12) : '尚未生成' }}</p><p>执行者：{{ n.summary.executors.length ? n.summary.executors.join('、') : '当前无人执行' }}</p></div></aside></div>
     </template>
     <section
       v-if="artifact || artifactError || artifactLoading"
@@ -1155,12 +1143,11 @@ function checkReason(c: any) {
       @close="op = null"
       @submit="perform"
     >
-      <label v-if="['claim', 'confirm', 'review'].includes(op.action)"
+      <label v-if="['claim', 'confirm'].includes(op.action)"
         >执行者 / 决策者<input v-model="actor" required
       /></label>
       <label v-if="!['claim', 'verify', 'resume'].includes(op.action)"
-        >{{ op.action === "review" ? "人工验收结论与依据" : "操作理由"
-        }}<textarea v-model="reason" required rows="3"></textarea>
+        >操作理由<textarea v-model="reason" required rows="3"></textarea>
       </label>
       <label v-if="op.action === 'resume'" class="inline"
         ><input type="checkbox" v-model="ack" />我已核实旧执行进程停止</label
@@ -1182,9 +1169,6 @@ function checkReason(c: any) {
       <p v-if="op.action === 'resume'" class="secondary">
         保留当前节点或回到选择的更早责任；未知或仍在运行的进程不会被擅自释放。
       </p>
-      <label v-if="op.action === 'review'"
-        >已有报告与证据（逗号分隔）<input v-model="refs" required
-      /></label>
       <label v-if="op.action === 'edit'"
         >任务定义 JSON<textarea
           v-model="edit"
@@ -1199,5 +1183,6 @@ function checkReason(c: any) {
         运行已配置的真实命令，结果绑定当前候选和修订。
       </p>
     </ActionDialog>
+    <ManualReviewDialog v-if="manualCheck" :task-id="id" :check-id="manualCheck" @close="manualCheck = ''" @saved="load(true)" />
   </div>
 </template>

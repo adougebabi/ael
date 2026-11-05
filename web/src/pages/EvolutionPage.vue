@@ -210,6 +210,7 @@ const referenceLink = (ref: any) =>
       <section class="content-section readable">
         <h2>原状与变化原因</h2>
         <p>{{ data.reason }}</p>
+        <div class="change-comparison"><div><h3>变化前</h3><p>未单独记录。</p></div><div><h3>变化后</h3><p>未单独记录；已记录的变化事实见下方结果。</p></div></div>
       </section>
       <section class="content-section readable">
         <h2>变化内容与实际结果</h2>
@@ -244,6 +245,7 @@ const referenceLink = (ref: any) =>
       </section>
       <section class="content-section readable">
         <h2>选择、取舍与证据</h2>
+        <p class="secondary">方案取舍未作为独立字段记录；如有关联决策，可阅读其原文。</p>
         <p v-if="data.kind !== 'decision'" class="secondary">
           仅通过显式任务和资料引用列出关联依据；未记录的方案与因果不作推断。
         </p>
@@ -264,7 +266,7 @@ const referenceLink = (ref: any) =>
           }}</small>
         </div>
         <p v-if="data.artifacts.length" class="secondary">
-          实际产物在对应任务“执行与验收”中读取（{{ data.artifacts.length }}
+          实际产物在对应任务“执行过程”中读取（{{ data.artifacts.length }}
           项引用）。
         </p>
         <a v-if="data.superseded_by" :href="knowledgeHref(data.superseded_by)"

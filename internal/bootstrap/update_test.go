@@ -261,21 +261,21 @@ func TestUpdateDelegatesToSourceReleaseForPreview(t *testing.T) {
 	if _, e := Init(root, false, false); e != nil {
 		t.Fatal(e)
 	}
-	source := updateFixture(t, "0.1.8", "fixture-future")
+	source := updateFixture(t, "0.2.0", "fixture-future")
 	trace := filepath.Join(t.TempDir(), "delegated.txt")
 	t.Setenv("AEL_DELEGATION_TRACE", trace)
 	program := []byte(`#!/bin/sh
-if [ "$1" = version ]; then printf '%s\n' '{"version":"0.1.8","build":"fixture-future"}'; exit 0; fi
+if [ "$1" = version ]; then printf '%s\n' '{"version":"0.2.0","build":"fixture-future"}'; exit 0; fi
 printf '%s\n' "$@" > "$AEL_DELEGATION_TRACE"
 shift
 while [ "$#" -gt 0 ]; do
  case "$1" in --project) shift; target=$1 ;; esac
  shift
 done
-printf '{"operation":"update","status":"preview","target":"%s","available":{"version":"0.1.8","build":"fixture-future"},"files":[]}' "$target"
+printf '{"operation":"update","status":"preview","target":"%s","available":{"version":"0.2.0","build":"fixture-future"},"files":[]}' "$target"
 `)
 	b := mustBundle(t, source)
-	text := "version 0.1.8\n"
+	text := "version 0.2.0\n"
 	for _, a := range b.Assets {
 		os.WriteFile(filepath.Join(source, a.Path), program, 0755)
 		text += a.Platform + " " + store.Hash(program) + " " + a.Path + "\n"
@@ -284,7 +284,7 @@ printf '{"operation":"update","status":"preview","target":"%s","available":{"ver
 	text += "notice " + store.Hash(notice) + " NOTICE\n"
 	os.WriteFile(filepath.Join(source, "ael-toolchain.lock"), []byte(text), 0644)
 	r, e := UpdateProject(root, UpdateOptions{From: source, DryRun: true})
-	if e != nil || r.Available.Version != "0.1.8" || r.Status != "preview" {
+	if e != nil || r.Available.Version != "0.2.0" || r.Status != "preview" {
 		t.Fatal(r, e)
 	}
 	called, _ := os.ReadFile(trace)

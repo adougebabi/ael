@@ -4,6 +4,7 @@ import (
 	"ael/internal/process"
 	"ael/internal/store"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -155,7 +156,7 @@ func (s *Service) Verify(id, check, executor string) (Next, error) {
 	return n, e
 }
 func (s *Service) Review(id, check, actor, reason string, refs []string) (Next, error) {
-	return s.review(id, check, actor, reason, refs, nil)
+	return s.review(id, check, actor, reason, "", "pass", refs, nil, "", "")
 }
 
 type ReviewExpectation struct {
@@ -165,11 +166,55 @@ type ReviewExpectation struct {
 }
 
 func (s *Service) ReviewExact(id, check, actor, reason string, refs []string, expected ReviewExpectation) (Next, error) {
-	return s.review(id, check, actor, reason, refs, &expected)
+	return s.review(id, check, actor, reason, "", "pass", refs, &expected, "", "")
 }
-func (s *Service) review(id, check, actor, reason string, refs []string, expected *ReviewExpectation) (Next, error) {
-	if actor == "" || reason == "" || len(refs) == 0 {
-		return Next{}, Error("HUMAN_EVIDENCE_REQUIRED", "actor, reason, artifact references")
+
+// ReviewResultExact records a specific human outcome against the version the
+// reviewer saw. The request key makes a lost HTTP response safe to retry.
+func (s *Service) ReviewResultExact(id, check, actor, reason, recovery, result string, refs []string, requestKey string, expected ReviewExpectation) (Next, error) {
+	if strings.TrimSpace(requestKey) == "" || len(requestKey) > 128 {
+		return Next{}, Error("IDEMPOTENCY_KEY_REQUIRED", "a unique review request key is required")
+	}
+	request, _ := json.Marshal(struct {
+		Task, Check, Actor, Reason, Recovery, Result string
+		Artifacts                                    []string
+		Expected                                     ReviewExpectation
+	}{id, check, actor, reason, recovery, result, refs, expected})
+	key, hash := "human-review:"+requestKey, store.Hash(request)
+	if previous, found, err := s.reviewReplay(key, hash); found || err != nil {
+		return previous, err
+	}
+	return s.review(id, check, actor, reason, recovery, result, refs, &expected, key, hash)
+}
+
+func (s *Service) reviewReplay(key, hash string) (Next, bool, error) {
+	var oldHash, raw string
+	err := s.Store.DB.QueryRow("SELECT hash,response FROM submissions WHERE key=?", key).Scan(&oldHash, &raw)
+	if err == sql.ErrNoRows {
+		return Next{}, false, nil
+	}
+	if err != nil {
+		return Next{}, false, err
+	}
+	if oldHash != hash {
+		return Next{}, true, Error("IDEMPOTENCY_CONFLICT", key)
+	}
+	var previous Next
+	if err = json.Unmarshal([]byte(raw), &previous); err != nil {
+		return Next{}, true, err
+	}
+	return previous, true, s.Store.Flush()
+}
+
+func (s *Service) review(id, check, actor, reason, recovery, result string, refs []string, expected *ReviewExpectation, key, hash string) (Next, error) {
+	if result != "pass" && result != "fail" && result != "blocked" {
+		return Next{}, Error("INVALID_RESULT", "select pass, fail or blocked")
+	}
+	if strings.TrimSpace(actor) == "" || strings.TrimSpace(reason) == "" || (result != "blocked" && len(refs) == 0) {
+		return Next{}, Error("HUMAN_EVIDENCE_REQUIRED", "actor and observation are required; pass and fail require actual evidence")
+	}
+	if result != "pass" && strings.TrimSpace(recovery) == "" {
+		return Next{}, Error("RECOVERY_REQUIRED", "describe the correction or conditions needed to continue")
 	}
 	t, e := s.Get(id)
 	if e != nil {
@@ -180,7 +225,7 @@ func (s *Service) review(id, check, actor, reason string, refs []string, expecte
 			return Next{}, Error("REVIEW_VERSION_REQUIRED", "refresh the task and review its exact candidate and revisions")
 		}
 		if expected.Candidate != t.Candidate || expected.DefinitionRevision != t.Definition.Revision || expected.PlanRevision != t.Plan.Revision {
-			return Next{}, Error("REVIEW_VERSION_MISMATCH", "review the updated candidate before confirming human pass")
+			return Next{}, Error("REVIEW_VERSION_MISMATCH", "review the updated candidate before recording a result")
 		}
 	}
 	var c Check
@@ -192,8 +237,8 @@ func (s *Service) review(id, check, actor, reason string, refs []string, expecte
 	if c.ID == "" || len(c.Command) > 0 {
 		return Next{}, Error("MANUAL_CHECK_REQUIRED", check)
 	}
-	if c.Method == "model" || c.Method == "scenario" {
-		return Next{}, Error("CHECK_METHOD_MISMATCH", "declared model/scenario capability cannot be replaced with human pass")
+	if EffectiveCheckMethod(c) != "human" {
+		return Next{}, Error("CHECK_METHOD_MISMATCH", "declared check capability cannot be replaced with human review")
 	}
 	workspace := t.CandidateWorkspace
 	if workspace == "" {
@@ -207,23 +252,49 @@ func (s *Service) review(id, check, actor, reason string, refs []string, expecte
 			return Next{}, e
 		}
 		hashes[r] = store.Hash(b)
-		if strings.HasSuffix(strings.ToLower(r), ".png") || strings.HasSuffix(strings.ToLower(r), ".jpg") {
+		if strings.HasSuffix(strings.ToLower(r), ".png") || strings.HasSuffix(strings.ToLower(r), ".jpg") || strings.HasSuffix(strings.ToLower(r), ".jpeg") {
 			if mime := http.DetectContentType(b); mime == "image/png" || mime == "image/jpeg" {
 				image = true
 			}
 		}
 	}
-	if c.Kind == "ui" && !image {
+	if c.Kind == "ui" && result != "blocked" && !image {
 		return Next{}, Error("SCREENSHOT_REQUIRED", check)
 	}
-	n, e := s.Claim(id, check, actor, "", "")
+	n, e := s.claim(id, check, actor, "", "", expected)
 	if e != nil {
+		if key != "" {
+			if previous, found, err := s.reviewReplay(key, hash); found || err != nil {
+				return previous, err
+			}
+		}
 		return n, e
 	}
 	a := n.Attempt
 	config, _ := json.Marshal(c)
-	ev := Evidence{Check: check, Candidate: t.Candidate, Revision: t.Definition.Revision, PlanRevision: t.Plan.Revision, Config: store.Hash(config), Result: "pass", Source: "human:" + actor, Environment: runtime.GOOS + "/" + runtime.GOARCH, Artifacts: refs, ArtifactHashes: hashes, Reason: reason, At: time.Now().UTC()}
-	return s.submit(Submission{id, a.ID, a.Token, ID("human-"), StepResult{Status: "pass", Summary: reason, Artifacts: refs}}, &ev)
+	ev := Evidence{Check: check, Candidate: t.Candidate, Revision: t.Definition.Revision, PlanRevision: t.Plan.Revision, Config: store.Hash(config), Result: result, Source: "human:" + actor, Executor: actor, Recovery: recovery, Environment: runtime.GOOS + "/" + runtime.GOARCH, Artifacts: refs, ArtifactHashes: hashes, Reason: reason, At: time.Now().UTC()}
+	step := StepResult{Status: result, Summary: reason, Artifacts: refs}
+	if result == "blocked" {
+		step.Blocker = &Blocker{Category: "environment", Reason: reason, Scope: t.Definition.Scope, Tried: reason, Recovery: recovery, ResumeAt: "verify"}
+	}
+	if key == "" {
+		key = ID("human-")
+	}
+	n, e = s.submitWithHash(Submission{id, a.ID, a.Token, key, step}, &ev, hash)
+	if e != nil {
+		// No process was started for a human review. Release only this attempt
+		// after a rejected result; never pause or alter another executor.
+		_, _ = s.mutate(id, "review_aborted", func(tx *store.Tx, current *Task) error {
+			attempt, err := findAttempt(current, a.ID, a.Token)
+			if err != nil || attempt.PID != 0 {
+				return Error("STALE_TOKEN", a.ID)
+			}
+			now := time.Now().UTC()
+			attempt.Status, attempt.Reason, attempt.Ended = "aborted", "human result was not recorded", &now
+			return nil
+		})
+	}
+	return n, e
 }
 func (s *Service) Artifact(ref string) ([]byte, error) { return s.artifact(ref) }
 func (s *Service) RecoverDefinitions() error {

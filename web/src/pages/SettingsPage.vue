@@ -251,7 +251,7 @@ const material = computed(() =>
             v-for="reason in issue.blocker_reason
               ? [issue.blocker_reason]
               : issue.reasons"
-            class="failure"
+            class="blocked-reason"
           >
             {{ blockerText(reason) }}
           </p>

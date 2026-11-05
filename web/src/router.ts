@@ -77,10 +77,10 @@ export function href(path: string, query: Record<string, string> = {}) {
 export function taskHref(id: string, section = "overview") {
   return href("/tasks/" + encodeURIComponent(id), { section });
 }
-export function knowledgeHref(id: string, version = "") {
+export function knowledgeHref(id: string, version = "", fragment = "") {
   return href(
     "/knowledge/" + encodeURIComponent(id),
-    version ? { version } : {},
+    { ...(version ? { version } : {}), ...(fragment ? { fragment } : {}) },
   );
 }
 export function back(fallback: string) {

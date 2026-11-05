@@ -21,6 +21,51 @@ type CheckSummary struct {
 type CheckExecution struct {
 	Executors []string `json:"executors"`
 }
+type CheckAccess struct {
+	EffectiveMethod string `json:"effective_method"`
+	CanReview       bool   `json:"can_review"`
+	Reason          string `json:"reason,omitempty"`
+}
+type PendingHumanReview struct {
+	Check  string   `json:"check"`
+	Covers []string `json:"covers"`
+}
+
+// EffectiveCheckMethod preserves the original explicit method. Only legacy
+// checks without either a method or a command default to human review.
+func EffectiveCheckMethod(c Check) string {
+	if c.Method != "" {
+		return c.Method
+	}
+	if len(c.Command) > 0 {
+		return "command"
+	}
+	return "human"
+}
+
+// ReviewAccess is a presentation of the same eligibility checked by the
+// review service and its claim transaction. It does not authorize a write.
+func ReviewAccess(n Next, c Check) CheckAccess {
+	a := CheckAccess{EffectiveMethod: EffectiveCheckMethod(c)}
+	t := n.Task
+	if a.EffectiveMethod != "human" || len(c.Command) != 0 {
+		a.Reason = "check requires its declared method"
+	} else if t == nil || t.Status != "open" || t.Step != "verify" || t.Paused || t.Confirmation != nil || t.Candidate == "" || (n.Action != "continue" && n.Action != "repair" && n.Action != "wait_executor") {
+		a.Reason = "task is not ready for this check"
+	} else if e := CurrentEvidence(t, c); e != nil && e.Result == "pass" {
+		a.Reason = "check already passed for this candidate"
+	} else {
+		for _, attempt := range t.Attempts {
+			if attempt.Unit == "check:"+c.ID && attempt.Status == "running" {
+				a.Reason = "check already has an active or unrecovered attempt"
+				return a
+			}
+		}
+		a.CanReview = true
+	}
+	return a
+}
+
 type TaskSummary struct {
 	ID                   string                    `json:"id"`
 	Title                string                    `json:"title"`
@@ -41,12 +86,13 @@ type TaskSummary struct {
 	Blocker              string                    `json:"blocker_reason"`
 	RequiresTaskDecision bool                      `json:"requires_task_decision"`
 	Checks               CheckSummary              `json:"checks"`
+	ManualReviews        []PendingHumanReview      `json:"manual_reviews"`
 	CurrentRuns          map[string]CheckExecution `json:"-"`
 }
 
 func (s *Service) Summarize(n Next) (TaskSummary, error) {
 	t := n.Task
-	r := TaskSummary{ID: t.Definition.ID, Title: t.Definition.Title, Type: t.Definition.Type, Board: n.Board, Step: n.Step, Action: n.Action, Reasons: n.Reasons, Executors: []string{}, Completed: t.Completed, Historical: t.Historical}
+	r := TaskSummary{ID: t.Definition.ID, Title: t.Definition.Title, Type: t.Definition.Type, Board: n.Board, Step: n.Step, Action: n.Action, Reasons: n.Reasons, Executors: []string{}, ManualReviews: []PendingHumanReview{}, Completed: t.Completed, Historical: t.Historical}
 	r.RequiresTaskDecision = t.Status == "open" && t.Confirmation != nil
 	r.CurrentRuns = map[string]CheckExecution{}
 	running := map[string]bool{}
@@ -72,6 +118,9 @@ func (s *Service) Summarize(n Next) (TaskSummary, error) {
 		}
 	}
 	for _, c := range t.Definition.Checks {
+		if ReviewAccess(n, c).CanReview {
+			r.ManualReviews = append(r.ManualReviews, PendingHumanReview{Check: c.ID, Covers: c.Covers})
+		}
 		if c.Required {
 			r.Checks.Required++
 		}

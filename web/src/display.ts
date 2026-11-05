@@ -122,13 +122,15 @@ export function blockerText(value: string) {
     return "规范来源已变化，需审阅并更新索引。";
   if (value.includes("KNOWLEDGE_MISSING"))
     return "任务引用的规范缺失，需核实来源与引用。";
-  return value;
+  const text = value.replace(/\s+/g, " ").trim();
+  return text.length > 180 ? text.slice(0, 177) + "…" : text;
 }
 export const stamp = (s: string | null | undefined) =>
   s && Number.isFinite(Date.parse(s))
     ? new Date(s).toLocaleString("zh-CN", { hour12: false })
     : "日期未确认";
 export function schedule(s: any) {
+  if (s.manual_reviews?.length && !s.running) return "等待人工验收";
   if (
     s.next_action === "wait_confirmation" &&
     !s.requires_task_decision &&
@@ -143,6 +145,7 @@ export function schedule(s: any) {
   return label(s.next_action);
 }
 export function nextAction(s: any) {
+  if (s.manual_reviews?.length) return "对照当前候选记录人工验收";
   if (s.next_action === "wait_confirmation" && !s.requires_task_decision)
     return "核实并解决适用规范冲突，再更新来源索引";
   const map: Record<string, string> = {
@@ -170,6 +173,15 @@ export function readableError(error: string) {
     NOT_RUNNABLE: "当前条件不允许领取，请先处理阻塞。",
     REVIEW_VERSION_REQUIRED: "验收版本信息缺失，请刷新任务后重新审阅。",
     REVIEW_VERSION_MISMATCH: "验收候选或修订已变化，请刷新后重新审阅。",
+    REVIEW_INPUT_REQUIRED: "请选择验收结论并填写必需的信息。",
+    REVIEW_NOT_ALLOWED: "当前检查不能记录人工验收，请刷新后核对状态。",
+    REVIEW_EVIDENCE_CHANGED: "证据已变化或无法读取，请核对后重新选择。",
+    HUMAN_EVIDENCE_REQUIRED: "请填写记录人和实际观察，并关联需要的真实证据。",
+    RECOVERY_REQUIRED: "请填写修复方向或继续验证的条件。",
+    SCREENSHOT_REQUIRED: "视觉检查需要关联真实的 PNG 或 JPEG 截图。",
+    CHECK_METHOD_MISMATCH: "此检查需要原先声明的执行方法，不能替换为人工判断。",
+    CANDIDATE_CHANGED: "工作区候选已变化，请重新生成并审阅当前候选。",
+    IDEMPOTENCY_CONFLICT: "本次请求已经记录但内容不同，请刷新任务核对结果。",
     REVISION_MISMATCH: "对象版本已变化，请刷新后重新审阅。",
     CONFIRMATION_MISMATCH: "确认版本已变化，请刷新后重新审阅。",
     CONFIRMATION_VERSION_MISMATCH: "确认版本已变化，请刷新后重新审阅。",
