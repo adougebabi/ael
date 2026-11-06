@@ -89,6 +89,8 @@ type TaskSummary struct {
 	Checks               CheckSummary              `json:"checks"`
 	ManualReviews        []PendingHumanReview      `json:"manual_reviews"`
 	PendingReviewNotes   int                       `json:"pending_review_notes"`
+	HumanReviewCount     int                       `json:"human_review_count"`
+	ReviewNoteState      string                    `json:"review_note_state,omitempty"`
 	CurrentRuns          map[string]CheckExecution `json:"-"`
 }
 
@@ -96,10 +98,35 @@ func (s *Service) Summarize(n Next) (TaskSummary, error) {
 	t := n.Task
 	r := TaskSummary{ID: t.Definition.ID, Title: t.Definition.Title, Type: t.Definition.Type, Board: n.Board, Step: n.Step, Action: n.Action, Reasons: n.Reasons, Executors: []string{}, ManualReviews: []PendingHumanReview{}, Completed: t.Completed, Historical: t.Historical}
 	r.RequiresTaskDecision = t.Status == "open" && t.Confirmation != nil
+	r.HumanReviewCount = len(t.HumanReviewNotes)
+	currentNotes := 0
+	currentConfirmed := false
 	for _, note := range t.HumanReviewNotes {
 		if note.Status == "pending" {
 			r.PendingReviewNotes++
+			if note.DefinitionRevision == t.Definition.Revision && note.PlanRevision == t.Plan.Revision {
+				currentNotes++
+			}
 		}
+		if note.Status == "confirmed" && t.Candidate != "" && note.ConfirmedCandidate == t.Candidate && note.DefinitionRevision == t.Definition.Revision && note.PlanRevision == t.Plan.Revision {
+			currentConfirmed = true
+		}
+	}
+	switch {
+	case currentNotes > 0 && t.Status != "open":
+		r.ReviewNoteState = "closed"
+	case currentNotes > 0 && t.Candidate == "":
+		r.ReviewNoteState = "await_candidate"
+	case currentNotes > 0:
+		r.ReviewNoteState = "await_confirmation"
+	case currentConfirmed:
+		r.ReviewNoteState = "confirmed"
+	case r.PendingReviewNotes > 0 && t.Status != "open":
+		r.ReviewNoteState = "closed"
+	case r.PendingReviewNotes > 0:
+		r.ReviewNoteState = "outdated"
+	case r.HumanReviewCount > 0:
+		r.ReviewNoteState = "historical"
 	}
 	r.CurrentRuns = map[string]CheckExecution{}
 	running := map[string]bool{}

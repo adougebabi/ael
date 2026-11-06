@@ -54,7 +54,7 @@ func TestPendingHumanReviewRecordsWithoutChangingWorkOrGates(t *testing.T) {
 		t.Fatal(current, err)
 	}
 	summary, err := s.Summarize(current)
-	if err != nil || summary.PendingReviewNotes != 1 || summary.Checks.RequiredPassed != 0 || summary.LastResult != "我已检查页面的实际行为" {
+	if err != nil || summary.PendingReviewNotes != 1 || summary.HumanReviewCount != 1 || summary.ReviewNoteState != "await_candidate" || summary.Checks.RequiredPassed != 0 || summary.LastResult != "我已检查页面的实际行为" {
 		t.Fatal(summary, err)
 	}
 	raw, err := os.ReadFile(filepath.Join(s.Root, ".ael", "records", id+".json"))
@@ -68,6 +68,26 @@ func TestPendingHumanReviewRecordsWithoutChangingWorkOrGates(t *testing.T) {
 	n, err = s.Submit(core.Submission{Task: id, Attempt: attempt.ID, Token: attempt.Token, Key: "actual-work", Result: core.StepResult{Status: "pass", Summary: "actual work", Artifacts: []string{"result.txt"}}})
 	if err != nil || n.Step != "verify" {
 		t.Fatal(n, err)
+	}
+	ready, err := s.Summarize(n)
+	if err != nil || ready.ReviewNoteState != "await_confirmation" {
+		t.Fatal(ready, err)
+	}
+	changed := *n.Task
+	changed.Plan.Revision++
+	stale := n
+	stale.Task = &changed
+	staleSummary, err := s.Summarize(stale)
+	if err != nil || staleSummary.ReviewNoteState != "outdated" {
+		t.Fatal(staleSummary, err)
+	}
+	closed := *n.Task
+	closed.Status = "cancelled"
+	terminal := n
+	terminal.Task = &closed
+	terminalSummary, err := s.Summarize(terminal)
+	if err != nil || terminalSummary.ReviewNoteState != "closed" {
+		t.Fatal(terminalSummary, err)
 	}
 	exact := core.ReviewExpectation{Candidate: n.Task.Candidate, DefinitionRevision: n.Revision, PlanRevision: n.PlanRevision}
 	wrong := exact
@@ -86,6 +106,35 @@ func TestPendingHumanReviewRecordsWithoutChangingWorkOrGates(t *testing.T) {
 	current, err = s.Next(id)
 	if err != nil || current.Task.Status != "open" || len(current.Task.Evidence) != 0 || current.Step != "verify" {
 		t.Fatal("a note must not pass checks", current, err)
+	}
+	after, err := s.Summarize(current)
+	if err != nil || after.PendingReviewNotes != 0 || after.HumanReviewCount != 1 || after.ReviewNoteState != "confirmed" {
+		t.Fatal(after, err)
+	}
+	// An unconfirmable older note must not mask an opinion confirmed for the
+	// current candidate, but a current pending note still needs attention.
+	mixedTask := *current.Task
+	oldNote := note
+	oldNote.PlanRevision--
+	mixedTask.HumanReviewNotes = append(append([]core.HumanReviewNote{}, current.Task.HumanReviewNotes...), oldNote)
+	mixed := current
+	mixed.Task = &mixedTask
+	mixedSummary, err := s.Summarize(mixed)
+	if err != nil || mixedSummary.PendingReviewNotes != 1 || mixedSummary.ReviewNoteState != "confirmed" {
+		t.Fatal(mixedSummary, err)
+	}
+	mixedTask.HumanReviewNotes = append(mixedTask.HumanReviewNotes, note)
+	mixedSummary, err = s.Summarize(mixed)
+	if err != nil || mixedSummary.PendingReviewNotes != 2 || mixedSummary.ReviewNoteState != "await_confirmation" {
+		t.Fatal(mixedSummary, err)
+	}
+	historicalTask := *current.Task
+	historicalTask.Candidate = ""
+	historical := current
+	historical.Task = &historicalTask
+	historicalSummary, err := s.Summarize(historical)
+	if err != nil || historicalSummary.ReviewNoteState != "historical" {
+		t.Fatal(historicalSummary, err)
 	}
 }
 

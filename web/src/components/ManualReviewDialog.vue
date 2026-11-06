@@ -17,6 +17,7 @@ const actor = ref(sessionStorage.getItem("ael-actor") || "");
 const selected = ref<string[]>([]), confirmed = ref(false);
 const receipt = ref<any>(null), receiptError = ref("");
 const receiptKind = ref(""), receiptNote = ref<any>(null), selectedNoteId = ref(""), evidenceOpen = ref(false);
+const composing = ref(true), showAllNotes = ref(false);
 const pendingReview = ref<any>(null);
 const requestKey = ref(globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`);
 const draftReady = ref(false), draftVersionChanged = ref(false), storageWarning = ref(false), reviewedCandidate = ref("");
@@ -26,7 +27,12 @@ const check = computed(() => snapshot.value?.task.definition.checks.find((c: any
 const access = computed(() => snapshot.value?.check_access?.[props.checkId]);
 const canRecord = computed(() => snapshot.value?.task.status === "open" && (!props.checkId || (check.value && access.value?.effective_method === "human" && !check.value.command?.length)));
 const provisional = computed(() => pendingReview.value ? pendingReview.value.action !== "review_result" : !props.checkId || !access.value?.can_review);
-const reviewNotes = computed<any[]>(() => [...(snapshot.value?.task.human_review_notes || [])].reverse().filter((note: any) => !props.checkId || !note.check || note.check === props.checkId));
+const reviewNotes = computed<any[]>(() => [...(snapshot.value?.task.human_review_notes || [])].reverse());
+const pendingNotes = computed(() => reviewNotes.value.some((note: any) => note.status === "pending"));
+const currentPendingNotes = computed(() => reviewNotes.value.some((note: any) => note.status === "pending" && note.definition_revision === snapshot.value?.definition_revision && note.plan_revision === snapshot.value?.plan_revision));
+const currentConfirmedNotes = computed(() => reviewNotes.value.some((note: any) => note.status === "confirmed" && !!snapshot.value?.task.candidate && note.confirmed_candidate === snapshot.value.task.candidate && note.definition_revision === snapshot.value?.definition_revision && note.plan_revision === snapshot.value?.plan_revision));
+const visibleNotes = computed(() => showAllNotes.value ? reviewNotes.value : reviewNotes.value.slice(0, 3));
+function noteAppliesToCheck(note: any) { return !!props.checkId && (!note.check || note.check === props.checkId); }
 const availableRefs = computed<string[]>(() => {
   const task = snapshot.value?.task;
   if (!task) return [];
@@ -57,6 +63,7 @@ function saveDraft() {
 }
 function restoreDraft() {
   const saved = readReviewDraft(projectScope.value, props.taskId, props.checkId);
+  let hasDraft = false;
   if (saved && snapshot.value) {
     outcome.value = typeof saved.outcome === "string" ? saved.outcome : "";
     reason.value = typeof saved.reason === "string" ? saved.reason : "";
@@ -65,7 +72,8 @@ function restoreDraft() {
     evidenceOpen.value = !!extraRefs.value;
     actor.value = typeof saved.actor === "string" ? saved.actor : actor.value;
     selected.value = Array.isArray(saved.selected) ? saved.selected.filter((v: unknown) => typeof v === "string") : [];
-    selectedNoteId.value = typeof saved.selectedNoteId === "string" && reviewNotes.value.some((note) => note.id === saved.selectedNoteId && note.status === "pending") ? saved.selectedNoteId : "";
+    hasDraft = !!(outcome.value || reason.value || recovery.value || extraRefs.value || selected.value.length);
+    selectedNoteId.value = typeof saved.selectedNoteId === "string" && reviewNotes.value.some((note) => note.id === saved.selectedNoteId && note.status === "pending" && noteAppliesToCheck(note)) ? saved.selectedNoteId : "";
     if (["review_result", "review_pending", "review_confirm"].includes(saved.pending?.action) && saved.pending.id === props.taskId && saved.pending.unit === props.checkId && saved.pending.request_key) {
       pendingReview.value = saved.pending;
       requestKey.value = saved.pending.request_key;
@@ -75,6 +83,7 @@ function restoreDraft() {
       confirmed.value = false;
     }
   }
+  composing.value = !!pendingReview.value || hasDraft || !reviewNotes.value.length;
   draftReady.value = true;
 }
 watch([outcome, reason, recovery, extraRefs, actor, selected, selectedNoteId, pendingReview], saveDraft, { deep: true, flush: "sync" });
@@ -115,6 +124,11 @@ function dismissPriorWork() {
   clearPriorWork(props.taskId, priorWork.value.attemptId);
   priorWork.value = readPriorWork(props.taskId, snapshot.value?.task.attempts || []);
 }
+function importPriorWork() {
+  if (!priorWork.value?.summary) return;
+  composing.value = true;
+  reason.value = reason.value ? reason.value + "\n" + priorWork.value.summary : priorWork.value.summary;
+}
 async function submit() {
   if (busy.value || !snapshot.value || (!canRecord.value && !pendingReview.value)) return;
   error.value = "";
@@ -142,6 +156,7 @@ async function submit() {
   await send(payload);
 }
 function useNote(note: any) {
+  composing.value = true;
   outcome.value = note.result; reason.value = note.reason; recovery.value = note.recovery || "";
   extraRefs.value = (note.artifacts || []).join(",");
   evidenceOpen.value = !!extraRefs.value;
@@ -201,14 +216,15 @@ async function send(payload: any) {
       <div class="manual-body">
       <p v-if="loading" role="status">正在读取当前候选和检查…</p>
       <template v-else-if="snapshot && !receipt">
-        <div class="candidate-bar"><AppIcon name="lock"/><span>{{ pendingReview ? '待确认提交的候选' : '当前候选' }} <strong :title="pendingReview?.candidate || snapshot.task.candidate">{{ (pendingReview?.candidate || snapshot.task.candidate)?.slice(0, 12) || "尚未生成" }}</strong> · 定义修订 {{ pendingReview?.revision || snapshot.definition_revision }} · 计划修订 {{ pendingReview?.plan_revision || snapshot.plan_revision }}</span><small>{{ checkId ? '仅作用于此检查' : '任务级人工意见' }}</small></div>
+        <div class="candidate-bar"><AppIcon name="lock"/><span>{{ pendingReview ? '待确认提交的候选' : '当前候选' }} <strong :title="pendingReview?.candidate || snapshot.task.candidate">{{ (pendingReview?.candidate || snapshot.task.candidate)?.slice(0, 12) || "尚未生成" }}</strong> · 定义修订 {{ pendingReview?.revision || snapshot.definition_revision }} · 计划修订 {{ pendingReview?.plan_revision || snapshot.plan_revision }}</span><small>{{ checkId ? '本次操作：检查 ' + checkId : '本次操作：任务级人工意见' }}</small></div>
         <p v-if="draftVersionChanged && !pendingReview" class="alert" role="status">候选或修订已变化，已保留草稿；请重新检查当前版本并再次确认。</p>
         <p v-if="storageWarning" class="alert" role="status">浏览器无法保存验收草稿，关闭页面后输入可能丢失。</p>
-        <section v-if="priorWork" class="review-note"><strong>发现本标签页上次未提交的实施表单</strong><p>这些文字没有被自动提交或视为验收结论。</p><button v-if="priorWork.summary" type="button" @click="reason = reason ? reason + '\n' + priorWork.summary : priorWork.summary">带入上次填写的工作说明</button><details><summary>查看旧填写</summary><p v-if="priorWork.summary">工作说明：{{ priorWork.summary }}</p><p v-if="priorWork.artifacts">产物引用：{{ priorWork.artifacts }}</p><p v-if="priorWork.knowledge_reason">规范处理依据：{{ priorWork.knowledge_reason }}</p><p v-if="priorWork.knowledge_artifacts">规范产物：{{ priorWork.knowledge_artifacts }}</p><p v-if="priorWork.return_to">期望退回：{{ priorWork.return_to }}</p></details><button type="button" @click="dismissPriorWork">移除旧草稿</button></section>
-        <p v-if="provisional && !pendingReview && canRecord" class="review-pending-explanation">{{ !snapshot.task.candidate ? '尚未生成验收候选；本次先记录人工意见，候选生成后需要你重新确认。' : checkId ? '此检查当前尚不能正式验收，本次只记录人工意见。' : '本次记录针对当前候选的任务级人工意见，不替代其他检查。' }}</p>
+        <section v-if="priorWork" class="review-note"><strong>发现本标签页上次未提交的实施表单</strong><p>这些文字没有被自动提交或视为验收结论。</p><button v-if="priorWork.summary" type="button" @click="importPriorWork">带入上次填写的工作说明</button><details><summary>查看旧填写</summary><p v-if="priorWork.summary">工作说明：{{ priorWork.summary }}</p><p v-if="priorWork.artifacts">产物引用：{{ priorWork.artifacts }}</p><p v-if="priorWork.knowledge_reason">规范处理依据：{{ priorWork.knowledge_reason }}</p><p v-if="priorWork.knowledge_artifacts">规范产物：{{ priorWork.knowledge_artifacts }}</p><p v-if="priorWork.return_to">期望退回：{{ priorWork.return_to }}</p></details><button type="button" @click="dismissPriorWork">移除旧草稿</button></section>
+        <p v-if="provisional && !pendingReview && canRecord" class="review-pending-explanation">{{ !composing && reviewNotes.length ? (currentPendingNotes ? (!snapshot.task.candidate ? '人工意见已保存，等待生成候选后重新确认，无需重复提交。' : '人工意见已保存，请核对当前候选后确认或引用。') : pendingNotes && !currentConfirmedNotes ? '先前意见的定义或计划已变化，请针对当前要求重新记录。' : '已保存的人工意见如下；需要补充时可记录新的意见。') : !snapshot.task.candidate ? '尚未生成验收候选；本次先记录人工意见，候选生成后需要你重新确认。' : checkId ? '此检查当前尚不能正式验收，本次只记录人工意见。' : '本次记录针对当前候选的任务级人工意见，不替代其他检查。' }}</p>
         <div v-if="!canRecord && !pendingReview" class="alert" role="alert">任务已结束，或此检查不支持人工验收；原有检查方式不会被修改。</div>
-        <section v-if="reviewNotes.length && !pendingReview" class="review-note-list"><h3>已记录的人工意见</h3><article v-for="note in reviewNotes.slice(0, 3)" :key="note.id" class="review-note"><strong>{{ label(note.result) }} · {{ note.actor }}</strong><small>{{ stamp(note.recorded_at) }} · {{ note.status === 'pending' ? '待候选确认' : note.status === 'confirmed' ? '已确认候选' : '历史记录' }}</small><p>{{ note.reason }}</p><button v-if="note.status === 'pending' && access?.can_review && note.definition_revision === snapshot.definition_revision && note.plan_revision === snapshot.plan_revision" type="button" @click="useNote(note)">引用这条意见</button><button v-if="note.status === 'pending' && !checkId && !note.check && snapshot.task.candidate && note.definition_revision === snapshot.definition_revision && note.plan_revision === snapshot.plan_revision" type="button" :disabled="busy" @click="confirmNote(note)">确认这条意见适用于当前候选</button><small v-if="note.status === 'pending' && (note.definition_revision !== snapshot.definition_revision || note.plan_revision !== snapshot.plan_revision)">定义或计划已变化，请重新记录意见。</small></article></section>
-        <fieldset v-if="canRecord || pendingReview" class="review-fields" :disabled="!!pendingReview">
+        <section v-if="reviewNotes.length && !pendingReview" class="review-note-list"><h3>已记录的人工意见 <span class="count">{{ reviewNotes.length }}</span></h3><article v-for="note in visibleNotes" :key="note.id" class="review-note"><strong>{{ label(note.result) }} · {{ note.actor }}</strong><small>{{ note.check ? '检查 ' + note.check : '任务级' }} · {{ stamp(note.recorded_at) }} · {{ note.status === 'pending' ? (note.definition_revision !== snapshot.definition_revision || note.plan_revision !== snapshot.plan_revision ? '已过期' : '待候选确认') : note.status === 'confirmed' ? '已确认候选' : '历史记录' }}</small><p>{{ note.reason }}</p><button v-if="canRecord && note.status === 'pending' && noteAppliesToCheck(note) && access?.can_review && note.definition_revision === snapshot.definition_revision && note.plan_revision === snapshot.plan_revision" type="button" @click="useNote(note)">引用这条意见</button><button v-if="canRecord && note.status === 'pending' && !checkId && !note.check && snapshot.task.candidate && note.definition_revision === snapshot.definition_revision && note.plan_revision === snapshot.plan_revision" type="button" :disabled="busy" @click="confirmNote(note)">确认这条意见适用于当前候选</button><small v-if="note.status === 'pending' && (note.definition_revision !== snapshot.definition_revision || note.plan_revision !== snapshot.plan_revision)">定义或计划已变化，请重新记录意见。</small></article><button v-if="reviewNotes.length > 3 && !showAllNotes" type="button" @click="showAllNotes = true">查看全部 {{ reviewNotes.length }} 条记录</button></section>
+        <button v-if="canRecord && !composing && !pendingReview" type="button" @click="composing = true">记录新的验收意见</button>
+        <fieldset v-if="(canRecord && composing) || pendingReview" class="review-fields" :disabled="!!pendingReview">
           <section class="review-criteria"><h3>{{ checkId ? checkId + ' · ' + label(check?.kind) : '任务验收条件' }}</h3><ul v-if="(checkId ? check?.covers : snapshot.task.definition.acceptance)?.length"><li v-for="item in (checkId ? check.covers : snapshot.task.definition.acceptance)" :key="item">{{ item }}</li></ul><p v-else>未记录具体标准，请先核实任务定义。</p></section>
           <fieldset class="review-outcomes"><legend>验收结论 <span aria-hidden="true">*</span></legend><div>
             <label v-for="[value, text] in [['pass', '通过'], ['fail', '不通过'], ['blocked', '暂无法验证']]" :key="value" :class="{ selected: outcome === value }"><input v-model="outcome" type="radio" name="review-outcome" :value="value" /><AppIcon :name="value === 'pass' ? 'check' : value === 'fail' ? 'warning' : 'clock'" />{{ text }}</label>
@@ -236,7 +252,7 @@ async function send(payload: any) {
       </section>
       <div v-if="error" role="alert" class="alert"><p>{{ readableError(error) }}</p><details><summary>具体原因</summary><pre>{{ error }}</pre></details><button v-if="snapshot && !receipt && /REVIEW_VERSION|CANDIDATE_CHANGED|REVIEW_NOT_ALLOWED/.test(error)" type="button" @click="reloadVersion">重新读取版本并保留输入</button></div>
       </div>
-      <div class="actions dialog-actions"><small v-if="!receipt">候选或修订变化后，需要重新核对。</small><button v-if="!receipt" type="button" :disabled="busy" @click="close">取消</button><button v-if="!receipt && !loading && (canRecord || pendingReview)" type="submit" class="primary" :disabled="busy">{{ busy ? '正在提交…' : pendingReview ? '原样重试提交' : '提交验收结果' }}</button><button v-if="receipt" type="button" @click="goTo('/tasks')">回工作台</button><button v-if="receipt" type="button" class="primary" @click="goTo('/tasks/' + encodeURIComponent(taskId) + '?section=checks')">查看任务结果</button><button v-if="error && !snapshot" type="button" @click="load">重新读取</button></div>
+      <div class="actions dialog-actions"><small v-if="!receipt">候选或修订变化后，需要重新核对。</small><button v-if="!receipt" type="button" :disabled="busy" @click="close">{{ composing || pendingReview ? '取消' : '返回' }}</button><button v-if="!receipt && !loading && ((canRecord && composing) || pendingReview)" type="submit" class="primary" :disabled="busy">{{ busy ? '正在提交…' : pendingReview ? '原样重试提交' : '提交验收结果' }}</button><button v-if="receipt" type="button" @click="goTo('/tasks')">回工作台</button><button v-if="receipt" type="button" class="primary" @click="goTo('/tasks/' + encodeURIComponent(taskId) + '?section=checks')">查看任务结果</button><button v-if="error && !snapshot" type="button" @click="load">重新读取</button></div>
     </form>
   </dialog>
 </template>

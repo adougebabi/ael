@@ -165,6 +165,16 @@ export function schedule(s: any) {
   if (s.next_action === "wait_executor") return "等待执行事实刷新";
   return label(s.next_action);
 }
+export function reviewNoteStatus(s: any) {
+  return ({
+    await_candidate: "已记录人工验收 · 待候选确认",
+    await_confirmation: "已记录人工验收 · 待确认当前候选",
+    confirmed: "人工意见已确认当前候选",
+    historical: "已有历史人工验收记录",
+    outdated: "人工验收意见需重新记录",
+    closed: "人工意见未完成候选确认",
+  } as Record<string, string>)[s?.review_note_state] || "";
+}
 export function nextAction(s: any) {
   if (s.manual_reviews?.length) return "对照当前候选记录人工验收";
   if (s.next_action === "wait_confirmation" && !s.requires_task_decision)

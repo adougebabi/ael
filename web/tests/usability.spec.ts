@@ -1763,7 +1763,7 @@ test("A34 实施中可直接记录人工意见，候选生成后由用户用于�
   current = await client.get("/api/task?id=" + id);
   expect(current.current_step).toBe("verify");
   expect(current.task.candidate).toBeTruthy();
-  await page.locator(".result-banner").getByRole("button", { name: "开始人工验收" }).click();
+  await page.locator(".result-banner").getByRole("button", { name: "查看验收记录" }).click();
   dialog = page.getByRole("dialog", { name: "记录人工验收" });
   await expect(dialog).toContainText("我检查了当前页面，候选生成后再确认。");
   await dialog.getByRole("button", { name: "引用这条意见" }).click();
@@ -1799,7 +1799,7 @@ test("A35 未配置人工检查的任务也可记录并确认任务级意见，�
   await dialog.getByRole("button", { name: "关闭", exact: true }).click();
   await step(client, id, ["app/ui-output.txt"]);
   await page.reload();
-  await page.locator(".result-banner").getByRole("button", { name: "开始人工验收" }).click();
+  await page.locator(".result-banner").getByRole("button", { name: "查看验收记录" }).click();
   dialog = page.getByRole("dialog", { name: "记录人工验收" });
   await dialog.getByRole("button", { name: "确认这条意见适用于当前候选" }).click();
   dialog = page.getByRole("dialog");
@@ -1809,6 +1809,9 @@ test("A35 未配置人工检查的任务也可记录并确认任务级意见，�
   expect(current.task.evidence || []).toHaveLength(0);
   expect(current.current_checks.model).toBeNull();
   expect(current.task.status).toBe("open");
+  await dialog.getByRole("button", { name: "关闭", exact: true }).click();
+  await page.reload();
+  await expect(page.locator(".result-banner")).toContainText("人工意见已确认当前候选");
 });
 
 test("A36 待候选人工意见的响应丢失后可关闭重开并安全重试", async ({ page, request }) => {
@@ -1891,4 +1894,139 @@ test("A38 未知的实施提交在旧接手释放后可核对并保留原文字"
   await dialog.getByRole("button", { name: "带入上次填写的工作说明" }).click();
   await expect(dialog.getByLabel("实际观察与理由")).toHaveValue("尚未发送成功的人工观察");
   expect((await client.get("/api/task?id=" + id)).task.evidence || []).toHaveLength(0);
+});
+
+test("A39 人工意见提交后工作台和详情清楚显示待候选确认", async ({ page, request, context }) => {
+  const client = await connect(request, "single"), id = "review-status-" + Date.now();
+  await client.post("/api/tasks", { id, title: "隔离人工验收状态", type: "bug", goal: "verified", acceptance: ["保留用户的验收意见"] });
+  await goto(page, "single", "/tasks?q=" + id);
+  let row = page.locator(".task-row").filter({ hasText: id });
+  await row.getByRole("button", { name: "验收", exact: true }).click();
+  let dialog = page.getByRole("dialog", { name: "记录人工验收" });
+  await dialog.getByRole("radio", { name: "通过", exact: true }).check();
+  await dialog.getByLabel("实际观察与理由").fill("已核对本次隔离界面的实际表现");
+  await dialog.getByLabel("记录人").fill("isolated reviewer");
+  await dialog.getByLabel("我确认以上是当前人工观察，候选生成后需要重新确认。").check();
+  await dialog.getByRole("button", { name: "提交验收结果" }).click();
+  await expect(page.getByRole("dialog")).toContainText("待候选确认");
+  await page.getByRole("dialog").getByRole("button", { name: "回工作台" }).click();
+  row = page.locator(".task-row").filter({ hasText: id });
+  await expect(row.locator(".review-note-status")).toContainText("已记录人工验收 · 待候选确认");
+  await expect(row).toContainText("等待接手");
+  await shot(page, "A39-workbench-review-status");
+  const other = await context.newPage();
+  await goto(other, "single", "/tasks?q=" + id);
+  await expect(other.locator(".task-row").filter({ hasText: id }).locator(".review-note-status")).toContainText("待候选确认");
+  await other.close();
+  await row.getByRole("button", { name: "查看验收记录" }).click();
+  dialog = page.getByRole("dialog", { name: "记录人工验收" });
+  await expect(dialog).toContainText("已核对本次隔离界面的实际表现");
+  await expect(dialog.getByRole("button", { name: "提交验收结果" })).toHaveCount(0);
+  await shot(page, "A39-saved-review-record");
+  await dialog.getByRole("button", { name: "记录新的验收意见" }).click();
+  await expect(dialog.getByRole("button", { name: "提交验收结果" })).toBeVisible();
+  await dialog.getByRole("button", { name: "取消", exact: true }).click();
+  await goto(page, "single", "/tasks/" + id);
+  await expect(page.locator(".result-banner")).toContainText("已记录人工验收 · 待候选确认");
+  await expect(page.locator(".result-banner")).toContainText("等待接手");
+  await expect(page.locator(".result-banner").getByRole("button", { name: "查看验收记录" })).toBeVisible();
+  await shot(page, "A39-detail-review-status");
+  const current = await client.get("/api/task?id=" + id);
+  expect(current.task.human_review_notes).toHaveLength(1);
+  expect(current.task.status).toBe("open");
+  expect(current.task.evidence || []).toHaveLength(0);
+});
+
+test("A40 两条已保存的人工意见都可查看，不自动合并或重复提交", async ({ page, request }) => {
+  const client = await connect(request, "single"), id = "review-two-records-" + Date.now();
+  const created = (await client.post("/api/tasks", { id, title: "隔离两次人工验收", type: "bug", goal: "verified", acceptance: ["保留真实记录"] })).value;
+  const common = { action: "review_pending", id, unit: "", executor: "reviewer", result: "pass", reason: "已核对", recovery: "", artifacts: [], candidate: "", revision: created.definition_revision, plan_revision: created.plan_revision };
+  await client.post("/api/action", { ...common, request_key: id + "-one" });
+  await client.post("/api/action", { ...common, request_key: id + "-two" });
+  await goto(page, "single", "/tasks/" + id);
+  await expect(page.locator(".result-banner")).toContainText("待候选确认");
+  await page.locator(".result-banner").getByRole("button", { name: "查看验收记录" }).click();
+  const dialog = page.getByRole("dialog", { name: "记录人工验收" });
+  await expect(dialog.locator(".review-note-list .review-note")).toHaveCount(2);
+  await expect(dialog.getByRole("button", { name: "提交验收结果" })).toHaveCount(0);
+  const current = await client.get("/api/task?id=" + id);
+  expect(current.task.human_review_notes).toHaveLength(2);
+  expect(current.task.evidence || []).toHaveLength(0);
+});
+
+test("A41 已完成任务仍可查看已确认的人工验收记录", async ({ page, request }) => {
+  ensureIsolatedOutput();
+  const client = await connect(request, "single"), id = "review-completed-record-" + Date.now();
+  await client.post("/api/tasks", { id, title: "隔离完成后的验收记录", type: "bug", goal: "verified", scope: ["app"], acceptance: ["人工确认结果"], checks: [{ id: "owner", kind: "review", method: "human", covers: ["人工确认结果"], required: true }] });
+  await step(client, id);
+  let current = await client.get("/api/task?id=" + id);
+  const note = (await client.post("/api/action", { action: "review_pending", id, unit: "", executor: "reviewer", result: "pass", reason: "此前已查看", recovery: "", artifacts: [], request_key: id + "-note", candidate: "", revision: current.definition_revision, plan_revision: current.plan_revision })).value;
+  await step(client, id, ["app/ui-output.txt"]);
+  current = await client.get("/api/task?id=" + id);
+  await client.post("/api/action", { action: "review_result", id, unit: "owner", executor: "reviewer", result: "pass", reason: "重新核对当前候选", recovery: "", artifacts: ["app/ui-output.txt"], request_key: id + "-formal", review_note_id: note.id, candidate: current.task.candidate, revision: current.definition_revision, plan_revision: current.plan_revision });
+  await goto(page, "single", "/tasks/" + id);
+  await expect(page.locator(".result-banner")).toContainText("人工意见已确认当前候选");
+  await page.locator(".task-heading-actions").getByRole("button", { name: "查看验收记录" }).click();
+  const dialog = page.getByRole("dialog", { name: "记录人工验收" });
+  await expect(dialog).toContainText("此前已查看");
+  await expect(dialog.getByRole("button", { name: "提交验收结果" })).toHaveCount(0);
+  expect((await client.get("/api/task?id=" + id)).task.status).toBe("completed");
+});
+
+test("A42 多个人工检查时两个入口都能查看其他检查的意见", async ({ page, request }) => {
+  ensureIsolatedOutput();
+  const client = await connect(request, "single"), id = "review-multiple-checks-" + Date.now();
+  await client.post("/api/tasks", { id, title: "隔离多个人工检查", type: "bug", goal: "verified", scope: ["app"], acceptance: ["核对实际产物"], checks: [
+    { id: "first-review", kind: "review", method: "human", covers: ["核对实际产物"], required: true },
+    { id: "second-review", kind: "review", method: "human", covers: ["核对实际产物"], required: true },
+  ] });
+  await step(client, id);
+  let current = await client.get("/api/task?id=" + id);
+  await client.post("/api/action", { action: "review_pending", id, unit: "second-review", executor: "reviewer", result: "pass", reason: "第二项检查的真实意见", recovery: "", artifacts: [], request_key: id + "-note", candidate: "", revision: current.definition_revision, plan_revision: current.plan_revision });
+  await step(client, id, ["app/ui-output.txt"]);
+  current = await client.get("/api/task?id=" + id);
+  expect(current.check_access["first-review"].can_review).toBeTruthy();
+  expect(current.check_access["second-review"].can_review).toBeTruthy();
+  await goto(page, "single", "/tasks?q=" + id);
+  await page.locator(".task-row").filter({ hasText: id }).getByRole("button", { name: "查看验收记录" }).click();
+  let dialog = page.getByRole("dialog", { name: "记录人工验收" });
+  await expect(dialog).toContainText("检查 second-review");
+  await expect(dialog).toContainText("第二项检查的真实意见");
+  await expect(dialog.getByRole("button", { name: "引用这条意见" })).toHaveCount(0);
+  await dialog.getByRole("button", { name: "返回", exact: true }).click();
+  await goto(page, "single", "/tasks/" + id);
+  await page.locator(".result-banner").getByRole("button", { name: "查看验收记录" }).click();
+  dialog = page.getByRole("dialog", { name: "记录人工验收" });
+  await expect(dialog).toContainText("第二项检查的真实意见");
+  await expect(dialog.getByRole("button", { name: "引用这条意见" })).toHaveCount(0);
+  await dialog.getByRole("button", { name: "返回", exact: true }).click();
+  await page.getByRole("button", { name: "检查与验收" }).click();
+  await page.locator(".check").filter({ hasText: "second-review ·" }).getByRole("button", { name: "记录人工验收" }).click();
+  dialog = page.getByRole("dialog", { name: "记录人工验收" });
+  await dialog.getByRole("button", { name: "引用这条意见" }).click();
+  await expect(dialog.getByLabel("实际观察与理由")).toHaveValue("第二项检查的真实意见");
+  current = await client.get("/api/task?id=" + id);
+  expect(current.task.human_review_notes).toHaveLength(1);
+  expect(current.task.evidence || []).toHaveLength(0);
+});
+
+test("A43 人工意见不遮挡阻塞，终态记录不能再次确认", async ({ page, request }) => {
+  ensureIsolatedOutput();
+  const client = await connect(request, "single"), id = "review-blocked-" + Date.now();
+  const created = (await client.post("/api/tasks", { id, title: "隔离人工意见与阻塞", type: "bug", goal: "verified", scope: ["app"], acceptance: ["核对结果"], checks: [{ id: "command", kind: "functional", method: "command", command: ["sh", "-c", "test -f app/ui-output.txt"], covers: ["核对结果"], required: true }] })).value;
+  await client.post("/api/action", { action: "review_pending", id, unit: "", executor: "reviewer", result: "pass", reason: "预先记录的意见", recovery: "", artifacts: [], request_key: id + "-note", candidate: "", revision: created.definition_revision, plan_revision: created.plan_revision });
+  await step(client, id);
+  await step(client, id, ["app/ui-output.txt"]);
+  await client.post("/api/action", { action: "pause", id, reason: "等待隔离环境恢复" });
+  await goto(page, "single", "/tasks?q=" + id);
+  const row = page.locator(".task-row").filter({ hasText: id });
+  await expect(row.locator(".review-note-status")).toContainText("待确认当前候选");
+  await expect(row.locator(".blocked-reason")).toContainText("等待隔离环境恢复");
+  await client.post("/api/action", { action: "cancel", id, reason: "隔离测试结束" });
+  await goto(page, "single", "/tasks/" + id);
+  await page.locator(".task-heading-actions").getByRole("button", { name: "查看验收记录" }).click();
+  const dialog = page.getByRole("dialog", { name: "记录人工验收" });
+  await expect(dialog).toContainText("预先记录的意见");
+  await expect(dialog.getByRole("button", { name: "确认这条意见适用于当前候选" })).toHaveCount(0);
+  expect((await client.get("/api/task?id=" + id)).task.status).toBe("cancelled");
 });

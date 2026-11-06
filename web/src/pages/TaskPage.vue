@@ -17,6 +17,7 @@ import {
   stamp,
   relativeStamp,
   schedule,
+  reviewNoteStatus,
   nextAction,
   goalLabel,
   blockerText,
@@ -287,6 +288,7 @@ const acceptanceState = computed(() => {
   if (t.value?.candidate && checks.required_passed === checks.required) return "必要检查已通过";
   return "验证进行中";
 });
+const reviewState = computed(() => reviewNoteStatus(n.value?.summary));
 function primaryAction() {
   if (primaryKind.value === "review") manualCheck.value = availableHumanChecks.value[0].id;
   else if (primaryKind.value === "review_pending") manualCheck.value = pendingReviewCheck.value;
@@ -626,11 +628,11 @@ function checkReason(c: any) {
             <span class="status" :class="[n.board, { confirmation: availableHumanChecks.length || n.next_action === 'wait_environment' }]">{{
               schedule(n.summary)
             }}</span
-            ><span>{{ label(n.current_step) }}</span><span>定义修订 {{ n.definition_revision }}</span
+            ><span v-if="reviewState" class="status confirmation">{{ reviewState }}</span><span>{{ label(n.current_step) }}</span><span>定义修订 {{ n.definition_revision }}</span
             ><span v-if="n.summary.activity_at" :title="stamp(n.summary.activity_at)">{{ relativeStamp(n.summary.activity_at) }}</span>
           </p>
         </div>
-        <div class="task-heading-actions"><button v-if="t.status === 'open' && !['review', 'review_pending'].includes(primaryKind)" class="primary" :disabled="busy" @click="openTaskReview">开始人工验收</button><button v-if="primaryKind" :class="{ primary: ['review', 'review_pending'].includes(primaryKind) }" :disabled="busy" @click="primaryAction">{{ primaryKind === 'claim' ? '接手工作' : primaryKind === 'checks' ? '查看检查' : primaryLabels[primaryKind] }}</button><details ref="taskMenu" class="task-more"><summary aria-label="更多任务操作" title="更多任务操作">···</summary><div class="task-more-menu"><button v-if="t.status === 'open' && !t.paused" :disabled="busy" @click="startFromMenu('pause', '暂缓任务')">暂缓</button><button v-if="t.status === 'open'" :disabled="busy" @click="startFromMenu('edit', '修订任务定义')">编辑任务定义</button><button v-if="t.status === 'open'" :disabled="busy" class="danger-text" @click="startFromMenu('cancel', '取消任务')">取消任务</button><a :href="href('/evolution', { q: t.definition.title })">查看相关演进</a></div></details></div>
+        <div class="task-heading-actions"><button v-if="t.status === 'open' && !['review', 'review_pending'].includes(primaryKind)" class="primary" :disabled="busy" @click="openTaskReview">{{ reviewState ? '查看验收记录' : '开始人工验收' }}</button><button v-if="t.status !== 'open' && n.summary.human_review_count" :disabled="busy" @click="openTaskReview">查看验收记录</button><button v-if="primaryKind" :class="{ primary: ['review', 'review_pending'].includes(primaryKind) }" :disabled="busy" @click="primaryAction">{{ primaryKind === 'claim' ? '接手工作' : primaryKind === 'checks' ? '查看检查' : primaryKind === 'review' && reviewState ? '查看验收记录' : primaryLabels[primaryKind] }}</button><details ref="taskMenu" class="task-more"><summary aria-label="更多任务操作" title="更多任务操作">···</summary><div class="task-more-menu"><button v-if="t.status === 'open' && !t.paused" :disabled="busy" @click="startFromMenu('pause', '暂缓任务')">暂缓</button><button v-if="t.status === 'open'" :disabled="busy" @click="startFromMenu('edit', '修订任务定义')">编辑任务定义</button><button v-if="t.status === 'open'" :disabled="busy" class="danger-text" @click="startFromMenu('cancel', '取消任务')">取消任务</button><a :href="href('/evolution', { q: t.definition.title })">查看相关演进</a></div></details></div>
       </header>
       <ol class="stage-track" aria-label="任务流程位置"><li v-for="(step, index) in t.plan.steps" :key="step" :class="{ current: t.status === 'open' && step === t.current_step, done: stageDone(step) && !(t.status === 'open' && step === t.current_step) }"><span class="stage-node">{{ stageDone(step) && !(t.status === 'open' && step === t.current_step) ? '✓' : Number(index) + 1 }}</span><span>{{ label(step) }}</span></li></ol>
       <nav class="tabs" aria-label="任务详情分区">
@@ -651,6 +653,8 @@ function checkReason(c: any) {
         <div class="conclusion result-banner" :class="{ amber: t.blocker || t.paused || t.confirmation, success: t.status === 'completed' }">
           <span class="banner-icon"><AppIcon :name="t.blocker || t.paused ? 'warning' : t.status === 'completed' ? 'check' : t.confirmation ? 'shield' : availableHumanChecks.length ? 'user' : 'play'" /></span><div>
           <h2>{{ bannerTitle }}</h2>
+          <p v-if="reviewState" class="review-note-status">{{ reviewState }}</p>
+          <p v-if="reviewState">人工意见已保存；实施与检查仍按当前状态继续。</p>
           <p>{{ bannerSummary }}</p>
           <p v-if="t.status === 'open' && t.blocker?.reason" class="blocked-reason">
             {{ blockerText(t.blocker.reason) }}
@@ -671,8 +675,7 @@ function checkReason(c: any) {
             }}；已尝试：{{ t.blocker.tried || "未记录" }}
           </p>
           <small v-if="t.historical">历史记录，未在本机复验</small>
-          <p v-if="n.summary.pending_review_notes">已记录 {{ n.summary.pending_review_notes }} 条人工意见，待候选确认。</p>
-          <button v-if="t.status === 'open'" class="primary banner-action" :disabled="busy" @click="openTaskReview">{{ pendingReviewCheck !== null ? '查看待确认的验收' : '开始人工验收' }}</button>
+          <button v-if="t.status === 'open'" class="primary banner-action" :disabled="busy" @click="openTaskReview">{{ pendingReviewCheck !== null ? '查看待确认的验收' : reviewState ? '查看验收记录' : '开始人工验收' }}</button>
           <button v-if="n.next_action === 'wait_confirmation' && !t.confirmation" class="banner-action" @click="setQuery({ section: 'basis' })">查看待核实规范</button>
           </div>
         </div>
@@ -1233,8 +1236,8 @@ function checkReason(c: any) {
         <section>
           <h2>下一步</h2>
           <p>{{ nextAction(n.summary) }}</p>
-          <button v-if="t.status === 'open' && !['review', 'review_pending'].includes(primaryKind)" class="primary" :disabled="busy" @click="openTaskReview">开始人工验收</button>
-          <button v-if="primaryKind" :class="{ primary: ['review', 'review_pending'].includes(primaryKind) }" :disabled="busy" @click="primaryAction">{{ primaryLabels[primaryKind] }}</button>
+          <button v-if="t.status === 'open' && !['review', 'review_pending'].includes(primaryKind)" class="primary" :disabled="busy" @click="openTaskReview">{{ reviewState ? '查看验收记录' : '开始人工验收' }}</button>
+          <button v-if="primaryKind" :class="{ primary: ['review', 'review_pending'].includes(primaryKind) }" :disabled="busy" @click="primaryAction">{{ primaryKind === 'review' && reviewState ? '查看验收记录' : primaryLabels[primaryKind] }}</button>
           <div v-if="unownedRunning" class="lost-claim-help"><p>当前标签页没有这次接手的凭据。若原执行确已停止，可以确认后恢复任务并重新接手。</p><button @click="start('resume', '恢复无法继续的接手')">恢复无法继续的接手</button></div>
         </section>
         <section class="next-panel-facts">
