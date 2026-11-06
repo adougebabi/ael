@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from "vue";
-import { api, params } from "../api";
+import { api, params, refreshRevision } from "../api";
 import {
   route,
   setQuery,
@@ -13,6 +13,7 @@ import { useResource } from "../resource";
 import { label, stamp } from "../display";
 import LoadState from "../components/LoadState.vue";
 import Pagination from "../components/Pagination.vue";
+import AppIcon from "../components/AppIcon.vue";
 const props = defineProps<{ id: string }>();
 const r = useResource<any>({ items: [], scopes: [], total: 0 }),
   { data, loading, error, last } = r;
@@ -47,6 +48,7 @@ watch(
   { flush: "post" },
 );
 onMounted(load);
+watch(refreshRevision, load);
 function filter(v: Record<string, string>) {
   setQuery({ ...v, offset: undefined });
 }
@@ -57,6 +59,10 @@ function localBoundary(value: string | null, end = false) {
 }
 const referenceLink = (ref: any) =>
   ref.kind === "task" ? taskHref(ref.id) : knowledgeHref(ref.id);
+const changeKinds = [["", "全部变化"], ["delivery", "交付结果"], ["decision", "决策与取舍"], ["spec", "规范变化"]];
+function day(value: string | null) {
+  return value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleDateString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit" }) : "日期未确认";
+}
 </script>
 <template>
   <div>
@@ -64,7 +70,7 @@ const referenceLink = (ref: any) =>
       ><p class="secondary" style="margin-top: 18px">
         有明确依据的交付、规范与决策。导入、索引、心跳和普通进程事件保留在诊断中。
       </p>
-      <form class="toolbar" @submit.prevent="filter({ q: search })">
+      <nav class="evolution-segments" aria-label="项目变化分类"><button v-for="[kind, title] in changeKinds" :key="kind" :class="{ chosen: (route.query.get('kind') || '') === kind }" :aria-pressed="(route.query.get('kind') || '') === kind" @click="filter({ kind })">{{ title }}</button></nav><form class="toolbar evolution-filters" @submit.prevent="filter({ q: search })">
         <label class="search"
           >查找项目变化<input
             v-model="search"
@@ -122,7 +128,7 @@ const referenceLink = (ref: any) =>
       ← 返回上一页</button
     ><LoadState :loading="loading" :error="error" :last="last" @retry="load" />
     <template v-if="!id"
-      ><div v-if="!loading && !error && !data.items.length" class="large-empty">
+      ><div class="evolution-layout"><div class="evolution-main"><div v-if="!loading && !error && !data.items.length" class="large-empty">
         <h2>暂无可追溯的项目变化</h2>
         <p>现有记录尚不足以证明变化，或当前筛选没有匹配结果。</p>
         <div class="related-links">
@@ -132,25 +138,9 @@ const referenceLink = (ref: any) =>
         </div>
       </div>
       <template v-for="(c, i) in data.items" :key="c.id"
-        ><h2
-          v-if="
-            !c.occurred_at &&
-            (Number(i) === 0 || data.items[Number(i) - 1].occurred_at)
-          "
-          class="content-section"
-        >
-          日期未确认
-        </h2>
+        ><h2 v-if="Number(i) === 0 || day(data.items[Number(i) - 1].occurred_at) !== day(c.occurred_at)" class="change-date">{{ day(c.occurred_at) }}</h2>
         <article class="change-row">
-          <div>
-            <time
-              >{{ c.time_basis === "latest_delivery" ? "最近关联交付 · " : ""
-              }}{{ stamp(c.occurred_at) }}</time
-            >
-            <p>{{ c.kind === "delivery" ? "任务交付" : label(c.kind) }}</p>
-            <span class="status" :class="c.result">{{ label(c.result) }}</span>
-          </div>
-          <div>
+          <div class="change-top"><span class="status change-kind"><AppIcon :name="c.kind === 'delivery' ? 'package' : c.kind === 'decision' ? 'evolution' : 'file'" />{{ c.kind === "delivery" ? "任务交付" : label(c.kind) }}</span><span class="change-scope">{{ c.scopes?.join("、") || "未记录具体范围" }}</span><time>{{ c.time_basis === "latest_delivery" ? "最近关联交付 · " : "" }}{{ stamp(c.occurred_at) }}</time></div>
             <h2>
               <a
                 class="record-title"
@@ -158,12 +148,9 @@ const referenceLink = (ref: any) =>
                 >{{ c.title }}</a
               >
             </h2>
-            <p>{{ c.content || "变化内容未单独记录，请查看原始依据。" }}</p>
-            <p><strong>原因：</strong>{{ c.reason }}</p>
-            <p class="secondary">
-              影响：{{ c.scopes?.join("、") || "未记录具体范围" }} ·
-              {{ c.references.length }} 项真实关联
-            </p>
+            <p class="change-content">{{ c.content || "变化内容未单独记录，请查看原始依据。" }}</p>
+            <p class="change-reason"><strong>为什么</strong> {{ c.reason }}</p>
+            <div class="change-footer"><span>{{ c.references.length }} 项真实关联</span><span class="status" :class="c.result">{{ label(c.result) }}</span></div>
             <p v-if="c.delivery_facts?.length" class="secondary">
               真实关联结果：{{
                 c.delivery_facts
@@ -177,7 +164,7 @@ const referenceLink = (ref: any) =>
             <small v-if="c.historical"
               >来源为历史记录，未声称当前实现已复验。</small
             >
-          </div>
+            <a class="change-link" :href="href('/evolution/' + encodeURIComponent(c.id))">查看变化与取舍 →</a>
         </article></template
       ><Pagination
         v-if="data.total > 25 || offset"
@@ -188,7 +175,7 @@ const referenceLink = (ref: any) =>
         @change="setQuery({ offset: $event })"
       /><a href="#/settings?section=diagnostics"
         >查看原始项目事件诊断</a
-      ></template
+      ></div><aside class="evolution-aside"><section><span class="eyebrow">PROJECT MEMORY</span><h2>让变化留下理由</h2><p>当前规范告诉我们怎么做；演进记录解释为什么走到这里。</p><ul><li>真实交付：产物、验收和发布分别说明</li><li>决策与代价：保留明确记录的取舍</li><li>可追溯依据：通过真实关联连接任务与规范</li></ul></section><section><h2>原始记录在诊断中</h2><p>迁移、索引和普通进程事件不进入默认变化流。</p><a href="#/settings?section=diagnostics">查看运行诊断 →</a></section></aside></div></template
     >
     <template v-else-if="data.id"
       ><header class="object-header">
@@ -207,7 +194,7 @@ const referenceLink = (ref: any) =>
           </p>
         </div>
       </header>
-      <section class="content-section readable">
+      <div class="evolution-detail-layout"><div class="evolution-detail-main"><section class="content-section readable">
         <h2>原状与变化原因</h2>
         <p>{{ data.reason }}</p>
         <div class="change-comparison"><div><h3>变化前</h3><p>未单独记录。</p></div><div><h3>变化后</h3><p>未单独记录；已记录的变化事实见下方结果。</p></div></div>
@@ -273,7 +260,7 @@ const referenceLink = (ref: any) =>
           >查看明确记录的后继方案</a
         >
         <p v-else class="secondary">未记录明确后继关系。</p>
-      </section></template
+      </section></div><aside class="evolution-aside"><section><h2>结果边界</h2><p>{{ label(data.result) }}</p><p>{{ data.historical ? '历史资料，未在本机复验。' : '结果以已记录的任务和交付为准。' }}</p></section><section><h2>变化依据</h2><p>发生时间：{{ stamp(data.occurred_at) }}</p><p>影响范围：{{ data.scopes?.join('、') || '未记录具体范围' }}</p><p>{{ data.references.length }} 项明确关联，见左侧证据。</p></section></aside></div></template
     >
   </div>
 </template>

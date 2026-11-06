@@ -107,3 +107,46 @@ func TestWildcardListenerHostAndOrigin(t *testing.T) {
 		}
 	}
 }
+
+func TestLoopbackListenerAcceptsLocalhostWithoutAcceptingRemoteHosts(t *testing.T) {
+	for _, bind := range []string{"127.0.0.1:7331", "[::1]:7331"} {
+		h := New(nil, bind)
+		for _, c := range []struct {
+			host, origin string
+			want         int
+		}{
+			{bind, "http://" + bind, 200},
+			{"localhost:7331", "http://localhost:7331", 200},
+			{"LOCALHOST:7331", "", 200},
+			{"localhost:9999", "", 403},
+			{"example.com:7331", "", 403},
+			{"192.168.1.2:7331", "", 403},
+			{"localhost:7331", "http://example.com:7331", 403},
+		} {
+			r := httptest.NewRequest("GET", "http://"+c.host+"/api/session", nil)
+			if c.origin != "" {
+				r.Header.Set("Origin", c.origin)
+			}
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+			if w.Code != c.want {
+				t.Errorf("bind %s host %s origin %s: got %d want %d", bind, c.host, c.origin, w.Code, c.want)
+			}
+		}
+	}
+}
+
+func TestSpecificNonLoopbackListenerDoesNotAcceptLocalhostAlias(t *testing.T) {
+	h := New(nil, "192.168.1.2:7331")
+	for _, c := range []struct {
+		host string
+		want int
+	}{{"192.168.1.2:7331", 200}, {"localhost:7331", 403}, {"example.com:7331", 403}} {
+		r := httptest.NewRequest("GET", "http://"+c.host+"/api/session", nil)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != c.want {
+			t.Errorf("host %s: got %d want %d", c.host, w.Code, c.want)
+		}
+	}
+}

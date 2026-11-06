@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from "vue";
-import { api, info, notices, params, refreshInfo } from "../api";
-import { route, setQuery, taskHref } from "../router";
+import { api, info, notices, params, refreshInfo, refreshRevision } from "../api";
+import { route, setQuery, taskHref, knowledgeHref } from "../router";
 import { useResource } from "../resource";
 import { useObjectReader } from "../objectReader";
 import { label, stamp, blockerText, readableError } from "../display";
@@ -10,6 +10,8 @@ import Pagination from "../components/Pagination.vue";
 import ActionDialog from "../components/ActionDialog.vue";
 import MarkdownBody from "../components/MarkdownBody.vue";
 import CopyButton from "../components/CopyButton.vue";
+import AppIcon from "../components/AppIcon.vue";
+import { theme, setTheme } from "../theme";
 const section = computed(() => route.value.query.get("section") || "overview");
 const batch = computed(() => route.value.query.get("batch") || "");
 const offset = computed(() => Number(route.value.query.get("offset") || 0));
@@ -89,6 +91,7 @@ async function load() {
 }
 watch(() => route.value.key, load);
 onMounted(load);
+watch(refreshRevision, load);
 function change(values: Record<string, string>) {
   setQuery({ ...values, offset: undefined });
 }
@@ -183,61 +186,11 @@ const material = computed(() =>
     </nav>
     <LoadState :loading="loading" :error="error" :last="last" @retry="load" />
     <section v-if="section === 'overview' && status">
-      <div class="conclusion">
-        <h2>
-          {{ info.project?.split("/").pop() }} ·
-          {{ status.workflow_active ? "活动工作区" : "预览工作区" }}
-        </h2>
-        <p>
-          {{ material
-          }}<span v-if="status.knowledge?.state === 'conflict'"
-            >，存在需要核实的规范冲突。</span
-          >
-        </p>
-        <p v-if="!status.workflow_active">
-          工作流尚未激活。资料导入与正式接管是两个独立步骤，激活继续使用原 CLI
-          授权。
-        </p>
-      </div>
-      <div class="capabilities">
-        <div>
-          <h3>资料可用性</h3>
-          <p>{{ material }}</p>
-          <a href="#/settings?section=sources">查看资料来源</a>
-        </div>
-        <div>
-          <h3>迁移应用</h3>
-          <p>
-            {{
-              status.applied_migrations
-                ? "已应用 " + status.applied_migrations + " 个批次"
-                : "尚无已应用的迁移批次"
-            }}
-          </p>
-          <small>没有旧资料迁移不妨碍直接使用已接入的规范。</small>
-        </div>
-        <div>
-          <h3>工作流激活</h3>
-          <p>
-            {{
-              status.workflow_active
-                ? "已激活，仍按任务权限执行"
-                : "尚未激活；只能预览与审阅"
-            }}
-          </p>
-        </div>
-        <div>
-          <h3>执行器能力</h3>
-          <p>{{ probe ? probe.reason : status.executor?.reason }}</p>
-          <button :disabled="probeBusy" @click="probeExecutor">
-            {{ probeBusy ? "探测中…" : "探测受管执行器接口" }}
-          </button>
-          <details v-if="probe">
-            <summary>探测详情</summary>
-            <pre>{{ JSON.stringify(probe, null, 2) }}</pre>
-          </details>
-        </div>
-      </div>
+      <p class="settings-notice">接入状态、迁移应用、工作流激活和执行器能力分别读取；未探测的能力不会被当作可用。</p>
+      <div class="settings-summary-grid"><section class="settings-summary-card"><span class="settings-icon"><AppIcon name="knowledge" /></span><div><h2>资料可用性 <span class="status">{{ material }}</span></h2><p v-if="status.knowledge?.state === 'conflict'">存在需要核实的规范冲突。</p><p v-else>规范、决策与历史资料可按实际来源查看。</p><a href="#/settings?section=sources">查看资料来源 →</a></div></section><section class="settings-summary-card"><span class="settings-icon"><AppIcon name="loop" /></span><div><h2>工作流激活 <span class="status">{{ status.workflow_active ? '已激活' : '尚未激活' }}</span></h2><p>{{ status.workflow_active ? '工作流已接入，仍按任务权限执行。' : '资料导入与正式接管是两个独立步骤；激活使用原 CLI 授权。' }}</p><a href="#/settings?section=diagnostics">查看接入信息 →</a></div></section></div>
+      <section class="settings-panel"><div class="settings-panel-head"><h2>执行器能力</h2><button :disabled="probeBusy" @click="probeExecutor">{{ probeBusy ? '探测中…' : '探测受管执行器接口' }}</button></div><div class="capability-line"><span class="settings-icon"><AppIcon name="layers" /></span><div><h3>受管执行器接口</h3><p>{{ probe ? probe.reason : status.executor?.reason }}</p></div><span class="status">{{ probe ? label(probe.state) : '尚未探测' }}</span></div><details v-if="probe"><summary>探测详情</summary><pre>{{ JSON.stringify(probe, null, 2) }}</pre></details></section>
+      <section class="settings-panel settings-migration"><div><h2>初始化与资料迁移</h2><p>{{ status.applied_migrations ? '已应用 ' + status.applied_migrations + ' 个批次。' : '尚无已应用的迁移批次。' }} 先审阅来源与影响，再确认当前计划。</p><a href="#/settings?section=migrations">查看已有迁移 →</a></div><button :disabled="busy" @click="start('preview')">扫描与预览</button></section>
+      <section class="settings-panel settings-appearance"><h2>外观</h2><p>选择工作台强调色；等待使用琥珀提示，失败与危险使用红色。</p><div><button :class="{ chosen: theme === 'indigo' }" :aria-pressed="theme === 'indigo'" @click="setTheme('indigo')"><span class="theme-swatch indigo"></span>靛蓝 · 默认</button><button :class="{ chosen: theme === 'graphite' }" :aria-pressed="theme === 'graphite'" @click="setTheme('graphite')"><span class="theme-swatch graphite"></span>石墨 · 更克制</button></div></section>
       <section class="content-section">
         <h2>当前需要处理的问题</h2>
         <p v-if="!status.issues?.length" class="empty">
@@ -270,8 +223,8 @@ const material = computed(() =>
         来源变更后，先审阅原资料，再通过现有 CLI
         更新索引。此页面不修改业务规范。
       </p>
-      <article v-for="s in data.items" class="record-row">
-        <h3>{{ s.record?.title || s.path.split("/").pop() }}</h3>
+      <article v-for="s in data.items" class="record-row source-row">
+        <span class="settings-icon"><AppIcon name="file" /></span><div><h3>{{ s.record?.title || s.path.split("/").pop() }}</h3>
         <p>
           {{ label(s.record?.status) }} ·
           {{
@@ -284,13 +237,14 @@ const material = computed(() =>
                   : label(s.action)
           }}
         </p>
+        <a v-if="s.action === 'connected' && s.record?.id" :href="knowledgeHref(s.record.id)">阅读已接入资料 →</a>
         <details>
           <summary>来源路径与读取诊断</summary>
           <p>来源：{{ s.path }}</p>
           <p v-if="s.authority_path">当前权威：{{ s.authority_path }}</p>
           <p>{{ s.reason }}</p>
           <code>{{ s.hash }}</code>
-        </details>
+        </details></div>
       </article>
       <p v-if="!loading && !data.total" class="empty">
         暂无来源账本条目，可回到接入概览核实资料状态。
@@ -323,7 +277,7 @@ const material = computed(() =>
         <p v-if="!loading && !data.runs?.length" class="empty">
           尚无迁移记录。可先扫描并审阅隔离或已明确授权的项目来源。
         </p>
-        <article v-for="m in data.runs" class="record-row">
+        <article v-for="m in data.runs" class="record-row migration-card">
           <a
             class="record-title"
             :href="
@@ -331,11 +285,7 @@ const material = computed(() =>
             "
             >{{ label(m.state) }} · {{ m.counts.sources }} 条来源</a
           >
-          <p>
-            已导入 {{ m.counts.imported }}；待核实 {{ m.counts.pending }}；忽略
-            {{ m.counts.ignored }}；保留原件
-            {{ m.counts.preserved }}；错误数量未单独记录。
-          </p>
+          <div class="migration-counts"><div><strong>{{ m.counts.sources }}</strong><small>来源</small></div><div><strong>{{ m.counts.imported }}</strong><small>已导入</small></div><div><strong>{{ m.counts.pending }}</strong><small>待核实</small></div><div><strong>{{ m.counts.preserved }}</strong><small>保留原件</small></div></div><small>忽略 {{ m.counts.ignored }}；错误数量未单独记录。</small>
           <small
             >计划生成于 {{ stamp(m.created) }}；执行时间未单独记录。{{
               m.activated ? "已执行工作流激活" : "本批次未记录工作流激活"
@@ -374,6 +324,7 @@ const material = computed(() =>
             {{ data.counts.imported }}；待核实 {{ data.counts.pending }}；忽略
             {{ data.counts.ignored }}；错误数量未单独记录。
           </p>
+          <div class="migration-counts"><div><strong>{{ data.counts.sources }}</strong><small>来源</small></div><div><strong>{{ data.counts.imported }}</strong><small>已导入</small></div><div><strong>{{ data.counts.pending }}</strong><small>待核实</small></div><div><strong>{{ data.counts.preserved }}</strong><small>保留原件</small></div></div>
           <small
             >计划生成于 {{ stamp(data.created) }}；执行时间未单独记录。</small
           >

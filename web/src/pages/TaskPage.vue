@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from "vue";
-import { api, notices, params } from "../api";
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
+import { api, ApiError, notices, params, refreshRevision } from "../api";
 import {
   route,
   setQuery,
@@ -24,17 +24,18 @@ import LoadState from "../components/LoadState.vue";
 import ActionDialog from "../components/ActionDialog.vue";
 import ManualReviewDialog from "../components/ManualReviewDialog.vue";
 import MarkdownBody from "../components/MarkdownBody.vue";
+import AppIcon from "../components/AppIcon.vue";
 const props = defineProps<{ id: string }>();
 const r = useResource<any>(null),
   { data: n, loading, error, last } = r;
 const t = computed(() => n.value?.task),
-  section = computed(() => route.value.query.get("section") || "overview");
+  rawSection = computed(() => route.value.query.get("section") || "overview"),
+  section = computed(() => rawSection.value === "technical" ? "execution" : rawSection.value);
 const sections = [
   ["overview", "概览"],
   ["checks", "检查与验收"],
   ["execution", "执行过程"],
   ["basis", "规范与决策"],
-  ["technical", "技术记录"],
 ];
 const basis = ref<any>(null),
   events = ref<any[]>([]),
@@ -81,6 +82,51 @@ const claimed = ref<any>(null),
   });
 const advancedResult = ref('{"status":"pass","summary":"","artifacts":[]}'),
   deliveryRef = ref("");
+const pendingSubmission = ref<any>(null), storageWarning = ref(""), technicalOpen = ref(false);
+const emptyResult = () => ({ status: "pass", summary: "", artifacts: "", knowledge_status: "unchanged", knowledge_reason: "", knowledge_artifacts: "", return_to: "" });
+const claimKey = (id: string) => "ael-dashboard-claim-v1:" + id;
+function saveClaim(id: string, attempt: any, draft = result.value, pending = pendingSubmission.value) {
+  try {
+    sessionStorage.setItem(claimKey(id), JSON.stringify({ attempt, draft, pending, advanced: advancedResult.value, deliveryRef: deliveryRef.value }));
+    storageWarning.value = "";
+  } catch {
+    storageWarning.value = "浏览器无法保存接手凭据；刷新或关闭此标签页后将无法继续提交。";
+  }
+}
+function removeClaim(id: string, attemptId: string) {
+  try {
+    const stored = JSON.parse(sessionStorage.getItem(claimKey(id)) || "null");
+    if (stored?.attempt?.id === attemptId) sessionStorage.removeItem(claimKey(id));
+  } catch { /* A corrupt record is never used as proof of ownership. */ }
+}
+watch([result, advancedResult, deliveryRef], () => {
+  if (claimed.value) saveClaim(props.id, claimed.value);
+}, { deep: true, flush: "sync" });
+async function restoreClaim(id: string) {
+  let saved: any;
+  try { saved = JSON.parse(sessionStorage.getItem(claimKey(id)) || "null"); } catch { return; }
+  if (!saved?.attempt?.id || !saved.attempt.token || !n.value || n.value.task?.definition?.id !== id) return;
+  const a = n.value.task.attempts?.find((item: any) => item.id === saved.attempt.id);
+  const valid = a && a.status === "running" && Date.parse(a.lease_until) > Date.now() &&
+    !a.pid && !a.owner_pid && !a.session && n.value.task.status === "open" && !n.value.task.paused &&
+    a.unit === n.value.task.current_step && a.unit === saved.attempt.unit &&
+    a.definition_revision === n.value.definition_revision && a.plan_revision === n.value.plan_revision &&
+    a.definition_revision === saved.attempt.definition_revision && a.plan_revision === saved.attempt.plan_revision;
+  if (!valid && !saved.pending) {
+    removeClaim(id, saved.attempt.id);
+    if (claimed.value?.id === saved.attempt.id) claimed.value = null;
+    return;
+  }
+  if (claimed.value?.id !== saved.attempt.id) {
+    result.value = { ...emptyResult(), ...(saved.draft || {}) };
+    advancedResult.value = saved.advanced || advancedResult.value;
+    deliveryRef.value = saved.deliveryRef || "";
+    pendingSubmission.value = saved.pending || null;
+    claimed.value = saved.attempt;
+    actor.value = saved.attempt.executor;
+    if (valid && !saved.pending) await contextReader.read(() => api("/api/context?" + params({ id })));
+  }
+}
 const receiptReader = useObjectReader<any>();
 const {
   data: receipt,
@@ -95,7 +141,7 @@ async function extras() {
     const v = await api("/api/task-knowledge?" + params({ id, compact: 1 }));
     if (id === props.id) basis.value = v;
   }
-  if (section.value === "technical") {
+  if (section.value === "execution" && (technicalOpen.value || rawSection.value === "technical")) {
     const v = await api("/api/events?" + params({ id }));
     if (id === props.id) {
       events.value = v;
@@ -104,7 +150,15 @@ async function extras() {
   }
 }
 async function load(quiet = false) {
-  await r.load(() => api("/api/task?" + params({ id: props.id })), quiet);
+  const id = props.id;
+  await r.load(() => api("/api/task?" + params({ id })), quiet);
+  if (id !== props.id) return;
+  await restoreClaim(id);
+  const requestedReview = route.value.query.get("review");
+  if (requestedReview && n.value?.task?.definition?.id === id) {
+    if (n.value.check_access?.[requestedReview]?.can_review) manualCheck.value = requestedReview;
+    setQuery({ review: undefined });
+  }
   try {
     await extras();
   } catch (e) {
@@ -124,6 +178,9 @@ watch(
     contextReader.clear();
     receiptReader.clear();
     claimed.value = null;
+    pendingSubmission.value = null;
+    result.value = emptyResult();
+    technicalOpen.value = false;
     manualCheck.value = "";
     load();
   },
@@ -133,7 +190,10 @@ watch(section, () => {
   basisReader.clear();
   load(true);
 });
+watch(rawSection, () => { if (rawSection.value === "technical") { technicalOpen.value = true; void load(true); } });
+watch(refreshRevision, () => load());
 onMounted(() => {
+  if (rawSection.value === "technical") technicalOpen.value = true;
   load();
   timer = setInterval(() => {
     if (!busy.value && !op.value) load(true);
@@ -145,6 +205,7 @@ const runnable = computed(
     ["continue", "repair"].includes(n.value?.next_action) &&
     t.value?.current_step !== "verify",
 );
+const unownedRunning = computed(() => !claimed.value && t.value?.status === "open" && t.value?.attempts?.some((a: any) => a.status === "running" || a.status === "interrupted"));
 const recoverable = computed(
   () =>
     t.value?.status === "open" &&
@@ -159,6 +220,34 @@ const recoverable = computed(
           (a.status === "running" && Date.parse(a.lease_until) <= Date.now()),
       )),
 );
+const primaryKind = computed(() => {
+  if (availableHumanChecks.value.length) return "review";
+  if (recoverable.value) return "resume";
+  if (t.value?.confirmation) return "decision";
+  if (runnable.value) return "claim";
+  if (t.value?.current_step === "verify" && t.value?.status === "open") return "checks";
+  return "";
+});
+function primaryAction() {
+  if (primaryKind.value === "review") manualCheck.value = availableHumanChecks.value[0].id;
+  else if (primaryKind.value === "resume") start("resume", "恢复任务");
+  else if (primaryKind.value === "decision") setQuery({ section: "basis" });
+  else if (primaryKind.value === "claim") start("claim", "接手当前工作");
+  else if (primaryKind.value === "checks") setQuery({ section: "checks" });
+}
+function technicalToggle(event: Event) {
+  technicalOpen.value = (event.target as HTMLDetailsElement).open;
+  if (technicalOpen.value && !eventsLoaded.value) void load(true);
+}
+async function showWorkForm() {
+  setQuery({ section: "overview" });
+  await nextTick();
+  document.getElementById("work-result")?.scrollIntoView({ block: "start" });
+}
+function stageDone(step: string) {
+  if (step === "verify") return !!n.value?.summary?.checks?.required && n.value.summary.checks.required_passed === n.value.summary.checks.required;
+  return !!t.value?.attempts?.some((a: any) => a.unit === step && a.status === "pass" && a.definition_revision === n.value.definition_revision && a.plan_revision === n.value.plan_revision);
+}
 const work = computed(() =>
   [...(t.value?.attempts || [])]
     .reverse()
@@ -227,6 +316,9 @@ async function perform() {
       ack_stopped: ack.value,
       ...extra,
     });
+    if (current.action === "claim" && v.attempt?.id && v.attempt?.token) {
+      saveClaim(current.id, v.attempt, emptyResult(), null);
+    }
     if (current.id !== props.id) {
       notices.value = current.title + "已记录，请在对应任务查看结果。";
       return;
@@ -234,18 +326,11 @@ async function perform() {
     sessionStorage.setItem("ael-actor", actor.value);
     if (current.action === "claim") {
       claimed.value = v.attempt;
+      pendingSubmission.value = null;
       contextReader.clear();
       receiptReader.clear();
       deliveryRef.value = "";
-      result.value = {
-        status: "pass",
-        summary: "",
-        artifacts: "",
-        knowledge_status: "unchanged",
-        knowledge_reason: "",
-        knowledge_artifacts: "",
-        return_to: "",
-      };
+      result.value = emptyResult();
     }
     notices.value =
       current.title +
@@ -271,6 +356,7 @@ async function perform() {
 }
 async function submit(advanced = false) {
   if (busy.value || !claimed.value) return;
+  const taskId = props.id, attempt = claimed.value;
   busy.value = true;
   error.value = "";
   try {
@@ -282,7 +368,7 @@ async function submit(advanced = false) {
         .map((x) => x.trim())
         .filter(Boolean),
     };
-    if (t.value.current_step === "execute")
+    if (attempt.unit === "execute")
       stepResult.knowledge = {
         status: result.value.knowledge_status,
         reason: result.value.knowledge_reason,
@@ -293,7 +379,7 @@ async function submit(advanced = false) {
       };
     if (result.value.status === "fail" && result.value.return_to)
       stepResult.return_to = result.value.return_to;
-    if (t.value.current_step === "delivery" && receipt.value) {
+    if (attempt.unit === "delivery" && receipt.value) {
       stepResult.delivery = receipt.value.receipt;
       if (!stepResult.artifacts.includes(receipt.value.ref))
         stepResult.artifacts.push(receipt.value.ref);
@@ -305,24 +391,41 @@ async function submit(advanced = false) {
         scope: t.value.definition.scope,
         tried: "见本次工作结果",
         recovery: result.value.knowledge_reason || "核实环境后恢复",
-        resume_at: t.value.current_step,
+        resume_at: attempt.unit,
       };
     if (advanced) stepResult = JSON.parse(advancedResult.value);
-    await api("/api/action", {
+    const payload = pendingSubmission.value || {
       action: "submit",
       submission: {
-        task: props.id,
-        attempt: claimed.value.id,
-        token: claimed.value.token,
-        key: claimed.value.id + "-dashboard",
+        task: taskId,
+        attempt: attempt.id,
+        token: attempt.token,
+        key: attempt.id + "-dashboard",
         result: stepResult,
       },
-    });
+    };
+    pendingSubmission.value = payload;
+    saveClaim(taskId, attempt, result.value, payload);
+    await api("/api/action", payload);
+    removeClaim(taskId, attempt.id);
+    if (props.id !== taskId || claimed.value?.id !== attempt.id) {
+      notices.value = "工作结果已提交，请在对应任务查看下一步。";
+      return;
+    }
+    pendingSubmission.value = null;
     claimed.value = null;
     notices.value = "工作结果已提交，状态由协议重新计算。";
     await load(true);
   } catch (e) {
-    error.value = String(e);
+    // These errors are returned before a submission is committed; other failures
+    // may mean the response was lost after commit and must be retried verbatim.
+    if (props.id === taskId && claimed.value?.id === attempt.id && e instanceof ApiError && ["RESULT_REQUIRED", "INVALID_RESULT", "ARTIFACT_REQUIRED", "ARTIFACT_MISSING", "UNSAFE_PATH", "SYMLINK_PATH", "TASK_CONTEXT_REQUIRED", "KNOWLEDGE_OUTCOME_REQUIRED", "KNOWLEDGE_ARTIFACT_REQUIRED", "DELIVERY_RECEIPT_REQUIRED", "DELIVERY_RECEIPT_INVALID", "DELIVERY_RECEIPT_MISMATCH", "WRONG_ENVIRONMENT", "TARGET_REQUIRED"].includes(e.code)) {
+      pendingSubmission.value = null;
+      saveClaim(taskId, attempt, result.value, null);
+      if (e.code === "TASK_CONTEXT_REQUIRED") void contextReader.read(() => api("/api/context?" + params({ id: taskId })));
+    }
+    if (props.id === taskId) error.value = String(e);
+    else notices.value = "工作结果提交未确认，请回到对应任务查看并重试。";
   } finally {
     busy.value = false;
   }
@@ -423,13 +526,13 @@ function checkReason(c: any) {
     <template v-if="n && t">
       <header class="object-header">
         <div>
-          <p class="eyebrow">任务 · {{ t.definition.type }}</p>
+          <p class="eyebrow">{{ t.definition.id }} · {{ t.definition.type }}</p>
           <h1>{{ t.definition.title }}</h1>
           <p class="inline">
             <span class="status" :class="n.board">{{
               schedule(n.summary)
             }}</span
-            ><span>{{ label(n.current_step) }}</span
+            ><span>{{ label(n.current_step) }}</span><span>定义修订 {{ n.definition_revision }}</span
             ><span>{{
               n.summary.executors.length
                 ? n.summary.executors.join("、")
@@ -437,9 +540,9 @@ function checkReason(c: any) {
             }}</span>
           </p>
         </div>
-        <div class="task-heading-actions"><button v-if="availableHumanChecks.length" class="primary" @click="manualCheck = availableHumanChecks[0].id">开始人工验收</button><a :href="href('/evolution', { q: t.definition.title })">查看相关演进</a></div>
+        <div class="task-heading-actions"><button v-if="primaryKind" class="primary" @click="primaryAction">{{ ({ review: '开始人工验收', resume: '处理阻塞', decision: '审阅方案', claim: '接手工作', checks: '查看检查' } as Record<string, string>)[primaryKind] }}</button><button v-else-if="n.board === 'active'" @click="setQuery({ section: 'execution' })">查看当前执行</button><a :href="href('/evolution', { q: t.definition.title })">查看相关演进</a></div>
       </header>
-      <ol class="stage-track" aria-label="任务流程位置"><li v-for="step in t.plan.steps" :key="step" :class="{ current: step === t.current_step }"><span>{{ step === t.current_step ? '●' : '○' }}</span>{{ label(step) }}</li></ol>
+      <ol class="stage-track" aria-label="任务流程位置"><li v-for="(step, index) in t.plan.steps" :key="step" :class="{ current: t.status === 'open' && step === t.current_step, done: stageDone(step) && !(t.status === 'open' && step === t.current_step) }"><span class="stage-node">{{ stageDone(step) && !(t.status === 'open' && step === t.current_step) ? '✓' : Number(index) + 1 }}</span><span>{{ label(step) }}</span></li></ol>
       <nav class="tabs" aria-label="任务详情分区">
         <button
           v-for="[id, title] in sections"
@@ -449,12 +552,15 @@ function checkReason(c: any) {
           @click="setQuery({ section: id })"
         >
           {{ title }}
+          <span v-if="id === 'checks'" class="count" aria-hidden="true">{{ n.summary.checks.required_passed }}/{{ n.summary.checks.required }}</span>
+          <span v-if="id === 'basis' && t.applicable_knowledge?.length" class="count" aria-hidden="true">{{ t.applicable_knowledge.length }}</span>
         </button>
       </nav>
       <div class="task-detail-layout"><div class="task-detail-main">
       <section v-if="section === 'overview'" class="overview">
-        <div class="conclusion">
-          <h2>当前结论与下一步</h2>
+        <div class="conclusion result-banner" :class="{ amber: t.blocker || t.paused || t.confirmation, success: t.status === 'completed' }">
+          <span class="banner-icon"><AppIcon :name="t.blocker || t.paused ? 'warning' : t.status === 'completed' ? 'check' : 'play'" /></span><div>
+          <h2>{{ t.status === 'completed' ? '已达到本次交付目标' : t.status === 'cancelled' ? '任务已取消，保留已有结果' : t.paused ? '任务已暂缓' : t.confirmation ? '这一步需要你的决定' : availableHumanChecks.length ? '还有人工验收需要你处理' : n.board === 'active' ? '当前工作正在执行' : '当前工作状态' }}</h2>
           <p>{{ label(n.summary.last_result) }}</p>
           <p v-if="t.status === 'open' && t.blocker?.reason" class="blocked-reason">
             {{ blockerText(t.blocker.reason) }}
@@ -481,155 +587,7 @@ function checkReason(c: any) {
                 : "尚无已提交的有效进展"
             }}<span v-if="t.historical"> · 历史记录，未在本机复验</span></small
           >
-        </div>
-        <div class="actions primary-actions">
-          <button
-            v-if="availableHumanChecks.length"
-            class="primary"
-            @click="manualCheck = availableHumanChecks[0].id"
-          >记录人工验收</button><button
-            v-else-if="t.current_step === 'verify'"
-            @click="setQuery({ section: 'checks' })"
-          >
-            查看验收与运行检查</button
-          ><button
-            v-if="t.confirmation"
-            class="primary"
-            @click="setQuery({ section: 'basis' })"
-          >
-            审阅并作出决定</button
-          ><button
-            v-if="n.next_action === 'wait_confirmation' && !t.confirmation"
-            @click="setQuery({ section: 'basis' })"
-          >
-            查看待核实规范</button
-          ><button
-            v-if="t.status === 'open' && !t.paused"
-            :disabled="busy"
-            @click="start('pause', '暂缓任务')"
-          >
-            暂缓</button
-          ><button
-            v-if="t.status === 'open'"
-            :disabled="busy"
-            @click="start('cancel', '取消任务')"
-          >
-            取消任务
-          </button>
-        </div>
-        <div v-if="claimed" class="work-form">
-          <h2>提交本次工作结果</h2>
-          <p>
-            本次接手：{{ actor }} · {{ label(claimed.unit) }}。{{
-              supplied
-                ? "已提供当前工作所需依据，请在提交前阅读。"
-                : "已接手；准确版本依据尚未读取成功。"
-            }}
-          </p>
-          <LoadState
-            :loading="contextLoading"
-            :error="contextError"
-            @retry="contextReader.retry"
-          />
-          <details v-if="supplied?.knowledge?.length">
-            <summary>
-              阅读已提供的准确版本依据（{{ supplied.knowledge.length }} 份）
-            </summary>
-            <section v-for="k in supplied.knowledge">
-              <h3>{{ k.title }}</h3>
-              <MarkdownBody :id="k.id" :body="k.body" />
-            </section>
-          </details>
-          <form @submit.prevent="submit()">
-            <label
-              >工作结论<select v-model="result.status">
-                <option value="pass">本步骤完成</option>
-                <option value="fail">未达到预期</option>
-                <option value="blocked">环境阻塞</option>
-              </select></label
-            ><label
-              >实际工作与结果<textarea
-                v-model="result.summary"
-                required
-                rows="3"
-              ></textarea></label
-            ><label
-              >本次产物（逗号分隔）<input
-                v-model="result.artifacts"
-                placeholder="已存在的项目相对路径或 runtime: 引用" /></label
-            ><template v-if="t.current_step === 'execute'"
-              ><label
-                >规范处理<select v-model="result.knowledge_status">
-                  <option value="unchanged">沿用现有规范</option>
-                  <option value="updated">已更新规范与决策</option>
-                </select></label
-              ><label
-                >规范处理依据 / 阻塞解除条件<textarea
-                  v-model="result.knowledge_reason"
-                  required
-                ></textarea></label
-              ><label v-if="result.knowledge_status === 'updated'"
-                >已变更的规范或决策产物（逗号分隔）<input
-                  v-model="result.knowledge_artifacts"
-                  required
-                  placeholder="实际已存在的项目相对路径" /></label></template
-            ><label v-if="result.status === 'fail'"
-              >需要回到哪个责任节点<select v-model="result.return_to">
-                <option value="">保留当前范围并修复</option>
-                <option
-                  v-for="step in t.plan.steps
-                    .slice(0, t.plan.steps.indexOf(t.current_step) + 1)
-                    .filter((s: string) =>
-                      ['define', 'analysis', 'execute'].includes(s),
-                    )"
-                  :value="step"
-                >
-                  {{ label(step) }}
-                </option>
-              </select></label
-            >
-            <section v-if="t.current_step === 'delivery'" class="receipt-form">
-              <h3>读取真实交付回执</h3>
-              <p>
-                先完成已授权的实际交付，再读取已有 JSON
-                回执。系统仍会核对候选、目标与回执，不以按钮点击当作发布。
-              </p>
-              <label
-                >真实交付回执引用<input
-                  v-model="deliveryRef"
-                  @input="receiptReader.clear"
-                  placeholder="runtime:delivery-receipt.json" /></label
-              ><button
-                type="button"
-                :disabled="!deliveryRef || receiptLoading"
-                @click="readReceipt"
-              >
-                读取交付回执</button
-              ><LoadState
-                :loading="receiptLoading"
-                :error="receiptError"
-                @retry="receiptReader.retry"
-              />
-              <p v-if="receipt">
-                回执：{{ receipt.receipt.run_id }} ·
-                {{ label(receipt.receipt.status) }} ·
-                {{ receipt.receipt.environment || receipt.receipt.target }}
-              </p>
-            </section>
-            <button
-              class="primary"
-              :disabled="
-                busy ||
-                !supplied ||
-                contextLoading ||
-                (t.current_step === 'delivery' &&
-                  result.status === 'pass' &&
-                  !receipt)
-              "
-            >
-              {{ busy ? "正在提交…" : "提交并查看下一步" }}
-            </button>
-          </form>
+          </div>
         </div>
         <section class="content-section">
           <h2>目标与范围</h2>
@@ -668,6 +626,157 @@ function checkReason(c: any) {
             <li v-for="a in t.definition.acceptance">{{ a }}</li>
           </ul>
         </section>
+        <div class="overview-cards"><section class="overview-card"><div class="section-heading"><h2>验收概况</h2><button @click="setQuery({ section: 'checks' })">全部检查 →</button></div><div class="overview-card-body"><p v-if="n.summary.checks.required" class="acceptance-count"><strong>{{ n.summary.checks.required_passed }}</strong> / {{ n.summary.checks.required }} 项必要检查通过</p><p v-else>尚未配置必需检查。</p><small>检查覆盖不等于研发进度；当前候选、验收方法和交付目标分别核对。</small></div></section><section class="overview-card"><div class="section-heading"><h2>最近进展</h2><button @click="setQuery({ section: 'execution' })">完整过程 →</button></div><div class="overview-card-body"><div v-if="work.length" class="work-timeline"><article v-for="a in work.slice(0, 3)" :key="a.id" class="timeline-item"><span class="timeline-marker"><AppIcon :name="a.status === 'pass' ? 'check' : 'clock'" /></span><div><h3>{{ label(a.unit) }} · {{ label(a.status) }}</h3><p>{{ a.reason || '已接手，尚未提交实际结果。' }}</p><time>{{ a.executor }} · {{ stamp(a.ended || a.started) }}</time></div></article></div><p v-else class="secondary">尚未提交有效工作进展。</p></div></section></div>
+        <div class="actions primary-actions">
+          <button
+            v-if="availableHumanChecks.length"
+            class="primary"
+            @click="manualCheck = availableHumanChecks[0].id"
+          >记录人工验收</button><button
+            v-else-if="t.current_step === 'verify'"
+            @click="setQuery({ section: 'checks' })"
+          >
+            查看验收与运行检查</button
+          ><button
+            v-if="t.confirmation"
+            class="primary"
+            @click="setQuery({ section: 'basis' })"
+          >
+            审阅并作出决定</button
+          ><button
+            v-if="n.next_action === 'wait_confirmation' && !t.confirmation"
+            @click="setQuery({ section: 'basis' })"
+          >
+            查看待核实规范</button
+          ><button
+            v-if="t.status === 'open' && !t.paused"
+            :disabled="busy"
+            @click="start('pause', '暂缓任务')"
+          >
+            暂缓</button
+          ><button
+            v-if="t.status === 'open'"
+            :disabled="busy"
+            @click="start('cancel', '取消任务')"
+          >
+            取消任务
+          </button>
+        </div>
+        <div v-if="claimed" id="work-result" class="work-form">
+          <h2>提交本次工作结果</h2>
+          <p>
+            本次接手：{{ actor }} · {{ label(claimed.unit) }}。{{
+              supplied
+                ? "已提供当前工作所需依据，请在提交前阅读。"
+                : "已接手；准确版本依据尚未读取成功。"
+            }}
+          </p>
+          <LoadState
+            :loading="contextLoading"
+            :error="contextError"
+            @retry="contextReader.retry"
+          />
+          <details v-if="supplied?.knowledge?.length">
+            <summary>
+              阅读已提供的准确版本依据（{{ supplied.knowledge.length }} 份）
+            </summary>
+            <section v-for="k in supplied.knowledge">
+              <h3>{{ k.title }}</h3>
+              <MarkdownBody :id="k.id" :body="k.body" />
+            </section>
+          </details>
+          <p v-if="storageWarning" role="alert" class="alert">{{ storageWarning }}</p>
+          <p v-if="pendingSubmission" role="status" class="alert">上次提交结果尚未确认。请原样重试；系统会使用同一请求，避免重复提交。</p>
+          <form @submit.prevent="submit()"><fieldset :disabled="!!pendingSubmission" class="work-fields">
+            <label
+              >工作结论<select v-model="result.status">
+                <option value="pass">本步骤完成</option>
+                <option value="fail">未达到预期</option>
+                <option value="blocked">环境阻塞</option>
+              </select></label
+            ><label
+              >实际工作与结果<textarea
+                v-model="result.summary"
+                required
+                rows="3"
+              ></textarea></label
+            ><label
+              >本次产物（逗号分隔）<input
+                v-model="result.artifacts"
+                placeholder="已存在的项目相对路径或 runtime: 引用" /></label
+            ><template v-if="claimed.unit === 'execute'"
+              ><label
+                >规范处理<select v-model="result.knowledge_status">
+                  <option value="unchanged">沿用现有规范</option>
+                  <option value="updated">已更新规范与决策</option>
+                </select></label
+              ><label
+                >规范处理依据 / 阻塞解除条件<textarea
+                  v-model="result.knowledge_reason"
+                  required
+                ></textarea></label
+              ><label v-if="result.knowledge_status === 'updated'"
+                >已变更的规范或决策产物（逗号分隔）<input
+                  v-model="result.knowledge_artifacts"
+                  required
+                  placeholder="实际已存在的项目相对路径" /></label></template
+            ><label v-if="result.status === 'fail'"
+              >需要回到哪个责任节点<select v-model="result.return_to">
+                <option value="">保留当前范围并修复</option>
+                <option
+                  v-for="step in t.plan.steps
+                    .slice(0, t.plan.steps.indexOf(t.current_step) + 1)
+                    .filter((s: string) =>
+                      ['define', 'analysis', 'execute'].includes(s),
+                    )"
+                  :value="step"
+                >
+                  {{ label(step) }}
+                </option>
+              </select></label
+            >
+            <section v-if="claimed.unit === 'delivery'" class="receipt-form">
+              <h3>读取真实交付回执</h3>
+              <p>
+                先完成已授权的实际交付，再读取已有 JSON
+                回执。系统仍会核对候选、目标与回执，不以按钮点击当作发布。
+              </p>
+              <label
+                >真实交付回执引用<input
+                  v-model="deliveryRef"
+                  @input="receiptReader.clear"
+                  placeholder="runtime:delivery-receipt.json" /></label
+              ><button
+                type="button"
+                :disabled="!deliveryRef || receiptLoading"
+                @click="readReceipt"
+              >
+                读取交付回执</button
+              ><LoadState
+                :loading="receiptLoading"
+                :error="receiptError"
+                @retry="receiptReader.retry"
+              />
+              <p v-if="receipt">
+                回执：{{ receipt.receipt.run_id }} ·
+                {{ label(receipt.receipt.status) }} ·
+                {{ receipt.receipt.environment || receipt.receipt.target }}
+              </p>
+            </section>
+            </fieldset><button
+              class="primary"
+              :disabled="
+                busy ||
+                (!pendingSubmission && (!supplied || contextLoading)) ||
+                (!pendingSubmission && claimed.unit === 'delivery' &&
+                  result.status === 'pass' &&
+                  !receipt)
+              "
+            >
+              {{ busy ? "正在提交…" : pendingSubmission ? "原样重试提交" : "提交并查看下一步" }}
+            </button>
+          </form>
+        </div>
         <section class="content-section">
           <h2>交付、规范处理与后续工作</h2>
           <p>
@@ -710,37 +819,11 @@ function checkReason(c: any) {
         </section>
       </section>
       <section v-if="section === 'execution' || section === 'checks'">
-        <section v-if="section === 'execution'" class="content-section">
-          <h2>执行计划</h2>
-          <ol class="plan">
-            <li
-              v-for="step in t.plan.steps"
-              :class="{ current: step === t.current_step }"
-            >
-              {{ label(step)
-              }}<span v-if="step === t.current_step"> · 当前节点</span>
-            </li>
-          </ol>
-          <small
-            >计划修订 {{ t.plan.revision }} · 计划节点不代表完成百分比</small
-          >
-        </section>
+        <div v-if="section === 'checks'" class="info-strip"><AppIcon name="shield" /><span>这些结果属于{{ t.candidate ? '当前候选 ' + t.candidate.slice(0, 12) : '当前任务，候选尚未生成' }}和定义修订 {{ n.definition_revision }}、计划修订 {{ n.plan_revision }}。人工验收只影响对应检查，不替代其他门禁。</span></div>
         <section v-if="section === 'checks'" class="content-section check-list">
-          <h2>检查与验收</h2>
-          <p>
-            有效结果通过 {{ n.summary.checks.passed }} 项；必需
-            {{ n.summary.checks.required }} 项；执行中
-            {{ n.summary.checks.running }}；失败
-            {{ n.summary.checks.failed }}；未执行
-            {{ n.summary.checks.not_run }}；受阻 {{ n.summary.checks.blocked
-            }}<span v-if="n.summary.checks.historical_failed"
-              >；历史失败 {{ n.summary.checks.historical_failed }}</span
-            >
-          </p>
-          <p class="secondary">
-            检查完成与候选通过分别判断；历史证据保留，不能满足当前版本门禁。
-          </p>
+          <div class="check-list-header"><h2>检查与验收</h2><small>{{ n.summary.checks.required_passed }} / {{ n.summary.checks.required }} 通过</small></div>
           <article v-for="c in t.definition.checks" :key="c.id" class="check">
+            <div class="check-row"><span class="check-state-icon" :class="n.current_runs[c.id] ? 'running' : n.current_checks[c.id]?.result || 'not_run'"><AppIcon :name="n.current_checks[c.id]?.result === 'pass' ? 'check' : n.current_checks[c.id]?.result === 'fail' ? 'warning' : 'clock'" /></span><div class="check-main">
             <div class="check-heading">
               <h3>{{ c.id }} · {{ label(c.kind) }}</h3>
               <span
@@ -757,11 +840,6 @@ function checkReason(c: any) {
                       : n.current_checks[c.id]?.result || "not_run",
                   )
                 }}</span
-              ><span
-                >{{ c.required ? "必需" : "非必需" }} ·
-                {{
-                  label(n.check_access?.[c.id]?.effective_method || c.method)
-                }}</span
               >
             </div>
             <p v-if="n.current_runs[c.id]">
@@ -771,10 +849,11 @@ function checkReason(c: any) {
             </p>
             <p>
               {{
-                n.current_checks[c.id]?.reason ||
+                n.current_checks[c.id]?.reason || c.covers?.join('；') ||
                 "尚无当前候选和修订上的有效检查结果。"
               }}
             </p>
+            <div class="check-tags"><span>{{ label(n.check_access?.[c.id]?.effective_method || c.method) }}</span> {{ c.required ? '必需检查' : '辅助检查' }}<template v-if="n.current_runs[c.id]"> · {{ n.current_runs[c.id].executors.join('、') }}</template></div>
             <p
               v-if="!n.current_checks[c.id] && priorCheck(c)"
               :class="{ failure: priorCheck(c).result === 'fail' }"
@@ -789,15 +868,14 @@ function checkReason(c: any) {
               }}
               · {{ stamp(n.current_checks[c.id].at) }}</small
             >
-            <div class="actions">
-              <button
+              <button class="check-evidence-toggle"
                 :aria-expanded="!!checkOpen[c.id]"
                 @click="checkOpen[c.id] = !checkOpen[c.id]"
               >
                 {{
                   checkOpen[c.id] ? "收起检查依据" : "查看检查依据与证据"
-                }}</button
-              ><button
+                }}</button>
+            </div><div class="actions check-actions"><button
                 v-if="c.command?.length"
                 :disabled="busy || !canCheck(c)"
                 :title="checkReason(c)"
@@ -814,7 +892,7 @@ function checkReason(c: any) {
               ><span v-else class="secondary"
                 >需要{{ label(c.method) }}能力；请由执行者提交真实报告。</span
               >
-            </div>
+            </div></div>
             <p v-if="c.command?.length && !canCheck(c)" class="secondary">
               {{ checkReason(c) }}
             </p>
@@ -865,30 +943,125 @@ function checkReason(c: any) {
             </div>
           </article>
         </section>
+        <section v-if="section === 'checks'" class="content-section check-next"><h3>检查通过后会发生什么？</h3><p>系统会根据当前候选、必要检查和“{{ goalLabel(t.definition.goal) }}”的交付目标判断下一步。未执行或受阻的检查不会被当作通过。</p><details class="check-statistics"><summary>查看检查状态统计</summary><p>有效结果通过 {{ n.summary.checks.passed }} 项；必需 {{ n.summary.checks.required }} 项；执行中 {{ n.summary.checks.running }}；失败 {{ n.summary.checks.failed }}；未执行 {{ n.summary.checks.not_run }}；受阻 {{ n.summary.checks.blocked }}<span v-if="n.summary.checks.historical_failed">；历史失败 {{ n.summary.checks.historical_failed }}</span>。历史证据不能满足当前版本门禁。</p></details></section>
         <section v-if="section === 'execution'" class="content-section">
-          <h2>实际工作进展</h2>
+          <div class="section-heading"><h2>工作进展</h2><span class="status">结果与下一动作</span></div>
           <p v-if="!work.length" class="empty">
             尚未接手；没有已提交的实际工作结果。
           </p>
-          <article v-for="a in work" class="work-unit">
-            <div>
+          <div class="work-timeline"><article v-for="a in work" :key="a.id" class="timeline-item">
+            <span class="timeline-marker"><AppIcon :name="a.status === 'pass' ? 'check' : 'clock'" /></span><div>
               <h3>{{ label(a.unit) }} · {{ a.executor }}</h3>
               <span class="status" :class="a.status">{{
                 label(a.status)
               }}</span>
-            </div>
             <p>{{ a.reason || "已接手，尚未提交实际结果。" }}</p>
-            <small
+            <time
               >{{ stamp(a.started) }} →
-              {{ a.ended ? stamp(a.ended) : "尚未结束" }}</small
+              {{ a.ended ? stamp(a.ended) : "尚未结束" }}</time
             >
             <div class="actions">
               <button v-for="ref in a.outputs" @click="openArtifact(ref)">
                 查看产物 {{ ref }}
               </button>
             </div>
-          </article>
+            </div>
+          </article></div>
         </section>
+        <details v-if="section === 'execution'" class="technical source-detail" :open="technicalOpen" @toggle="technicalToggle"><summary>技术记录</summary>
+        <details v-if="claimed">
+          <summary>高级协议结果提交</summary>
+          <p>
+            当前已领取工作的完整
+            StepResult；仍经过原协议、授权、候选和修订校验。
+          </p>
+          <label
+            >完整步骤结果 JSON<textarea
+              v-model="advancedResult"
+              rows="8"
+              spellcheck="false"
+            ></textarea></label
+          ><button :disabled="busy" @click="submit(true)">
+            提交完整步骤结果
+          </button>
+        </details>
+        <h2>执行计划</h2><ol class="plan"><li v-for="step in t.plan.steps" :key="step" :class="{ current: step === t.current_step }">{{ label(step) }}<span v-if="step === t.current_step"> · 当前节点</span></li></ol><small>计划修订 {{ t.plan.revision }} · 计划节点不代表完成百分比</small>
+        <dl class="facts">
+          <div
+            v-for="[key, value] in Object.entries({
+              任务: t.definition.id,
+              定义修订: n.definition_revision,
+              计划修订: n.plan_revision,
+              候选: t.candidate,
+              原始下一动作: n.next_action,
+              原始来源: t.definition.source,
+            })"
+          >
+            <dt>{{ key }}</dt>
+            <dd>{{ value || "未记录" }}</dd>
+          </div>
+        </dl>
+        <details>
+          <summary>Attempt、租约与交付记录</summary>
+          <pre>{{
+            JSON.stringify(
+              {
+                attempts: t.attempts,
+                delivery: t.delivery,
+                history: t.history,
+              },
+              null,
+              2,
+            )
+          }}</pre>
+        </details>
+        <p v-if="technicalOpen && !eventsLoaded && !error" role="status" class="loading">
+          正在读取任务技术记录…
+        </p>
+        <details v-if="eventsLoaded">
+          <summary>原始事件（{{ events.length }} 条）</summary>
+          <article v-for="e in events" class="record-row">
+            <strong>{{ e.kind }}</strong> · {{ stamp(e.at) }}
+            <pre>{{ JSON.stringify(e.body, null, 2) }}</pre>
+          </article>
+        </details>
+        <details>
+          <summary>完整定义与规范指纹</summary>
+          <pre>{{
+            JSON.stringify(
+              {
+                definition: t.definition,
+                basis: t.applicable_knowledge,
+                policy: t.policy_hash,
+              },
+              null,
+              2,
+            )
+          }}</pre>
+        </details>
+        <div class="actions">
+          <button
+            :disabled="busy || t.status !== 'open'"
+            @click="start('edit', '修订任务定义')"
+          >
+            编辑任务定义</button
+          ><button
+            class="danger-text"
+            :disabled="
+              busy ||
+              t.attempts?.some((a: any) =>
+                ['running', 'interrupted'].includes(a.status),
+              )
+            "
+            @click="start('delete', '永久删除任务')"
+          >
+            永久删除任务
+          </button>
+        </div>
+        <p class="secondary">
+          活动或未核实停止的执行会阻止删除；入向依赖与引用仍由内核保护。
+        </p>
+      </details>
       </section>
       <section v-if="section === 'basis'">
         <p v-if="!basis && !error" role="status" class="loading">
@@ -915,14 +1088,11 @@ function checkReason(c: any) {
             </button>
           </div>
         </section>
-        <h2>适用规范与参考依据</h2>
-        <p class="secondary">
-          列出实际提供过的准确版本及显式引用；不把范围相关性当作已经使用的证明。
-        </p>
+        <div class="info-strip"><AppIcon name="knowledge" /><span>显示本任务实际提供过的准确版本及显式引用；不把范围相关性当作已经使用的证明。</span></div>
         <p v-if="basis && !basis.records.length" class="empty">
           本任务尚无已提供或显式引用的规范与决策。
         </p>
-        <article v-for="k in basis?.records || []" class="record-row">
+        <div v-if="basis?.records?.length" class="record-list task-basis-list"><article v-for="k in basis.records" :key="k.id" class="record-row"><span class="basis-icon"><AppIcon name="file" /></span><div>
           <h3>{{ k.title }}</h3>
           <p>
             <span class="status"
@@ -947,7 +1117,7 @@ function checkReason(c: any) {
               }}</button
             ><a :href="knowledgeHref(k.id)">查看当前资料与来源</a>
           </div>
-        </article>
+        </div></article></div>
         <LoadState
           :loading="readingLoading"
           :error="readingError"
@@ -1006,101 +1176,7 @@ function checkReason(c: any) {
           </article>
         </section>
       </section>
-      <section v-if="section === 'technical'" class="technical">
-        <details v-if="claimed">
-          <summary>高级协议结果提交</summary>
-          <p>
-            当前已领取工作的完整
-            StepResult；仍经过原协议、授权、候选和修订校验。
-          </p>
-          <label
-            >完整步骤结果 JSON<textarea
-              v-model="advancedResult"
-              rows="8"
-              spellcheck="false"
-            ></textarea></label
-          ><button :disabled="busy" @click="submit(true)">
-            提交完整步骤结果
-          </button>
-        </details>
-        <h2>技术记录</h2>
-        <dl class="facts">
-          <div
-            v-for="[key, value] in Object.entries({
-              任务: t.definition.id,
-              定义修订: n.definition_revision,
-              计划修订: n.plan_revision,
-              候选: t.candidate,
-              原始下一动作: n.next_action,
-              原始来源: t.definition.source,
-            })"
-          >
-            <dt>{{ key }}</dt>
-            <dd>{{ value || "未记录" }}</dd>
-          </div>
-        </dl>
-        <details>
-          <summary>Attempt、租约与交付记录</summary>
-          <pre>{{
-            JSON.stringify(
-              {
-                attempts: t.attempts,
-                delivery: t.delivery,
-                history: t.history,
-              },
-              null,
-              2,
-            )
-          }}</pre>
-        </details>
-        <p v-if="!eventsLoaded && !error" role="status" class="loading">
-          正在读取任务技术记录…
-        </p>
-        <details v-if="eventsLoaded">
-          <summary>原始事件（{{ events.length }} 条）</summary>
-          <article v-for="e in events" class="record-row">
-            <strong>{{ e.kind }}</strong> · {{ stamp(e.at) }}
-            <pre>{{ JSON.stringify(e.body, null, 2) }}</pre>
-          </article>
-        </details>
-        <details>
-          <summary>完整定义与规范指纹</summary>
-          <pre>{{
-            JSON.stringify(
-              {
-                definition: t.definition,
-                basis: t.applicable_knowledge,
-                policy: t.policy_hash,
-              },
-              null,
-              2,
-            )
-          }}</pre>
-        </details>
-        <div class="actions">
-          <button
-            :disabled="busy || t.status !== 'open'"
-            @click="start('edit', '修订任务定义')"
-          >
-            编辑任务定义</button
-          ><button
-            class="danger-text"
-            :disabled="
-              busy ||
-              t.attempts?.some((a: any) =>
-                ['running', 'interrupted'].includes(a.status),
-              )
-            "
-            @click="start('delete', '永久删除任务')"
-          >
-            永久删除任务
-          </button>
-        </div>
-        <p class="secondary">
-          活动或未核实停止的执行会阻止删除；入向依赖与引用仍由内核保护。
-        </p>
-      </section>
-      </div><aside class="next-panel"><h2>下一步</h2><p>{{ nextAction(n.summary) }}</p><button v-if="availableHumanChecks.length" class="primary" @click="manualCheck = availableHumanChecks[0].id">开始人工验收</button><button v-else-if="recoverable" @click="start('resume', '恢复任务')">恢复任务</button><button v-else-if="t.confirmation" @click="setQuery({ section: 'basis' })">审阅当前方案</button><button v-else-if="runnable" @click="start('claim', '接手当前工作')">接手当前工作</button><button v-else-if="t.current_step === 'verify'" @click="setQuery({ section: 'checks' })">查看检查与验收</button><div class="next-panel-facts"><h3>工作信息</h3><p>交付目标：{{ goalLabel(t.definition.goal) }}</p><p>当前候选：{{ t.candidate ? t.candidate.slice(0, 12) : '尚未生成' }}</p><p>执行者：{{ n.summary.executors.length ? n.summary.executors.join('、') : '当前无人执行' }}</p></div></aside></div>
+      </div><aside class="next-panel"><section><h2>下一步</h2><p>{{ nextAction(n.summary) }}</p><button v-if="primaryKind" :class="{ primary: primaryKind === 'review' }" @click="primaryAction">{{ ({ review: '开始人工验收', resume: '恢复任务', decision: '审阅当前方案', claim: '接手当前工作', checks: '查看检查与验收' } as Record<string, string>)[primaryKind] }}</button><button v-else-if="claimed" @click="showWorkForm">提交本次工作结果</button><button v-else-if="n.board === 'active'" @click="setQuery({ section: 'execution' })">查看当前执行</button><div v-if="unownedRunning" class="lost-claim-help"><p>当前标签页没有这次接手的凭据。若原执行确已停止，可以确认后恢复任务并重新接手。</p><button @click="start('resume', '恢复无法继续的接手')">恢复无法继续的接手</button></div></section><section class="next-panel-facts"><h3>工作信息</h3><dl><div><dt>执行 / 负责</dt><dd>{{ n.summary.executors.length ? n.summary.executors.join('、') : '当前无人执行' }}</dd></div><div><dt>交付目标</dt><dd>{{ goalLabel(t.definition.goal) }}</dd></div><div><dt>当前候选</dt><dd :title="t.candidate || ''">{{ t.candidate ? t.candidate.slice(0, 12) : '尚未生成' }}</dd></div><div><dt>影响范围</dt><dd>{{ t.definition.scope?.join('、') || '未限定路径' }}</dd></div></dl></section><section class="next-panel-facts"><h3>相关依据</h3><p>{{ t.applicable_knowledge?.length ? '已提供 ' + t.applicable_knowledge.length + ' 份依据' : t.definition.knowledge?.length ? '任务包含明确引用' : '尚无已提供的依据' }}</p><button @click="setQuery({ section: 'basis' })">查看规范与决策 →</button></section></aside></div>
     </template>
     <section
       v-if="artifact || artifactError || artifactLoading"
@@ -1150,7 +1226,7 @@ function checkReason(c: any) {
         >操作理由<textarea v-model="reason" required rows="3"></textarea>
       </label>
       <label v-if="op.action === 'resume'" class="inline"
-        ><input type="checkbox" v-model="ack" />我已核实旧执行进程停止</label
+        ><input type="checkbox" v-model="ack" required />我已核实此任务的所有旧执行进程均已停止</label
       >
       <label v-if="op.action === 'resume'"
         >恢复位置<select v-model="resumeTarget">
@@ -1167,7 +1243,7 @@ function checkReason(c: any) {
         </select></label
       >
       <p v-if="op.action === 'resume'" class="secondary">
-        保留当前节点或回到选择的更早责任；未知或仍在运行的进程不会被擅自释放。
+        恢复会结束此任务所有正在执行或中断的旧接手；请先确认它们都已停止。保留当前节点或回到选择的更早责任，仍由后端检查进程状态。
       </p>
       <label v-if="op.action === 'edit'"
         >任务定义 JSON<textarea

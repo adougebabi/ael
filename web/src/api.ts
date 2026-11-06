@@ -70,6 +70,11 @@ export const info = ref<any>({});
 export const infoError = ref("");
 export const infoLast = ref("");
 export const notices = ref("");
+export const refreshRevision = ref(0);
+export function refreshCurrentView() {
+  refreshRevision.value++;
+  void refreshInfo();
+}
 export async function refreshInfo() {
   try {
     info.value = await api("/api/info");

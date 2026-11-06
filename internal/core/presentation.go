@@ -11,6 +11,7 @@ import (
 
 type CheckSummary struct {
 	Required         int `json:"required"`
+	RequiredPassed   int `json:"required_passed"`
 	Passed           int `json:"passed"`
 	Failed           int `json:"failed"`
 	NotRun           int `json:"not_run"`
@@ -136,6 +137,9 @@ func (s *Service) Summarize(n Next) (TaskSummary, error) {
 			switch e.Result {
 			case "pass":
 				r.Checks.Passed++
+				if c.Required {
+					r.Checks.RequiredPassed++
+				}
 			case "fail":
 				r.Checks.Failed++
 			case "blocked":

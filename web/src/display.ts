@@ -84,6 +84,9 @@ const labels: Record<string, string> = {
   retired: "已切换权威来源",
   ignored: "已忽略",
   success: "成功",
+  interface_available: "接口可调用",
+  unavailable: "不可用",
+  not_probed: "尚未探测",
 };
 export const label = (value: string) =>
   value?.startsWith("check:")

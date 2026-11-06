@@ -4,7 +4,7 @@ import MarkdownIt from "markdown-it";
 import { api, params } from "../api";
 import { knowledgeHref, navigate, route } from "../router";
 import { readableError } from "../display";
-const props = defineProps<{ body: string; id: string }>();
+const props = defineProps<{ body: string; id: string; tocRight?: boolean }>();
 const linkError = ref("");
 const md = new MarkdownIt({ html: false, linkify: false, typographer: false });
 md.disable("image");
@@ -71,8 +71,8 @@ async function click(e: MouseEvent) {
 }
 </script>
 <template>
-  <div class="reader-layout">
-    <nav v-if="headings.length > 1" class="toc" aria-label="正文目录">
+  <div class="reader-layout" :class="{ 'reader-layout-right': tocRight }">
+    <nav v-if="!tocRight && headings.length > 1" class="toc" aria-label="正文目录">
       <strong>本文目录</strong
       ><button v-for="h in headings" :key="h.id" @click="scroll(h.id)">
         {{ h.title }}
@@ -88,5 +88,9 @@ async function click(e: MouseEvent) {
       </div>
       <article class="markdown" @click="click" v-html="html"></article>
     </div>
+    <aside v-if="tocRight" class="reader-sidebar">
+      <nav v-if="headings.length > 1" class="toc" aria-label="正文目录"><strong>本文目录</strong><button v-for="h in headings" :key="h.id" :class="h.level" @click="scroll(h.id)">{{ h.title }}</button></nav>
+      <slot name="sidebar" />
+    </aside>
   </div>
 </template>

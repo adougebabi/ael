@@ -54,6 +54,31 @@ func TestTaskSummaryUsesExactEvidenceAndIgnoresHeartbeats(t *testing.T) {
 	}
 }
 
+func TestRequiredPassedExcludesOptionalChecks(t *testing.T) {
+	s := fixture(t)
+	d := core.Definition{Title: "必需检查统计", Type: "bug", Goal: "verified", Acceptance: []string{"结果正确"}, Checks: []core.Check{
+		{ID: "required", Kind: "functional", Command: []string{"sh", "-c", "true"}, Covers: []string{"结果正确"}, Required: true},
+		{ID: "optional", Kind: "functional", Command: []string{"sh", "-c", "true"}, Covers: []string{"结果正确"}},
+	}}
+	id := atVerify(t, s, d)
+	n, err := s.Verify(id, "optional", "checker")
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary, err := s.Summarize(n)
+	if err != nil || summary.Checks.Passed != 1 || summary.Checks.Required != 1 || summary.Checks.RequiredPassed != 0 {
+		t.Fatal("optional pass must not satisfy required progress", summary, err)
+	}
+	n, err = s.Verify(id, "required", "checker")
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary, err = s.Summarize(n)
+	if err != nil || summary.Checks.Passed != 2 || summary.Checks.RequiredPassed != 1 {
+		t.Fatal("required pass was not counted", summary, err)
+	}
+}
+
 func TestTerminalSummaryDoesNotPresentOldBlockerAsCurrent(t *testing.T) {
 	s := fixture(t)
 	id := create(t, s, core.Definition{Title: "取消受阻任务", Type: "bug", Goal: "verified", Acceptance: []string{"保留结果"}})

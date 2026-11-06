@@ -383,8 +383,9 @@ func Listen(s *core.Service, addr string, extra func(http.ResponseWriter, *http.
 	return (&http.Server{Handler: h, ReadHeaderTimeout: 5 * time.Second}).Serve(ln)
 }
 
-// A wildcard bind accepts IP authorities on the bound port and local host names.
-// Arbitrary DNS names remain rejected; Origin must match the validated request.
+// A loopback bind also accepts localhost on the bound port. A wildcard bind
+// accepts IP authorities and local host names; arbitrary DNS names stay rejected.
+// Origin must always match the validated request authority.
 func (h *Handler) acceptsHost(authority string) bool {
 	if authority == h.Host {
 		return true
@@ -393,12 +394,15 @@ func (h *Handler) acceptsHost(authority string) bool {
 	if e != nil {
 		return false
 	}
-	ip := net.ParseIP(bind)
-	if bind != "" && (ip == nil || !ip.IsUnspecified()) {
-		return false
-	}
 	host, p, e := net.SplitHostPort(authority)
 	if e != nil || p != port {
+		return false
+	}
+	ip := net.ParseIP(bind)
+	if ip != nil && ip.IsLoopback() {
+		return strings.EqualFold(host, "localhost")
+	}
+	if bind != "" && (ip == nil || !ip.IsUnspecified()) {
 		return false
 	}
 	if parsed := net.ParseIP(host); parsed != nil {

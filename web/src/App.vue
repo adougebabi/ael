@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { info, infoError, infoLast, notices, refreshInfo } from "./api";
+import { info, infoError, infoLast, notices, refreshInfo, refreshCurrentView } from "./api";
 import { route, href } from "./router";
 import TaskList from "./pages/TaskList.vue";
 import TaskPage from "./pages/TaskPage.vue";
@@ -10,6 +10,7 @@ import EvolutionPage from "./pages/EvolutionPage.vue";
 import SettingsPage from "./pages/SettingsPage.vue";
 import AppIcon from "./components/AppIcon.vue";
 import GlobalSearchDialog from "./components/GlobalSearchDialog.vue";
+import { theme, applyTheme, toggleTheme } from "./theme";
 const area = computed(() => route.value.path.split("/")[1] || "tasks");
 const id = computed(() =>
   decodeURIComponent(route.value.path.split("/").slice(2).join("/")),
@@ -20,21 +21,23 @@ const titles: Record<string, string> = {
   evolution: "项目演进",
   settings: "项目设置",
 };
+const subtitles: Record<string, string> = {
+  tasks: "让工作继续向前，让需要你处理的事项一目了然。",
+  knowledge: "当前规则、设计取舍和历史依据，各在其位。",
+  evolution: "看清改变了什么、为什么改变，以及结果到了哪一步。",
+  settings: "把接入状态、资料来源和运行问题放在清楚的位置。",
+};
+const projectName = computed(() => info.value.project?.split("/").filter(Boolean).pop() || "正在连接");
+const projectInitials = computed(() => {
+  if (!info.value.project) return "…";
+  const words = projectName.value.split(/[\s_-]+/).filter(Boolean);
+  if (!words.length) return projectName.value.slice(0, 2).toUpperCase();
+  return (words.length > 1 ? words[0][0] + words[words.length - 1][0] : words[0].slice(0, 2)).toUpperCase();
+});
 function focusMain() {
   document.getElementById("main-content")?.focus();
 }
 const mobileMenu = ref(false), showSearch = ref(false);
-let savedTheme = "";
-try { savedTheme = localStorage.getItem("ael-theme") || ""; } catch {}
-const theme = ref(savedTheme === "graphite" ? "graphite" : "indigo");
-function applyTheme() {
-  document.documentElement.dataset.theme = theme.value;
-  try { localStorage.setItem("ael-theme", theme.value); } catch {}
-}
-function toggleTheme() {
-  theme.value = theme.value === "indigo" ? "graphite" : "indigo";
-  applyTheme();
-}
 function keyboard(e: KeyboardEvent) {
   const target = e.target as HTMLElement;
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k' || e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName) && !target?.isContentEditable) {
@@ -61,15 +64,14 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener('keydown', 
         @click="mobileMenu = false"><AppIcon name="loop"/><span class="mark">ael<span>/</span></span></a
       >
       <div class="workspace">
-        <span class="eyebrow">当前项目</span
-        ><strong>{{ info.project?.split("/").pop() || "正在连接" }}</strong
+        <span class="workspace-avatar" aria-hidden="true">{{ projectInitials }}</span><span class="workspace-info"><strong>{{ projectName }}</strong
         ><small>{{
           info.config?.mode === "shadow"
             ? "预览模式 · 工作流未激活"
             : info.config
               ? "活动工作区"
               : "等待读取项目身份"
-        }}</small>
+        }}</small></span>
       </div>
       <p class="sidebar-label">WORKSPACE</p><nav aria-label="主导航" @click="mobileMenu = false">
         <a
@@ -103,17 +105,17 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener('keydown', 
         </footer>
       </div>
     </aside>
-    <div class="app-frame"><header class="topbar"><button class="mobile-menu-button" aria-label="打开导航" :aria-expanded="mobileMenu" @click="mobileMenu = true"><AppIcon name="menu"/></button><div class="breadcrumbs">工作空间 <span>›</span> {{ titles[area] || '页面' }}<span v-if="id">› 详情</span></div><div class="topbar-actions"><span v-if="infoError" class="connection-alert">连接异常</span><button class="top-search" @click="showSearch = true"><AppIcon name="search"/>快速查找 <kbd>⌘ K</kbd></button><button class="icon-button" aria-label="刷新项目状态" @click="refreshInfo"><AppIcon name="loop"/></button></div></header>
+    <div class="app-frame"><header class="topbar"><button class="mobile-menu-button" aria-label="打开导航" :aria-expanded="mobileMenu" @click="mobileMenu = true"><AppIcon name="menu"/></button><div class="breadcrumbs">工作空间 <span>›</span> {{ titles[area] || '页面' }}<span v-if="id">› 详情</span></div><div class="topbar-actions"><span v-if="infoError" class="connection-alert">连接异常</span><button class="top-search" @click="showSearch = true"><AppIcon name="search"/>快速查找 <kbd>⌘ K</kbd></button><button class="icon-button" aria-label="刷新项目状态" @click="refreshCurrentView"><AppIcon name="loop"/></button></div></header>
     <main id="main-content" tabindex="-1">
       <header v-if="!id || (area === 'tasks' && id === 'new')" class="page-header">
         <div>
           <p class="eyebrow">{{ info.project?.split("/").pop() || "AEL" }}</p>
           <h1>{{ titles[area] || "页面不存在" }}</h1>
-          <p v-if="area === 'tasks'" class="page-subtitle">让工作继续向前，让需要你处理的事项一目了然。</p>
+          <p class="page-subtitle">{{ subtitles[area] }}</p>
         </div>
         <a v-if="area === 'tasks'" class="button primary" href="#/tasks/new"
           >＋ 创建任务</a
-        ><button v-else @click="refreshInfo">刷新项目状态</button>
+        ><a v-else-if="area === 'knowledge'" class="button" href="#/settings?section=sources">资料来源</a><a v-else-if="area === 'evolution'" class="button" href="#/settings?section=diagnostics">技术记录</a><button v-else @click="refreshCurrentView">刷新项目状态</button>
       </header>
       <div v-if="notices" role="status" class="notice">
         <span>{{ notices }}</span
