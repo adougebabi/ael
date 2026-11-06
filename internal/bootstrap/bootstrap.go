@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-const Version = "0.1.16"
+const Version = "0.1.17"
 
 type Config struct {
 	Schema    int    `json:"schema"`
@@ -267,6 +267,10 @@ func Open(root string) (*core.Service, Report, error) {
 	svc := &core.Service{Store: s, Root: root, Active: c.Mode == "active"}
 	svc.ResolveBasis = func(d core.Definition) ([]core.BasisReference, error) { return knowledge.Basis(root, d) }
 	svc.ConstraintCheck = func(d core.Definition) []string { return knowledge.Conflicts(root, d) }
+	svc.SnapshotConstraints = func() core.ConstraintResolvers {
+		snapshot := knowledge.Capture(root)
+		return core.ConstraintResolvers{ResolveBasis: snapshot.Basis, Check: snapshot.Conflicts}
+	}
 	if e = s.Flush(); e == nil {
 		e = svc.RecoverDefinitions()
 	}

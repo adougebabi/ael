@@ -175,6 +175,39 @@ func TestAttentionUsesCurrentHumanEligibility(t *testing.T) {
 	}
 }
 
+func TestAttentionCountsDistinctTasksBeyondRepresentativeCards(t *testing.T) {
+	s := fixture(t)
+	for i := 0; i < 4; i++ {
+		atVerify(t, s, core.Definition{Title: "等待人工检查", Type: "bug", Goal: "verified", Acceptance: []string{"result"}, Checks: []core.Check{{ID: "owner", Kind: "review", Method: "human", Covers: []string{"result"}, Required: true}}})
+	}
+	for i := 0; i < 2; i++ {
+		id := create(t, s, core.Definition{Title: "等待环境", Type: "bug", Goal: "verified", Acceptance: []string{"result"}})
+		if _, err := s.Pause(id, "等待条件"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	batchCount := 0
+	originalSnapshot := s.SnapshotConstraints
+	s.SnapshotConstraints = func() core.ConstraintResolvers { batchCount++; return originalSnapshot() }
+	page, err := s.Attention()
+	if err != nil || page.Truncated || page.Total != 6 || len(page.TaskIDs) != 6 || len(page.Items) != 3 {
+		t.Fatal("count and representative cards must be distinct", page, err)
+	}
+	if batchCount != 1 {
+		t.Fatal("attention should read knowledge once per scan", batchCount)
+	}
+	seen := map[string]bool{}
+	for _, id := range page.TaskIDs {
+		if seen[id] {
+			t.Fatal("duplicate task counted", id)
+		}
+		seen[id] = true
+	}
+	if page.Items[0].Kind != "human" || page.Items[1].Kind != "blocked" {
+		t.Fatal("representatives should preserve different attention types", page.Items)
+	}
+}
+
 func TestHumanFailureInInspectionDeliversFindingsWithoutChangingSource(t *testing.T) {
 	s := fixture(t)
 	file := filepath.Join(s.Root, "inspected.txt")

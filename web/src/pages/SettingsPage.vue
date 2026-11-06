@@ -95,6 +95,12 @@ watch(refreshRevision, load);
 function change(values: Record<string, string>) {
   setQuery({ ...values, offset: undefined });
 }
+function eventSummary(event: any) {
+  const body = event.body || {};
+  const value = body.result?.summary || body.summary || body.reason || body.failure;
+  return typeof value === "string" && value.trim() ? value : "查看原始记录了解事件详情。";
+}
+function showCurrentIssues() { document.getElementById("settings-current-issues")?.scrollIntoView({ block: "start" }); }
 async function probeExecutor() {
   if (probeBusy.value) return;
   probeBusy.value = true;
@@ -188,10 +194,10 @@ const material = computed(() =>
     <section v-if="section === 'overview' && status">
       <p class="settings-notice">接入状态、迁移应用、工作流激活和执行器能力分别读取；未探测的能力不会被当作可用。</p>
       <div class="settings-summary-grid"><section class="settings-summary-card"><span class="settings-icon"><AppIcon name="knowledge" /></span><div><h2>资料可用性 <span class="status">{{ material }}</span></h2><p v-if="status.knowledge?.state === 'conflict'">存在需要核实的规范冲突。</p><p v-else>规范、决策与历史资料可按实际来源查看。</p><a href="#/knowledge">打开规范库 →</a></div></section><section class="settings-summary-card"><span class="settings-icon"><AppIcon name="loop" /></span><div><h2>工作流激活 <span class="status">{{ status.workflow_active ? '已激活' : '尚未激活' }}</span></h2><p>{{ status.workflow_active ? '工作流已接入，仍按任务权限执行。' : '资料导入与正式接管是两个独立步骤；激活使用原 CLI 授权。' }}</p><a href="#/settings?section=diagnostics">查看接入信息 →</a></div></section></div>
-      <section class="settings-panel"><div class="settings-panel-head"><h2>执行器能力</h2><button :disabled="probeBusy" @click="probeExecutor">{{ probeBusy ? '探测中…' : '探测受管执行器接口' }}</button></div><div class="capability-line"><span class="settings-icon"><AppIcon name="layers" /></span><div><h3>受管执行器接口</h3><p>{{ probe ? probe.reason : status.executor?.reason }}</p></div><span class="status">{{ probe ? label(probe.state) : '尚未探测' }}</span></div><details v-if="probe"><summary>探测详情</summary><pre>{{ JSON.stringify(probe, null, 2) }}</pre></details></section>
+      <section class="settings-panel"><div class="settings-panel-head"><h2>执行器能力</h2><button :disabled="probeBusy" @click="probeExecutor">{{ probeBusy ? '探测中…' : '探测受管执行器接口' }}</button></div><div class="capability-line"><span class="settings-icon"><AppIcon name="layers" /></span><div><h3>受管执行器接口</h3><p>{{ probe ? probe.reason : status.executor?.reason }}</p></div><span class="status">{{ probe ? label(probe.state) : '尚未探测' }}</span></div><div v-for="item in [{ title: '命令检查', description: '由任务执行真实命令并记录结果。' }, { title: '浏览器验收', description: '由具备浏览器能力的执行者检查实际页面。' }, { title: '测试环境', description: '具体依赖和阻塞由相应任务记录。' }]" :key="item.title" class="capability-line"><span class="settings-icon"><AppIcon :name="item.title === '浏览器验收' ? 'knowledge' : item.title === '测试环境' ? 'shield' : 'play'" /></span><div><h3>{{ item.title }}</h3><p>{{ item.description }}</p></div><span class="status">未单独探测</span></div><button v-if="status.issues?.length" class="inline-link" @click="showCurrentIssues">查看受影响的任务 →</button><details v-if="probe"><summary>探测详情</summary><pre>{{ JSON.stringify(probe, null, 2) }}</pre></details></section>
       <section class="settings-panel settings-migration"><div><h2>初始化与资料迁移</h2><p>{{ status.applied_migrations ? '已应用 ' + status.applied_migrations + ' 个批次。' : '尚无已应用的迁移批次。' }} 先审阅来源与影响，再确认当前计划。</p><a href="#/settings?section=migrations">查看已有迁移 →</a></div><button :disabled="busy" @click="start('preview')">扫描与预览</button></section>
       <section class="settings-panel settings-appearance"><h2>外观</h2><p>选择工作台强调色；等待使用琥珀提示，失败与危险使用红色。</p><div><button :class="{ chosen: theme === 'indigo' }" :aria-pressed="theme === 'indigo'" @click="setTheme('indigo')"><span class="theme-palette indigo"><i></i><i></i><i></i><i></i></span>靛蓝 · 默认 <span v-if="theme === 'indigo'" aria-hidden="true">✓</span></button><button :class="{ chosen: theme === 'graphite' }" :aria-pressed="theme === 'graphite'" @click="setTheme('graphite')"><span class="theme-palette graphite"><i></i><i></i><i></i><i></i></span>石墨 · 更克制 <span v-if="theme === 'graphite'" aria-hidden="true">✓</span></button></div></section>
-      <section class="content-section">
+      <section id="settings-current-issues" class="content-section">
         <h2>当前需要处理的问题</h2>
         <p v-if="!status.issues?.length" class="empty">
           当前没有任务报告明确阻断；这不代表尚未探测的能力已通过。
@@ -213,7 +219,7 @@ const material = computed(() =>
       </section>
     </section>
     <section v-if="section === 'sources'">
-      <h2>原始资料与权威来源</h2>
+      <div class="section-heading"><h2>原始资料与权威来源</h2><button :disabled="busy" @click="start('preview')">查看扫描预览</button></div>
       <p>
         {{
           label(data.health?.state)
@@ -305,6 +311,7 @@ const material = computed(() =>
               m.groups.find((g: any) => g.category === "unknown")?.count || 0
             }}
           </p>
+          <div class="actions"><button :disabled="busy" @click="start('verify', m.id)">核验迁移</button><a :href="'#/settings?' + params({ section: 'migrations', batch: m.id, mode: 'warnings' })">查看告警 →</a></div><p v-if="verification[m.id]" class="secondary">{{ verification[m.id].valid ? '本次核验通过。' : '本次核验发现问题，请查看批次详情。' }}</p>
         </article></template
       >
       <template v-else-if="data.id"
@@ -328,10 +335,8 @@ const material = computed(() =>
           <small
             >计划生成于 {{ stamp(data.created) }}；执行时间未单独记录。</small
           >
-          <div v-if="batch !== 'preview'" class="actions">
-            <button :disabled="busy" @click="start('verify', batch)">
-              核验迁移</button
-            ><button
+          <div v-if="batch !== 'preview'" class="actions"><button :disabled="busy" @click="start('verify', batch)">核验迁移</button><button @click="change({ mode: 'warnings' })">查看告警</button></div>
+          <details v-if="batch !== 'preview'" class="source-detail"><summary>高级操作与迁移标识</summary><p>批次：{{ batch }}</p><div class="actions"><button
               :disabled="busy || data.state === 'rolled_back'"
               @click="start('repair', batch)"
             >
@@ -342,7 +347,7 @@ const material = computed(() =>
             >
               回滚本次导入
             </button>
-          </div>
+          </div></details>
           <p v-if="data.activated" class="failure">
             本批次包含已授权的激活；回滚范围仍由原接口核验与保护。
           </p>
@@ -537,6 +542,7 @@ const material = computed(() =>
       </p>
       <article v-for="e in data.events" class="record-row">
         <h3>{{ e.kind }}</h3>
+        <p class="secondary">{{ eventSummary(e) }}</p>
         <small
           >{{ stamp(e.at) }}
           <a v-if="e.task" :href="taskHref(e.task, 'technical')"

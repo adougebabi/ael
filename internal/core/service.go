@@ -16,11 +16,17 @@ import (
 )
 
 type Service struct {
-	Store           *store.Store
-	Root            string
-	Active          bool
-	ResolveBasis    func(Definition) ([]BasisReference, error)
-	ConstraintCheck func(Definition) []string
+	Store               *store.Store
+	Root                string
+	Active              bool
+	ResolveBasis        func(Definition) ([]BasisReference, error)
+	ConstraintCheck     func(Definition) []string
+	SnapshotConstraints func() ConstraintResolvers
+}
+
+type ConstraintResolvers struct {
+	ResolveBasis func(Definition) ([]BasisReference, error)
+	Check        func(Definition) []string
 }
 
 func ID(prefix string) string {
@@ -407,35 +413,47 @@ func (s *Service) List() ([]Next, error) {
 	return all, nil
 }
 func (s *Service) Next(id string) (Next, error) {
+	return s.next(id, true)
+}
+
+// next can omit artifact reads for list projections which only need task
+// eligibility. Detail views still receive the original evidence availability.
+func (s *Service) next(id string, includeArtifacts bool) (Next, error) {
+	return s.nextWithConstraints(id, includeArtifacts, s.ResolveBasis, s.ConstraintCheck)
+}
+
+func (s *Service) nextWithConstraints(id string, includeArtifacts bool, resolveBasis func(Definition) ([]BasisReference, error), constraintCheck func(Definition) []string) (Next, error) {
 	t, e := s.Get(id)
 	if e != nil {
 		return Next{}, e
 	}
-	for i := range t.Evidence {
-		ev := &t.Evidence[i]
-		ev.ArtifactStatus = map[string]string{}
-		workspace := t.CandidateWorkspace
-		if workspace == "" {
-			workspace = s.Root
-		}
-		for _, ref := range ev.Artifacts {
-			if _, err := s.artifactAt(workspace, ref); err != nil {
-				ev.ArtifactStatus[ref] = "摘要保留 / 原件已清理或缺失"
-			} else {
-				ev.ArtifactStatus[ref] = "原件可读取"
+	if includeArtifacts {
+		for i := range t.Evidence {
+			ev := &t.Evidence[i]
+			ev.ArtifactStatus = map[string]string{}
+			workspace := t.CandidateWorkspace
+			if workspace == "" {
+				workspace = s.Root
+			}
+			for _, ref := range ev.Artifacts {
+				if _, err := s.artifactAt(workspace, ref); err != nil {
+					ev.ArtifactStatus[ref] = "摘要保留 / 原件已清理或缺失"
+				} else {
+					ev.ArtifactStatus[ref] = "原件可读取"
+				}
 			}
 		}
 	}
 	n := t.BaseNext()
-	if s.ResolveBasis != nil && t.Status == "open" && (t.Step == "verify" || t.Step == "delivery") {
-		refs, err := s.ResolveBasis(t.Definition)
+	if resolveBasis != nil && t.Status == "open" && (t.Step == "verify" || t.Step == "delivery") {
+		refs, err := resolveBasis(t.Definition)
 		if err == nil && !sameBasis(t.Basis, refs) {
 			n.Action = "wait_environment"
 			n.Reasons = append(n.Reasons, "applicable knowledge changed after execution; return to execute, load current basis and revalidate affected candidate")
 		}
 	}
-	if s.ConstraintCheck != nil && t.Status == "open" {
-		for _, reason := range s.ConstraintCheck(t.Definition) {
+	if constraintCheck != nil && t.Status == "open" {
+		for _, reason := range constraintCheck(t.Definition) {
 			n.Action = "wait_environment"
 			if strings.Contains(reason, "unresolved knowledge conflict") {
 				n.Action = "wait_confirmation"

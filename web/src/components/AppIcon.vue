@@ -7,6 +7,7 @@ defineProps<{ name: string }>();
   <template v-else-if="name === 'evolution'"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="6" r="2"/><path d="M6 7v10M8 16c6 0 10-2 10-8"/></template>
   <template v-else-if="name === 'settings'"><path d="m10 3-.5 2.2-2 .9-2-.7-2 3.4 1.6 1.5v2.4l-1.6 1.5 2 3.4 2-.7 2 .9.5 2.2h4l.5-2.2 2-.9 2 .7 2-3.4-1.6-1.5v-2.4L21 8.8l-2-3.4-2 .7-2-.9L14 3z"/><circle cx="12" cy="11.5" r="3"/></template>
   <template v-else-if="name === 'search'"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></template>
+  <template v-else-if="name === 'star'"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z"/></template>
   <template v-else-if="name === 'menu'"><path d="M4 6h16M4 12h16M4 18h16"/></template>
   <template v-else-if="name === 'theme'"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 0 0 16z"/></template>
   <template v-else-if="name === 'file'"><path d="M6 3h8l4 4v14H6zM14 3v5h5M9 12h6M9 16h6"/></template>

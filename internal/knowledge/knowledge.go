@@ -191,15 +191,32 @@ func inScope(r Record, d core.Definition) bool {
 	}
 	return false
 }
-func Conflicts(root string, d core.Definition) []string {
-	all, e := ReadAll(root)
-	if e != nil {
-		return []string{e.Error()}
+
+// Snapshot holds one consistent read of the knowledge sources for a bounded
+// batch of read-only task projections. Mutating actions still read afresh.
+type Snapshot struct {
+	records    []Record
+	readErr    error
+	catalogErr error
+}
+
+func Capture(root string) *Snapshot {
+	all, err := ReadAll(root)
+	if err != nil {
+		return &Snapshot{readErr: err}
+	}
+	_, catalogErr := readCatalog(root)
+	return &Snapshot{records: all, catalogErr: catalogErr}
+}
+
+func (snapshot *Snapshot) Conflicts(d core.Definition) []string {
+	if snapshot.readErr != nil {
+		return []string{snapshot.readErr.Error()}
 	}
 	out := []string{}
 	for _, id := range d.Knowledge {
 		found := false
-		for _, r := range all {
+		for _, r := range snapshot.records {
 			if r.ID == id {
 				found = true
 			}
@@ -208,18 +225,19 @@ func Conflicts(root string, d core.Definition) []string {
 			out = append(out, "KNOWLEDGE_MISSING: "+id)
 		}
 	}
-	if _, e := readCatalog(root); os.IsNotExist(e) {
+	if os.IsNotExist(snapshot.catalogErr) {
 		out = append(out, "KNOWLEDGE_NOT_INDEXED: run knowledge index")
-	} else if e != nil {
-		out = append(out, e.Error())
+	} else if snapshot.catalogErr != nil {
+		out = append(out, snapshot.catalogErr.Error())
 	}
-	for _, r := range all {
+	for _, r := range snapshot.records {
 		if r.Status == "conflict" && inScope(r, d) {
 			out = append(out, "unresolved knowledge conflict: "+r.ID)
 		}
 	}
 	return out
 }
+func Conflicts(root string, d core.Definition) []string { return Capture(root).Conflicts(d) }
 func Context(s *core.Service, id, query string, budget int) (any, error) {
 	if e := Sync(s); e != nil {
 		return nil, e
@@ -308,19 +326,18 @@ func Encode(r Record) []byte {
 }
 
 // Basis returns the same effective, scoped versions used by Context, for submission freshness checks.
-func Basis(root string, d core.Definition) ([]core.BasisReference, error) {
-	if reasons := Conflicts(root, d); len(reasons) > 0 {
+func (snapshot *Snapshot) Basis(d core.Definition) ([]core.BasisReference, error) {
+	if reasons := snapshot.Conflicts(d); len(reasons) > 0 {
 		return nil, core.Error("KNOWLEDGE_UNAVAILABLE", strings.Join(reasons, "; "))
 	}
-	all, e := ReadAll(root)
-	if e != nil {
-		return nil, e
-	}
 	out := []core.BasisReference{}
-	for _, r := range all {
+	for _, r := range snapshot.records {
 		if inScope(r, d) && (r.Status == "current" || r.Status == "accepted" || slices.Contains(d.Knowledge, r.ID)) {
 			out = append(out, core.BasisReference{ID: r.ID, Source: r.Path, Version: r.Hash, Status: r.Status, Reason: "scope or explicit reference"})
 		}
 	}
 	return out, nil
+}
+func Basis(root string, d core.Definition) ([]core.BasisReference, error) {
+	return Capture(root).Basis(d)
 }

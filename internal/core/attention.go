@@ -11,11 +11,17 @@ type AttentionItem struct {
 
 type AttentionPage struct {
 	Items     []AttentionItem `json:"items"`
+	Total     int             `json:"total"`
+	TaskIDs   []string        `json:"task_ids"`
 	Truncated bool            `json:"truncated"`
 }
 
 func (s *Service) Attention() (AttentionPage, error) {
-	page := AttentionPage{Items: []AttentionItem{}}
+	page := AttentionPage{Items: []AttentionItem{}, TaskIDs: []string{}}
+	seen := map[string]bool{}
+	extras := []AttentionItem{}
+	resolveBasis, constraintCheck := s.ResolveBasis, s.ConstraintCheck
+	snapshotReady := false
 	queries := []struct {
 		kind, clause string
 		args         []any
@@ -43,26 +49,60 @@ func (s *Service) Attention() (AttentionPage, error) {
 		if err != nil {
 			return page, err
 		}
-		found := false
-		for _, id := range ids[:min(len(ids), 200)] {
-			n, err := s.Next(id)
-			if err != nil {
-				return page, err
-			}
-			summary, err := s.Summarize(n)
-			if err != nil {
-				return page, err
-			}
-			if query.kind == "human" && len(summary.ManualReviews) == 0 || query.kind == "decision" && !summary.RequiresTaskDecision || query.kind == "blocked" && summary.Blocker == "" && summary.Action != "wait_environment" {
-				continue
-			}
-			page.Items = append(page.Items, AttentionItem{Kind: query.kind, Task: summary})
-			found = true
-			break
-		}
-		if !found && len(ids) > 200 {
+		if len(ids) > 200 {
 			page.Truncated = true
 		}
+		if len(ids) > 0 && !snapshotReady && s.SnapshotConstraints != nil {
+			resolvers := s.SnapshotConstraints()
+			resolveBasis, constraintCheck = resolvers.ResolveBasis, resolvers.Check
+			snapshotReady = true
+		}
+		found := false
+		for _, id := range ids[:min(len(ids), 200)] {
+			n, err := s.nextWithConstraints(id, false, resolveBasis, constraintCheck)
+			if err != nil {
+				return page, err
+			}
+			eligible := false
+			switch query.kind {
+			case "human":
+				for _, check := range n.Task.Definition.Checks {
+					if ReviewAccess(n, check).CanReview {
+						eligible = true
+						break
+					}
+				}
+			case "decision":
+				eligible = n.Task.Status == "open" && n.Task.Confirmation != nil
+			case "blocked":
+				eligible = n.Task.Blocker != nil || n.Action == "wait_environment"
+			}
+			if !eligible || seen[id] {
+				continue
+			}
+			seen[id] = true
+			page.TaskIDs = append(page.TaskIDs, id)
+			page.Total++
+			if !found || len(extras) < 3 {
+				summary, err := s.Summarize(n)
+				if err != nil {
+					return page, err
+				}
+				item := AttentionItem{Kind: query.kind, Task: summary}
+				if !found {
+					page.Items = append(page.Items, item)
+					found = true
+				} else {
+					extras = append(extras, item)
+				}
+			}
+		}
+	}
+	for _, item := range extras {
+		if len(page.Items) >= 3 {
+			break
+		}
+		page.Items = append(page.Items, item)
 	}
 	return page, nil
 }

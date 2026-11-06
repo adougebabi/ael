@@ -50,6 +50,54 @@ func TestBrowseBoundsBodyAndKeepsAuthorityStatus(t *testing.T) {
 	}
 }
 
+func TestBrowseProjectsRealScopeCountsAndTaskReferences(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, ".ael/knowledge")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	records := []Record{
+		{ID: "frontend", Title: "前端规则", Kind: "spec", Status: "current", Summary: "真实摘要", Paths: []string{"apps/web", "shared"}, Tasks: []string{"explicit", "explicit"}, Body: "正文"},
+		{ID: "backend", Title: "后端规则", Kind: "spec", Status: "current", Paths: []string{"apps/core"}, Body: "正文"},
+		{ID: "general", Title: "项目规则", Kind: "spec", Status: "current", Body: "正文"},
+		{ID: "decision", Title: "设计决定", Kind: "decision", Status: "accepted", Paths: []string{"apps/web"}, Body: "正文"},
+	}
+	for _, r := range records {
+		if err := os.WriteFile(filepath.Join(dir, r.ID+".md"), Encode(r), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	db, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, task := range []core.Task{
+		{Definition: core.Definition{ID: "explicit", Knowledge: []string{"frontend"}}},
+		{Definition: core.Definition{ID: "implicit", Knowledge: []string{"frontend"}}},
+	} {
+		raw, _ := json.Marshal(task)
+		if _, err = db.DB.Exec("INSERT INTO tasks(id,body,status,step,updated) VALUES(?,?,?,?,?)", task.Definition.ID, string(raw), "open", "execute", ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	page, err := BrowseWithUsage(&core.Service{Root: root, Store: db}, BrowseQuery{View: "current", Scope: "apps/web"})
+	if err != nil || page.Total != 1 || page.Counts["current"] != 1 || page.ViewCounts["current"] != 3 || page.ViewCounts["decisions"] != 1 || page.ScopeCounts.All != 3 || page.ScopeCounts.Unclassified != 1 || page.ScopeCounts.Paths["apps/web"] != 1 || page.ScopeCounts.Paths["apps/core"] != 1 {
+		t.Fatal(page, err)
+	}
+	if page.Items[0].ID != "frontend" || page.Items[0].TaskCount != 2 || len(page.Items[0].Hash) != 64 || page.Items[0].Description != "真实摘要" {
+		t.Fatal("list must use actual references and version fingerprint", page.Items[0])
+	}
+	page, err = BrowseWithUsage(&core.Service{Root: root, Store: db}, BrowseQuery{View: "decisions"})
+	if err != nil || page.ScopeCounts.All != 1 || page.ScopeCounts.Paths["apps/web"] != 1 {
+		t.Fatal(page, err)
+	}
+	page, err = BrowseWithUsage(&core.Service{Root: root, Store: db}, BrowseQuery{View: "current", Text: "前端规则"})
+	if err != nil || page.Total != 1 || page.ScopeCounts.All != 3 || page.ScopeCounts.Paths["apps/core"] != 1 {
+		t.Fatal("scope navigation must count the whole selected category", page, err)
+	}
+}
+
 func TestAggregatedChangesKeepDeliveryDatesAndCurrentCandidateArtifacts(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, ".ael/knowledge")

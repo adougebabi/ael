@@ -92,71 +92,107 @@ func (t *Tx) File(path string, body []byte) error {
 	if e == nil {
 		hash = Hash(old)
 	}
-	_, e = t.Exec("INSERT INTO outbox(path,old_hash,body,state) VALUES(?,?,?,'pending') ON CONFLICT(path) DO UPDATE SET old_hash=CASE WHEN outbox.state='done' THEN excluded.old_hash ELSE outbox.old_hash END,body=excluded.body,state='pending'", path, hash, body)
-	return e
-}
-
-// Flush uses compare-and-swap and atomic rename. Conflicting user edits are retained.
-func (s *Store) Flush() error {
-	rows, e := s.DB.Query("SELECT path,old_hash,body,state FROM outbox WHERE state IN ('pending','delete_pending') ORDER BY CASE WHEN path LIKE '%/.ael/project.yaml' THEN 3 WHEN path LIKE '%/AGENTS.md' THEN 2 WHEN state='delete_pending' THEN 1 ELSE 0 END,rowid")
+	hash, e = t.intentBaseline(path, hash)
 	if e != nil {
 		return e
 	}
-	type intent struct {
-		path, old, state string
-		b                []byte
+	_, e = t.Exec("INSERT INTO outbox(path,old_hash,body,state) VALUES(?,?,?,'pending') ON CONFLICT(path) DO UPDATE SET old_hash=excluded.old_hash,body=excluded.body,state='pending'", path, hash, body)
+	return e
+}
+
+// intentBaseline recognizes an intent already applied before a crash or failed
+// DB commit. Other unexpected disk changes retain the old conflict guard.
+func (t *Tx) intentBaseline(path, current string) (string, error) {
+	var old, state string
+	var body []byte
+	err := t.Row("SELECT old_hash,body,state FROM outbox WHERE path=?", path).Scan(&old, &body, &state)
+	if err == sql.ErrNoRows {
+		return current, nil
 	}
-	var all []intent
+	if err != nil {
+		return "", err
+	}
+	if state == "done" || state == "pending" && current != "" && current == Hash(body) || state == "delete_pending" && current == "" {
+		return current, nil
+	}
+	return old, nil
+}
+
+// Flush serializes each intent's current version and filesystem update using a
+// SQLite write lock, including across processes. Earlier successful intents
+// remain committed if a later file has a genuine conflict.
+func (s *Store) Flush() error {
+	rows, e := s.DB.Query("SELECT path FROM outbox WHERE state IN ('pending','delete_pending') ORDER BY CASE WHEN path LIKE '%/.ael/project.yaml' THEN 3 WHEN path LIKE '%/AGENTS.md' THEN 2 WHEN state='delete_pending' THEN 1 ELSE 0 END,rowid")
+	if e != nil {
+		return e
+	}
+	var paths []string
 	for rows.Next() {
-		var i intent
-		if e = rows.Scan(&i.path, &i.old, &i.b, &i.state); e != nil {
+		var path string
+		if e = rows.Scan(&path); e != nil {
 			rows.Close()
 			return e
 		}
-		all = append(all, i)
+		paths = append(paths, path)
 	}
 	e = rows.Err()
 	rows.Close()
 	if e != nil {
 		return e
 	}
-	for _, i := range all {
-		b, err := os.ReadFile(i.path)
-		current := ""
-		if err == nil {
-			current = Hash(b)
-		} else if !os.IsNotExist(err) {
-			return err
-		}
-		if i.state == "delete_pending" {
-			if current != "" {
-				if current != i.old {
-					return fmt.Errorf("FILE_CONFLICT: %s; delete intent retained", i.path)
-				}
-				if e = os.Remove(i.path); e != nil {
-					return e
-				}
-			}
-			if _, e = s.DB.Exec("UPDATE outbox SET state='done' WHERE path=? AND state='delete_pending'", i.path); e != nil {
-				return e
-			}
-			continue
-		}
-		if current != Hash(i.b) && current != i.old {
-			return fmt.Errorf("FILE_CONFLICT: %s; pending intent retained", i.path)
-		}
-		if current != Hash(i.b) {
-			mode := os.FileMode(0644)
-			if st, err := os.Stat(i.path); err == nil {
-				mode = st.Mode().Perm()
-			}
-			if e = Atomic(i.path, i.b, mode); e != nil {
-				return e
-			}
-		}
-		if _, e = s.DB.Exec("UPDATE outbox SET state='done' WHERE path=? AND body=?", i.path, i.b); e != nil {
+	for _, path := range paths {
+		if e = s.Write(func(tx *Tx) error { return s.flushOne(tx, path) }); e != nil {
 			return e
 		}
+	}
+	return nil
+}
+
+func (s *Store) flushOne(tx *Tx, path string) error {
+	var old, state string
+	var body []byte
+	e := tx.Row("SELECT old_hash,body,state FROM outbox WHERE path=? AND state IN ('pending','delete_pending')", path).Scan(&old, &body, &state)
+	if e == sql.ErrNoRows {
+		return nil
+	}
+	if e != nil {
+		return e
+	}
+	b, err := os.ReadFile(path)
+	current := ""
+	if err == nil {
+		current = Hash(b)
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if state == "delete_pending" {
+		if current != "" {
+			if current != old {
+				return fmt.Errorf("FILE_CONFLICT: %s; delete intent retained", path)
+			}
+			if e = os.Remove(path); e != nil {
+				return e
+			}
+		}
+		if _, e = tx.Exec("UPDATE outbox SET state='done' WHERE path=? AND state='delete_pending'", path); e != nil {
+			return e
+		}
+		return nil
+	}
+	if current != Hash(body) && current != old {
+		return fmt.Errorf("FILE_CONFLICT: %s; pending intent retained", path)
+	}
+	if current != Hash(body) {
+		mode := os.FileMode(0644)
+		if st, err := os.Stat(path); err == nil {
+			mode = st.Mode().Perm()
+		}
+		if e = Atomic(path, body, mode); e != nil {
+			return e
+		}
+	}
+	if _, e = tx.Exec("UPDATE outbox SET state='done' WHERE path=? AND body=?", path, body); e != nil {
+		return e
 	}
 	return nil
 }
@@ -259,11 +295,17 @@ func CopyAtomic(from, to string, mode os.FileMode) error {
 func (t *Tx) DeleteFile(path string) error {
 	old, e := os.ReadFile(path)
 	if os.IsNotExist(e) {
-		return nil
+		// A queued create must not recreate a file after a later delete.
+		_, e = t.Exec("UPDATE outbox SET body=?,state='done' WHERE path=? AND state IN ('pending','delete_pending')", []byte{}, path)
+		return e
 	}
 	if e != nil {
 		return e
 	}
-	_, e = t.Exec("INSERT INTO outbox(path,old_hash,body,state) VALUES(?,?,?,'delete_pending') ON CONFLICT(path) DO UPDATE SET old_hash=CASE WHEN outbox.state='done' THEN excluded.old_hash ELSE outbox.old_hash END,body=excluded.body,state='delete_pending'", path, Hash(old), []byte{})
+	hash, e := t.intentBaseline(path, Hash(old))
+	if e != nil {
+		return e
+	}
+	_, e = t.Exec("INSERT INTO outbox(path,old_hash,body,state) VALUES(?,?,?,'delete_pending') ON CONFLICT(path) DO UPDATE SET old_hash=excluded.old_hash,body=excluded.body,state='delete_pending'", path, hash, []byte{})
 	return e
 }

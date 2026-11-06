@@ -11,7 +11,7 @@ import ManualReviewDialog from "../components/ManualReviewDialog.vue";
 import AppIcon from "../components/AppIcon.vue";
 import { pendingReviews } from "../reviewDraft";
 
-const r = useResource<any>({ groups: {}, counts: {}, total: 0, attention: [] });
+const r = useResource<any>({ groups: {}, counts: {}, total: 0, attention: [], attentionTotal: 0, attentionIds: [] });
 const { data, loading, error, last } = r;
 const recent = useResource<any>({ items: [] });
 const basis = useResource<any>({ items: [] });
@@ -23,7 +23,11 @@ const manualTarget = ref<{ id: string; check: string } | null>(null);
 const pendingTargets = ref(pendingReviews(info.value.project || ""));
 watch(() => info.value.project, (project) => { pendingTargets.value = pendingReviews(project || ""); }, { immediate: true });
 const attention = computed(() => (data.value.attention || []).filter((item: any) => !pendingTargets.value.some((pending) => pending.taskId === item.task.id)));
-const attentionCount = computed(() => attention.value.length + pendingTargets.value.length);
+const attentionCount = computed(() => {
+  const known = new Set<string>(data.value.attentionIds || []);
+  const pending = new Set(pendingTargets.value.map((item) => item.taskId));
+  return (data.value.attentionTotal || 0) + [...pending].filter((id) => !known.has(id)).length;
+});
 const currentCount = computed(() => ["active", "pending", "confirmation"].reduce((sum, id) => sum + (data.value.counts[id] || 0), 0));
 const visibleBoards = computed(() => boards.filter(([id]) => board.value === "all" ? !!data.value.counts[id] : board.value ? board.value === id : ["active", "pending", "confirmation"].includes(id) && !!data.value.counts[id]));
 const filteredCount = computed(() => board.value === "all" ? data.value.total : board.value ? data.value.counts[board.value] || 0 : currentCount.value);
@@ -48,6 +52,7 @@ async function load(quiet = false) {
       groups: Object.fromEntries(boards.map(([id]) => [id, page.items.filter((item: any) => item.board === id)])),
       counts: page.counts || {}, total: page.total || 0,
       attention: attentionResult.value?.items || [], attentionTruncated: !!attentionResult.value?.truncated,
+      attentionTotal: attentionResult.value?.total || 0, attentionIds: attentionResult.value?.task_ids || [],
       attentionError: attentionResult.error,
     };
   }, quiet);
@@ -67,9 +72,9 @@ onUnmounted(() => { clearInterval(timer); clearTimeout(debounce); });
 </script>
 <template>
   <section class="attention-section">
-    <div class="section-heading"><h2>需要你处理 <span class="count">{{ attentionCount }}</span></h2><small>验收、决策与阻塞，不必在任务里反复寻找</small></div>
-    <div v-if="attentionCount" class="attention-grid"><article v-for="pending in pendingTargets" :key="pending.taskId + ':' + pending.checkId" class="attention-card featured"><div class="attention-meta"><span><AppIcon name="clock"/>验收提交待确认</span><small>{{ pending.taskId }}</small></div><h3>{{ pending.title }}</h3><p>上次提交结果尚未确认，请原样重试并核对回执。</p><div class="attention-bottom"><small>本标签页保存的验收请求</small><button class="primary" @click="manualTarget = { id: pending.taskId, check: pending.checkId }">查看并重试</button></div></article><AttentionCard v-for="item in attention" :key="item.kind" :kind="item.kind" :task="item.task" @review="(id, check) => manualTarget = { id, check }" /></div>
-    <p v-else-if="!loading && !data.attentionError" class="attention-empty">目前没有需要你介入的事项。</p>
+    <div class="section-heading"><h2>需要你处理 <span class="count">{{ data.attentionTruncated ? '≥' : '' }}{{ attentionCount }}</span></h2><small>验收、决策与阻塞，不必在任务里反复寻找</small></div>
+    <div v-if="attentionCount" class="attention-grid"><article v-for="pending in pendingTargets" :key="pending.taskId + ':' + pending.checkId" class="attention-card featured"><div class="attention-meta"><span><AppIcon name="clock"/>验收提交待确认</span><small>{{ pending.taskId }}</small></div><h3>{{ pending.title }}</h3><p>上次提交结果尚未确认，请原样重试并核对回执。</p><div class="attention-bottom"><small>本标签页保存的验收请求</small><button class="primary" @click="manualTarget = { id: pending.taskId, check: pending.checkId }">查看并重试</button></div></article><AttentionCard v-for="item in attention" :key="item.kind + ':' + item.task.id" :kind="item.kind" :task="item.task" @review="(id, check) => manualTarget = { id, check }" /></div>
+    <p v-else-if="!loading && !data.attentionError && !data.attentionTruncated" class="attention-empty">目前没有需要你介入的事项。</p>
     <p v-if="data.attentionTruncated" class="secondary">待处理事项较多，此处仅检查了最近的部分任务；请使用下方分组查看全部任务。</p>
     <p v-if="data.attentionError" class="secondary">暂时无法读取待处理事项，请刷新工作台重试。</p>
   </section>

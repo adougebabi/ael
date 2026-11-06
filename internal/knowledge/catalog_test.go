@@ -5,9 +5,38 @@ import (
 	"ael/internal/store"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
+
+func TestBatchSnapshotMatchesFreshConstraintsAndDoesNotMutate(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, ".ael/knowledge")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "rule.md")
+	if err := os.WriteFile(path, Encode(Record{ID: "rule", Title: "规则", Kind: "spec", Status: "current", Paths: []string{"app"}, Body: "actual rule"}), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Index(root); err != nil {
+		t.Fatal(err)
+	}
+	d := core.Definition{Scope: []string{"app"}, Knowledge: []string{"rule"}}
+	snapshot := Capture(root)
+	got, err := snapshot.Basis(d)
+	want, freshErr := Basis(root, d)
+	if err != nil || freshErr != nil || !slices.Equal(got, want) || !slices.Equal(snapshot.Conflicts(d), Conflicts(root, d)) {
+		t.Fatal(got, want, err, freshErr)
+	}
+	if err = os.WriteFile(path, Encode(Record{ID: "rule", Title: "规则", Kind: "spec", Status: "conflict", Paths: []string{"app"}, Body: "changed"}), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.Conflicts(d)) != 0 || len(Conflicts(root, d)) == 0 {
+		t.Fatal("batch snapshot was not isolated from later source changes")
+	}
+}
 
 func TestWorkflowSourceLedgerAndFailures(t *testing.T) {
 	root := t.TempDir()

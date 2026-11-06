@@ -13,6 +13,15 @@ func WithUsage(s *core.Service, q string) ([]Record, error) {
 	}
 	byID := map[string]int{}
 	for i, r := range all {
+		seen := map[string]bool{}
+		distinct := make([]string, 0, len(r.Tasks))
+		for _, id := range r.Tasks {
+			if !seen[id] {
+				distinct = append(distinct, id)
+				seen[id] = true
+			}
+		}
+		all[i].Tasks = distinct
 		byID[r.ID] = i
 	}
 	rows, e := s.Store.DB.Query("SELECT body FROM tasks")

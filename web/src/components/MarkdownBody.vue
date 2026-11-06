@@ -4,7 +4,8 @@ import MarkdownIt from "markdown-it";
 import { api, params } from "../api";
 import { knowledgeHref, navigate, route } from "../router";
 import { readableError } from "../display";
-const props = defineProps<{ body: string; id: string; tocRight?: boolean }>();
+const props = withDefaults(defineProps<{ body: string; id: string; tocRight?: boolean; showBody?: boolean }>(), { showBody: true });
+const emit = defineEmits<{ showBody: [] }>();
 const linkError = ref("");
 const md = new MarkdownIt({ html: false, linkify: false, typographer: false });
 md.disable("image");
@@ -34,7 +35,8 @@ md.renderer.rules.link_open = (tokens, i, options, _env, self) => {
   return self.renderToken(tokens, i, options);
 };
 const html = computed(() => md.render(props.body));
-function scroll(id: string) {
+async function scroll(id: string) {
+  if (!props.showBody) { emit("showBody"); await nextTick(); }
   document.getElementById(id)?.scrollIntoView({ block: "start" });
 }
 function scrollFragment(fragment: string) {
@@ -44,6 +46,7 @@ function scrollFragment(fragment: string) {
   return !!heading;
 }
 async function restoreFragment() {
+  if (!props.showBody) return;
   if (route.value.path !== "/knowledge/" + encodeURIComponent(props.id)) return;
   const fragment = route.value.query.get("fragment");
   if (fragment) { await nextTick(); scrollFragment(fragment); }
@@ -86,10 +89,12 @@ async function click(e: MouseEvent) {
           <pre>{{ linkError }}</pre>
         </details>
       </div>
-      <article class="markdown" @click="click" v-html="html"></article>
+      <slot name="before" />
+      <article v-if="showBody" class="markdown" @click="click" v-html="html"></article>
+      <slot name="after" />
     </div>
     <aside v-if="tocRight" class="reader-sidebar">
-      <nav v-if="headings.length > 1" class="toc" aria-label="正文目录"><strong>本文目录</strong><button v-for="h in headings" :key="h.id" :class="h.level" @click="scroll(h.id)">{{ h.title }}</button></nav>
+      <nav v-if="headings.length" class="toc" aria-label="正文目录"><strong>本页目录</strong><button v-for="h in headings" :key="h.id" :class="h.level" @click="scroll(h.id)">{{ h.title }}</button></nav>
       <slot name="sidebar" />
     </aside>
   </div>

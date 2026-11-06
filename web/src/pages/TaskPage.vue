@@ -328,14 +328,27 @@ function stageDone(step: string) {
   if (step === "verify") return !!n.value?.summary?.checks?.required && n.value.summary.checks.required_passed === n.value.summary.checks.required;
   return !!t.value?.attempts?.some((a: any) => a.unit === step && a.status === "pass" && a.definition_revision === n.value.definition_revision && a.plan_revision === n.value.plan_revision);
 }
-const work = computed(() =>
-  [...(t.value?.attempts || [])]
-    .reverse()
-    .filter(
-      (a: any) =>
-        a.ended || a.status === "running" || a.status === "interrupted",
-    ),
-);
+const work = computed(() => {
+  const attempts = (t.value?.attempts || []).filter((a: any) => a.ended || a.status === "running" || a.status === "interrupted");
+  const approvals = (t.value?.approvals || []).map((a: any, index: number) => ({
+    id: "approval:" + index + ":" + a.at,
+    display_unit: ({ plan: "方案决定", revision: "修订决定", delivery: "交付决定" } as Record<string, string>)[a.kind] || "决定",
+    display_status: ({ approve: "已批准", adjust: "要求调整", reject: "已否决" } as Record<string, string>)[a.decision] || a.decision,
+    status: a.decision === "approve" ? "pass" : a.decision === "reject" ? "rejected" : "confirmation",
+    executor: a.actor, reason: a.reason, started: a.at, ended: a.at, outputs: [],
+  }));
+  const activities = (n.value?.activity || []).filter((event: any) => event.kind !== "confirmation" || event.historical || !(t.value?.approvals || []).length).map((event: any) => ({
+    id: "event:" + event.id,
+    display_unit: ({ paused: "任务暂缓", resumed: "任务恢复", review_resumed: "人工检查恢复", cancelled: "任务取消", definition_revised: "任务定义修订", confirmation: "历史决定记录" } as Record<string, string>)[event.kind] || "任务状态变化",
+    display_status: event.kind === "confirmation" ? "详情未保留" : event.historical ? "历史记录" : "已记录", status: "", executor: "",
+    reason: event.kind === "confirmation" ? "历史决定不代表当前授权。" : event.summary ? blockerText(event.summary) : (event.kind === "cancelled" && t.value?.status === "cancelled" ? t.value.result : ""),
+    started: event.at, ended: event.at, outputs: [],
+  }));
+  if (t.value?.historical && t.value.status === "cancelled" && t.value.completed && !(n.value?.activity || []).some((event: any) => event.kind === "cancelled")) {
+    activities.push({ id: "historical:cancelled", display_unit: "历史任务取消", display_status: "已记录", status: "", executor: "", reason: t.value.result || "", started: t.value.completed, ended: t.value.completed, outputs: [] });
+  }
+  return [...attempts, ...approvals, ...activities].sort((a: any, b: any) => Date.parse(b.ended || b.started) - Date.parse(a.ended || a.started));
+});
 watch(
   () =>
     JSON.stringify([
@@ -710,7 +723,7 @@ function checkReason(c: any) {
             <li v-for="a in t.definition.acceptance">{{ a }}</li>
           </ul>
         </section>
-        <div class="overview-cards"><section class="overview-card"><div class="section-heading"><h2>验收概况</h2><button @click="setQuery({ section: 'checks' })">全部检查 →</button></div><div class="overview-card-body"><div class="acceptance-summary"><p v-if="n.summary.checks.required" class="acceptance-count"><strong>{{ n.summary.checks.required_passed }}</strong> / {{ n.summary.checks.required }} 项必要检查通过</p><p v-else>尚未配置必需检查。</p><span class="status" :class="{ blocked: n.summary.checks.blocked || availableHumanChecks.length, pass: t.candidate && n.summary.checks.required && n.summary.checks.required_passed === n.summary.checks.required }">{{ acceptanceState }}</span></div><small>检查覆盖不等于研发进度；当前候选、验收方法和交付目标分别核对。</small></div></section><section class="overview-card"><div class="section-heading"><h2>最近进展</h2><button @click="setQuery({ section: 'execution' })">完整过程 →</button></div><div class="overview-card-body"><div v-if="work.length" class="work-timeline"><article v-for="a in work.slice(0, 3)" :key="a.id" class="timeline-item"><span class="timeline-marker"><AppIcon :name="a.status === 'pass' ? 'check' : 'clock'" /></span><div><h3>{{ label(a.unit) }} · {{ label(a.status) }}</h3><p>{{ a.reason || '已接手，尚未提交实际结果。' }}</p><time>{{ a.executor }} · {{ stamp(a.ended || a.started) }}</time></div></article></div><p v-else class="secondary">尚未提交有效工作进展。</p></div></section></div>
+        <div class="overview-cards"><section class="overview-card"><div class="section-heading"><h2>验收概况</h2><button @click="setQuery({ section: 'checks' })">全部检查 →</button></div><div class="overview-card-body"><div class="acceptance-summary"><p v-if="n.summary.checks.required" class="acceptance-count"><strong>{{ n.summary.checks.required_passed }}</strong> / {{ n.summary.checks.required }} 项必要检查通过</p><p v-else>尚未配置必需检查。</p><span class="status" :class="{ blocked: n.summary.checks.blocked || availableHumanChecks.length, pass: t.candidate && n.summary.checks.required && n.summary.checks.required_passed === n.summary.checks.required }">{{ acceptanceState }}</span></div><small>检查覆盖不等于研发进度；当前候选、验收方法和交付目标分别核对。</small></div></section><section class="overview-card"><div class="section-heading"><h2>最近进展</h2><button @click="setQuery({ section: 'execution' })">完整过程 →</button></div><div class="overview-card-body"><div v-if="work.length" class="work-timeline"><article v-for="a in work.slice(0, 3)" :key="a.id" class="timeline-item"><span class="timeline-marker"><AppIcon :name="a.status === 'pass' ? 'check' : 'clock'" /></span><div><h3>{{ a.display_unit || label(a.unit) }} · {{ a.display_status || label(a.status) }}</h3><p v-if="a.reason">{{ a.reason }}</p><p v-else-if="!a.display_unit">已接手，尚未提交实际结果。</p><time>{{ a.executor ? a.executor + ' · ' : '' }}{{ stamp(a.ended || a.started) }}</time></div></article></div><p v-else class="secondary">尚未提交有效工作进展。</p></div></section></div>
         <details v-if="claimed" id="work-result" class="work-form" :open="workFormOpen" @toggle="workFormOpen = ($event.target as HTMLDetailsElement).open">
           <summary>填写实施工作结果</summary>
           <h2>提交本次工作结果</h2>
@@ -1002,11 +1015,11 @@ function checkReason(c: any) {
           </p>
           <div class="work-timeline"><article v-for="a in work" :key="a.id" class="timeline-item">
             <span class="timeline-marker"><AppIcon :name="a.status === 'pass' ? 'check' : 'clock'" /></span><div>
-              <h3>{{ label(a.unit) }} · {{ a.executor }}</h3>
+              <h3>{{ a.display_unit || label(a.unit) }}<template v-if="a.executor"> · {{ a.executor }}</template></h3>
               <span class="status" :class="a.status">{{
-                label(a.status)
+                a.display_status || label(a.status)
               }}</span>
-            <p>{{ a.reason || "已接手，尚未提交实际结果。" }}</p>
+            <p v-if="a.reason">{{ a.reason }}</p><p v-else-if="!a.display_unit">已接手，尚未提交实际结果。</p>
             <time
               >{{ stamp(a.started) }} →
               {{ a.ended ? stamp(a.ended) : "尚未结束" }}</time
@@ -1018,6 +1031,7 @@ function checkReason(c: any) {
             </div>
             </div>
           </article></div>
+          <p v-if="n.activity_truncated" class="secondary">这里只显示最近 100 条任务状态变化；完整记录可在下方技术记录中查看。</p>
         </section>
         <details v-if="section === 'execution'" class="technical source-detail" :open="technicalOpen" @toggle="technicalToggle"><summary>技术记录</summary>
         <details v-if="claimed">

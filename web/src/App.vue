@@ -37,10 +37,10 @@ const projectInitials = computed(() => {
 function focusMain() {
   document.getElementById("main-content")?.focus();
 }
-const mobileMenu = ref(false), showSearch = ref(false), attentionCount = ref(0);
+const mobileMenu = ref(false), showSearch = ref(false), attentionCount = ref(0), attentionTruncated = ref(false);
 async function refreshAttention() {
-  try { attentionCount.value = (await api('/api/attention')).items?.length || 0; }
-  catch { attentionCount.value = 0; }
+  try { const result = await api('/api/attention'); attentionCount.value = result.total || 0; attentionTruncated.value = !!result.truncated; }
+  catch { attentionCount.value = 0; attentionTruncated.value = false; }
 }
 function keyboard(e: KeyboardEvent) {
   const target = e.target as HTMLElement;
@@ -89,7 +89,7 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener('keydown', 
           :href="href('/' + key)"
           :aria-current="area === key ? 'page' : undefined"
           :class="{ chosen: area === key }"
-          ><AppIcon :name="key"/>{{ name }}<span v-if="key === 'tasks' && attentionCount" class="sidebar-attention-count" :aria-label="attentionCount + ' 项需要处理'">{{ attentionCount }}</span></a
+          ><AppIcon :name="key"/>{{ name }}<span v-if="key === 'tasks' && attentionCount" class="sidebar-attention-count" :aria-label="(attentionTruncated ? '至少 ' : '') + attentionCount + ' 项需要处理'">{{ attentionTruncated ? '≥' : '' }}{{ attentionCount }}</span></a
         >
       </nav>
       <div class="sidebar-bottom">

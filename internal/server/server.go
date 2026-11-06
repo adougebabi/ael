@@ -112,7 +112,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			q := r.URL.Query()
 			limit, _ := strconv.Atoi(q.Get("limit"))
 			offset, _ := strconv.Atoi(q.Get("offset"))
-			v, e := knowledge.Browse(h.Service.Root, knowledge.BrowseQuery{Text: q.Get("q"), View: q.Get("view"), Scope: q.Get("scope"), Limit: limit, Offset: offset})
+			v, e := knowledge.BrowseWithUsage(h.Service, knowledge.BrowseQuery{Text: q.Get("q"), View: q.Get("view"), Scope: q.Get("scope"), Limit: limit, Offset: offset})
 			reply(w, v, e)
 		case "/api/knowledge-record":
 			h.knowledgeRecord(w, r)
@@ -260,6 +260,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			v, e := h.Service.Next(r.URL.Query().Get("id"))
 			if e == nil {
 				summary, err := h.Service.Summarize(v)
+				activities, truncated, activityErr := h.Service.TaskActivity(r.URL.Query().Get("id"))
+				if err == nil {
+					err = activityErr
+				}
 				checks := map[string]*core.Evidence{}
 				access := map[string]core.CheckAccess{}
 				for _, c := range v.Task.Definition.Checks {
@@ -268,11 +272,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 				reply(w, struct {
 					core.Next
-					Summary core.TaskSummary               `json:"summary"`
-					Checks  map[string]*core.Evidence      `json:"current_checks"`
-					Runs    map[string]core.CheckExecution `json:"current_runs"`
-					Access  map[string]core.CheckAccess    `json:"check_access"`
-				}{v, summary, checks, summary.CurrentRuns, access}, err)
+					Summary           core.TaskSummary               `json:"summary"`
+					Checks            map[string]*core.Evidence      `json:"current_checks"`
+					Runs              map[string]core.CheckExecution `json:"current_runs"`
+					Access            map[string]core.CheckAccess    `json:"check_access"`
+					Activity          []core.TaskActivity            `json:"activity"`
+					ActivityTruncated bool                           `json:"activity_truncated"`
+				}{v, summary, checks, summary.CurrentRuns, access, activities, truncated}, err)
 				return
 			}
 			reply(w, v, e)

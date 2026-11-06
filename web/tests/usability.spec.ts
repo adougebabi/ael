@@ -275,8 +275,7 @@ test("A05 千条资料：分类搜索分页与正文懒加载", async ({ page, r
   });
   await goto(page, "many", "/knowledge?view=history");
   await expect(page.locator(".knowledge-scopes")).toContainText("按适用范围");
-  await page.getByText("更多范围", { exact: true }).click();
-  await page.getByLabel("适用范围").selectOption("archive");
+  await page.getByRole("complementary", { name: "资料范围导航" }).getByRole("button", { name: /^archive / }).click();
   await expect(page.locator(".knowledge")).toHaveCount(25);
   expect(bodyRequests).toBe(0);
   await expect(page.locator(".markdown")).toHaveCount(0);
@@ -287,11 +286,10 @@ test("A05 千条资料：分类搜索分页与正文懒加载", async ({ page, r
   await expect(page).toHaveURL(/offset=25/);
   await expect(page.locator(".knowledge")).toHaveCount(25);
   expect(bodyRequests).toBe(0);
-  await page.getByLabel("搜索全部资料").fill("needle-0999");
-  await page.getByRole("button", { name: "搜索", exact: true }).click();
+  await page.getByLabel("搜索规范").fill("needle-0999");
   await expect(page.locator(".knowledge")).toHaveCount(1);
   await expect(page.locator(".knowledge")).toContainText("历史资料");
-  await page.locator(".knowledge a").click();
+  await page.locator(".knowledge .record-title").click();
   await expect(page.locator(".markdown")).toContainText("needle-0999");
   expect(bodyRequests).toBe(1);
   await shot(page, "A05-knowledge-lazy-reader");
@@ -314,11 +312,11 @@ test("A06 状态不改写、Markdown、真实链接、来源与替代关系", as
   await expect(
     page.getByRole("navigation", { name: "正文目录" }),
   ).toBeVisible();
-  await expect(page.locator(".reader-layout-right .reader-sidebar")).toContainText("关联任务与后继");
+  await expect(page.locator(".reader-layout-right .reader-sidebar")).toContainText("关联任务");
   await expect(page.locator(".markdown script")).toHaveCount(0);
   await expect(page.locator(".markdown")).toContainText("<script>");
   await expect(page.locator('.markdown a[href^="javascript:"]')).toHaveCount(0);
-  await page.getByText("来源与版本", { exact: true }).click();
+  await page.getByText("版本与变化", { exact: true }).click();
   await expect(page.locator(".source-details")).toContainText(
     ".ael/knowledge/current.md",
   );
@@ -811,6 +809,7 @@ test("A12c 迁移真实预览、错误摘要、应用防重复、核验修复回
   await expect(
     page.getByRole("heading", { name: "本次核验通过", exact: true }),
   ).toBeVisible();
+  await page.getByText("高级操作与迁移标识", { exact: true }).click();
   await page.getByRole("button", { name: "修复中断", exact: true }).click();
   await confirmDialog(page);
   await shot(page, "A12-migration-verified");
@@ -1342,6 +1341,10 @@ test("A18 方案调整和否决均记录决定而不取消任务", async ({ page
     expect(current.task.plan.revision).toBe(2);
     expect(current.current_step).toBe("analysis");
     if (decision === "reject") await shot(page, "A18-rejected-plan");
+    await page.getByRole("button", { name: "执行过程", exact: true }).click();
+    await expect(page.locator(".work-timeline")).toContainText(decision === "adjust" ? "要求调整" : "已否决");
+    await expect(page.locator(".work-timeline")).toContainText("隔离工程中明确记录本次方案决定");
+    await expect(page.locator(".work-timeline .timeline-item").filter({ hasText: "方案决定" })).toHaveCount(1);
   }
 });
 
@@ -1647,10 +1650,10 @@ test("A30 四项检查通过且待人工验收时对齐工作台与详情入口"
 test("A31 资料分区、筛选清除和诊断摘要连接真实数据", async ({ page }) => {
   await goto(page, "many", "/knowledge/current-rule");
   await expect(page.locator(".markdown")).toBeVisible();
-  await page.getByRole("navigation", { name: "资料详情分区" }).getByRole("button", { name: "来源与版本" }).click();
+  await page.getByRole("navigation", { name: "资料详情分区" }).getByRole("button", { name: "版本与变化" }).click();
   await expect(page.locator(".source-details")).toContainText(".ael/knowledge/current.md");
   await page.getByRole("navigation", { name: "资料详情分区" }).getByRole("button", { name: "关联工作" }).click();
-  await expect(page.getByRole("link", { name: "真实隔离交付 verified-change" })).toBeVisible();
+  await expect(page.locator(".reader-section").getByRole("link").filter({ hasText: "verified-change" })).toBeVisible();
   await goto(page, "many", "/knowledge?view=all&q=not-present-in-fixture-2026");
   await page.getByRole("button", { name: "清除筛选" }).click();
   await expect(page).not.toHaveURL(/q=/);
@@ -2144,4 +2147,166 @@ test("A46 两个人工检查同理由受阻时定位最新阻塞", async ({ page
   expect(after.task.paused).toBeFalsy();
   expect(after.current_checks.ui.result).toBe("blocked");
   expect(after.current_checks.ux.result).toBe("blocked");
+});
+
+test("A47 规范库和阅读器按参考结构展示真实数据与常用资料", async ({ page, request }) => {
+  const client = await connect(request);
+  const listing = await client.get("/api/knowledge-page?view=current&limit=25");
+  const item = listing.items.find((entry: any) => entry.id === "current-rule");
+  const detail = await client.get("/api/knowledge-record?id=current-rule");
+  expect(item.task_count).toBe(detail.related_tasks.length);
+  expect(item.hash).toBe(detail.hash);
+  expect(listing.scope_counts.paths.app).toBeGreaterThan(0);
+  await goto(page, "many", "/knowledge");
+  const scope = page.getByRole("complementary", { name: "资料范围导航" });
+  await expect(scope.getByRole("button", { name: /^全部范围/ })).toContainText(String(listing.scope_counts.all));
+  await expect(scope.getByRole("button", { name: /^app / })).toContainText(String(listing.scope_counts.paths.app));
+  const searchBox = await page.getByLabel("搜索规范").boundingBox();
+  const searchIcon = await page.locator(".library-search svg").boundingBox();
+  expect(searchIcon!.x).toBeGreaterThanOrEqual(searchBox!.x);
+  expect(searchIcon!.y).toBeGreaterThanOrEqual(searchBox!.y);
+  expect(searchIcon!.x + searchIcon!.width).toBeLessThanOrEqual(searchBox!.x + searchBox!.width);
+  await scope.getByRole("button", { name: /^app / }).click();
+  await expect(page.getByRole("navigation", { name: "资料分类" }).getByRole("button", { name: /现行规范/ })).toContainText(String(listing.view_counts.current));
+  const row = page.locator(".knowledge").filter({ hasText: "隔离夹具：当前交付规范" });
+  await expect(row).toContainText(item.task_count + " 个关联任务");
+  await expect(row).toContainText("指纹 " + item.hash.slice(0, 8));
+  let recordRequests = 0;
+  page.on("request", (r) => { if (r.url().includes("/api/knowledge-record?")) recordRequests++; });
+  await row.locator(".record-title").click();
+  await expect(page.locator(".reader > .reader-tabs")).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "正文目录" })).toBeVisible();
+  await expect(page.locator(".reader-sidebar")).toContainText("关联任务");
+  await expect(page.getByRole("button", { name: "加入常用" })).toBeEnabled();
+  await page.getByRole("button", { name: "加入常用" }).click();
+  await expect(page.getByRole("button", { name: "已加入常用" })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "版本与变化" }).click();
+  await expect(page.locator(".source-details")).toContainText(detail.hash);
+  await expect(page.locator(".source-details")).toContainText("尚未提供可比较的版本差异");
+  await page.locator(".reader-sidebar").getByRole("button", { name: "当前约束" }).click();
+  await expect(page.locator(".markdown")).toBeVisible();
+  expect(recordRequests).toBe(1);
+  await goto(page, "many", "/knowledge");
+  await expect(page.locator(".knowledge").filter({ hasText: "隔离夹具：当前交付规范" }).locator(".bookmark-mark")).toBeVisible();
+  await page.reload();
+  await expect(page.locator(".knowledge").filter({ hasText: "隔离夹具：当前交付规范" }).locator(".bookmark-mark")).toBeVisible();
+  await goto(page, "many", "/knowledge/current-rule?reader=related");
+  await expect(page.locator(".reader-section")).toContainText("使用或改变这份资料的工作");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole("button", { name: "版本与变化" })).toBeVisible();
+  await expect(page.locator(".sidebar")).toBeHidden();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+  await shot(page, "A47-knowledge-reader-mobile");
+});
+
+test("A48 规范读取失败可重试，分类和范围切换复位分页", async ({ page }) => {
+  let fail = true;
+  await page.route("**/api/knowledge-record?*", async (route) => {
+    if (fail && route.request().url().includes("id=current-rule")) { fail = false; await route.abort(); }
+    else await route.continue();
+  });
+  await goto(page, "many", "/knowledge/current-rule");
+  await expect(page.getByRole("alert")).toBeVisible();
+  await page.getByRole("alert").getByRole("button", { name: "重试" }).click();
+  await expect(page.locator(".markdown")).toContainText("当前约束");
+  await page.unroute("**/api/knowledge-record?*");
+  await goto(page, "many", "/knowledge?view=history&scope=archive&offset=25");
+  await expect(page.locator(".knowledge")).toHaveCount(25);
+  await page.getByRole("navigation", { name: "资料分类" }).getByRole("button", { name: /决策与取舍/ }).click();
+  await expect(page).toHaveURL(/view=decisions/);
+  await expect(page).not.toHaveURL(/offset=|scope=/);
+  await expect(page.locator(".knowledge").first()).toBeVisible();
+  await goto(page, "many", "/knowledge");
+  await page.getByLabel("搜索规范").fill("needle-0999");
+  await expect(page.locator(".library-empty")).toContainText("没有匹配资料");
+  await page.getByRole("button", { name: "搜索全部资料 →" }).click();
+  await expect(page).toHaveURL(/view=all/);
+  await expect(page.locator(".knowledge")).toContainText("历史资料");
+});
+
+test("A49 项目演进与设置按参考分区保留真实操作", async ({ page }) => {
+  await goto(page, "many", "/evolution/knowledge%3Alocal-choice");
+  await expect(page.getByRole("heading", { name: "这次改变" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "取舍与没有采用的方案" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "关联工作与当前结果" })).toBeVisible();
+  await expect(page.locator(".evolution-aside")).toContainText("变化依据");
+  await expect(page.locator(".evolution-aside")).toContainText("记录信息");
+  await goto(page, "many", "/evolution");
+  await page.getByLabel("查找项目变化").fill("本地结果与回归交付");
+  await expect(page.locator(".change-row")).toHaveCount(1);
+  await expect(page.locator(".change-footer")).toContainText("项工作");
+  await expect(page.locator(".change-footer")).toContainText("份依据");
+  await goto(page, "many", "/settings");
+  await expect(page.locator(".settings-panel").filter({ hasText: "执行器能力" })).toContainText("浏览器验收");
+  await expect(page.locator(".settings-panel").filter({ hasText: "执行器能力" })).toContainText("未单独探测");
+  await goto(page, "many", "/settings?section=sources");
+  await page.getByRole("button", { name: "查看扫描预览" }).click();
+  await expect(page.getByRole("dialog")).toContainText("只扫描当前项目");
+  await page.getByRole("dialog").getByRole("button", { name: "返回" }).click();
+  await goto(page, "many", "/settings?section=migrations");
+  await expect(page.locator(".migration-card").first().getByRole("button", { name: "核验迁移" })).toBeVisible();
+  await expect(page.locator(".migration-card").first().getByRole("link", { name: /查看告警/ })).toBeVisible();
+});
+
+test("A50 任务进展显示真实暂缓与恢复事件", async ({ page, request }) => {
+  const client = await connect(request, "single"), id = "activity-timeline-" + Date.now();
+  await client.post("/api/tasks", { id, title: "隔离任务进展", type: "bug", goal: "verified", acceptance: ["结果"] });
+  await client.post("/api/action", { action: "pause", id, reason: "等待隔离条件" });
+  await client.post("/api/action", { action: "resume", id });
+  const current = await client.get("/api/task?id=" + id);
+  expect(current.activity.map((item: any) => item.kind)).toEqual(["resumed", "paused"]);
+  await goto(page, "single", "/tasks/" + id);
+  const recent = page.locator(".overview-card").filter({ hasText: "最近进展" });
+  await expect(recent).toContainText("任务恢复");
+  await expect(recent).toContainText("任务暂缓");
+  await expect(recent).toContainText("等待隔离条件");
+  await recent.getByRole("button", { name: "完整过程 →" }).click();
+  await expect(page.locator(".work-timeline")).toContainText("任务恢复");
+  await expect(page.locator(".work-timeline")).toContainText("任务暂缓");
+});
+
+test("A51 待处理计数覆盖同类任务，卡片仍保持紧凑", async ({ page, request }) => {
+  ensureIsolatedOutput();
+  const client = await connect(request, "single"), prefix = "attention-count-" + Date.now();
+  const before = await client.get("/api/attention");
+  for (let i = 0; i < 4; i++) {
+    const id = prefix + "-human-" + i;
+    await client.post("/api/tasks", { id, title: "隔离人工检查 " + i, type: "bug", goal: "verified", scope: ["app"], acceptance: ["结果"], checks: [{ id: "owner", kind: "review", method: "human", covers: ["结果"], required: true }] });
+    await step(client, id);
+    await step(client, id, ["app/ui-output.txt"]);
+  }
+  for (let i = 0; i < 2; i++) {
+    const id = prefix + "-blocked-" + i;
+    await client.post("/api/tasks", { id, title: "隔离等待环境 " + i, type: "bug", goal: "verified", acceptance: ["结果"] });
+    await client.post("/api/action", { action: "pause", id, reason: "等待隔离条件" });
+  }
+  const after = await client.get("/api/attention");
+  expect(after.truncated).toBeFalsy();
+  expect(after.total).toBe(before.total + 6);
+  expect(new Set(after.task_ids).size).toBe(after.total);
+  expect(after.items).toHaveLength(3);
+  await goto(page, "single");
+  await expect(page.locator(".attention-section h2 .count")).toHaveText(String(after.total));
+  await expect(page.locator(".attention-section .attention-card")).toHaveCount(3);
+});
+
+test("A52 历史恢复的取消与决定不冒充当前授权", async ({ page, request }) => {
+  const client = await connect(request, "single"), id = "historical-activity-" + Date.now();
+  await client.post("/api/tasks", { id, title: "隔离历史任务", type: "bug", goal: "verified", acceptance: ["结果"] });
+  await client.post("/api/action", { action: "cancel", id, reason: "历史取消原因" });
+  await page.route("**/api/task?*", async (route) => {
+    if (!route.request().url().includes("id=" + id)) { await route.continue(); return; }
+    const response = await route.fetch(), body = await response.json();
+    body.task.historical = true;
+    body.activity = [{ id: 123, kind: "confirmation", at: body.task.completed, historical: true }];
+    body.task.approvals = [];
+    await route.fulfill({ response, json: body });
+  });
+  await goto(page, "single", "/tasks/" + id);
+  const recent = page.locator(".overview-card").filter({ hasText: "最近进展" });
+  await expect(recent).toContainText("历史任务取消");
+  await expect(recent).toContainText("历史取消原因");
+  await expect(recent).toContainText("历史决定记录");
+  await expect(recent).toContainText("历史决定不代表当前授权");
+  await page.unroute("**/api/task?*");
 });

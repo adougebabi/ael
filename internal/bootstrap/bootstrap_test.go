@@ -31,6 +31,10 @@ func TestInitDryRunIdempotentAndUserConflict(t *testing.T) {
 	if !strings.Contains(string(b), original) || strings.Count(string(b), begin) != 1 {
 		t.Fatal(string(b))
 	}
+	workflow, e := os.ReadFile(filepath.Join(root, ".agents/skills/ael-work/references/workflow.md"))
+	if e != nil || !strings.Contains(string(workflow), "单次完成的代码任务") || !strings.Contains(string(workflow), "再提交实施结果生成候选") || !strings.Contains(string(workflow), "重新执行全部必要检查") {
+		t.Fatal("single-task commit guidance was not installed", e)
+	}
 	skill := filepath.Join(root, ".agents/skills/ael-work/SKILL.md")
 	os.WriteFile(skill, []byte("user edit"), 0644)
 	if _, e = Init(root, false, true); e == nil {

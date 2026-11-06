@@ -23,14 +23,23 @@ type Summary struct {
 	Excerpt     bool     `json:"excerpt"`
 	Paths       []string `json:"paths"`
 	OccurredAt  string   `json:"occurred_at,omitempty"`
+	Hash        string   `json:"hash,omitempty"`
+	TaskCount   int      `json:"task_count"`
+}
+type ScopeCounts struct {
+	All          int            `json:"all"`
+	Unclassified int            `json:"unclassified"`
+	Paths        map[string]int `json:"paths"`
 }
 type BrowsePage struct {
-	Items  []Summary      `json:"items"`
-	Counts map[string]int `json:"counts"`
-	Total  int            `json:"total"`
-	Scopes []string       `json:"scopes"`
-	Limit  int            `json:"limit"`
-	Offset int            `json:"offset"`
+	Items       []Summary      `json:"items"`
+	Counts      map[string]int `json:"counts"`
+	ViewCounts  map[string]int `json:"view_counts"`
+	ScopeCounts ScopeCounts    `json:"scope_counts"`
+	Total       int            `json:"total"`
+	Scopes      []string       `json:"scopes"`
+	Limit       int            `json:"limit"`
+	Offset      int            `json:"offset"`
 }
 
 func Title(r Record) string {
@@ -64,7 +73,7 @@ func summary(r Record) Summary {
 	if d == "" {
 		d = Excerpt(r.Body)
 	}
-	return Summary{r.ID, Title(r), r.Kind, r.Status, d, r.Summary == "", r.Paths, r.OccurredAt}
+	return Summary{ID: r.ID, Title: Title(r), Kind: r.Kind, Status: r.Status, Description: d, Excerpt: r.Summary == "", Paths: r.Paths, OccurredAt: r.OccurredAt, Hash: r.Hash, TaskCount: len(r.Tasks)}
 }
 func view(r Record) string {
 	if r.Kind == "decision" {
@@ -76,6 +85,24 @@ func view(r Record) string {
 	return "history"
 }
 func Browse(root string, q BrowseQuery) (BrowsePage, error) {
+	all, err := ReadAll(root)
+	if err != nil {
+		return BrowsePage{}, err
+	}
+	return browseRecords(all, q), nil
+}
+
+// BrowseWithUsage includes explicit and task-supplied references in one
+// projection; list responses still contain no document bodies.
+func BrowseWithUsage(s *core.Service, q BrowseQuery) (BrowsePage, error) {
+	all, err := WithUsage(s, "")
+	if err != nil {
+		return BrowsePage{}, err
+	}
+	return browseRecords(all, q), nil
+}
+
+func browseRecords(all []Record, q BrowseQuery) BrowsePage {
 	if q.Limit <= 0 || q.Limit > 100 {
 		q.Limit = 25
 	}
@@ -85,17 +112,27 @@ func Browse(root string, q BrowseQuery) (BrowsePage, error) {
 	if q.View == "" {
 		q.View = "current"
 	}
-	p := BrowsePage{Items: []Summary{}, Counts: map[string]int{"current": 0, "decisions": 0, "history": 0}, Scopes: []string{}, Limit: q.Limit, Offset: q.Offset}
-	all, e := ReadAll(root)
-	if e != nil {
-		return p, e
-	}
+	p := BrowsePage{Items: []Summary{}, Counts: map[string]int{"current": 0, "decisions": 0, "history": 0}, ViewCounts: map[string]int{"current": 0, "decisions": 0, "history": 0}, ScopeCounts: ScopeCounts{Paths: map[string]int{}}, Scopes: []string{}, Limit: q.Limit, Offset: q.Offset}
 	scopes := map[string]bool{}
 	for _, r := range all {
+		p.ViewCounts[view(r)]++
 		for _, x := range r.Paths {
 			scopes[x] = true
 		}
-		if q.Text != "" && !strings.Contains(strings.ToLower(r.Title+" "+r.ID+" "+r.Path+" "+r.Body+" "+strings.Join(r.Paths, " ")), strings.ToLower(q.Text)) {
+		if q.View == "all" || view(r) == q.View {
+			p.ScopeCounts.All++
+			if len(r.Paths) == 0 {
+				p.ScopeCounts.Unclassified++
+			}
+			seen := map[string]bool{}
+			for _, x := range r.Paths {
+				if !seen[x] {
+					p.ScopeCounts.Paths[x]++
+					seen[x] = true
+				}
+			}
+		}
+		if q.Text != "" && !strings.Contains(strings.ToLower(r.Title+" "+r.ID+" "+r.Path+" "+r.Source+" "+r.Summary+" "+r.Body+" "+strings.Join(r.Paths, " ")), strings.ToLower(q.Text)) {
 			continue
 		}
 		if q.Scope == "unclassified" && len(r.Paths) > 0 {
@@ -117,7 +154,7 @@ func Browse(root string, q BrowseQuery) (BrowsePage, error) {
 		p.Scopes = append(p.Scopes, x)
 	}
 	slices.Sort(p.Scopes)
-	return p, nil
+	return p
 }
 func Read(s *core.Service, id, version string) (Record, error) {
 	if version != "" {

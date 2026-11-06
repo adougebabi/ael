@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { api, params, refreshRevision } from "../api";
 import {
   route,
@@ -19,6 +19,7 @@ const r = useResource<any>({ items: [], scopes: [], total: 0 }),
   { data, loading, error, last } = r;
 const search = ref(route.value.query.get("q") || "");
 const offset = computed(() => Number(route.value.query.get("offset") || 0));
+let searchTimer: ReturnType<typeof setTimeout> | undefined, typing = false;
 async function load() {
   await r.load(() =>
     api(
@@ -42,16 +43,19 @@ async function load() {
 watch(
   () => route.value.key,
   () => {
-    search.value = route.value.query.get("q") || "";
+    if (!typing) search.value = route.value.query.get("q") || "";
     load();
   },
   { flush: "post" },
 );
 onMounted(load);
+onUnmounted(() => clearTimeout(searchTimer));
 watch(refreshRevision, load);
 function filter(v: Record<string, string>) {
   setQuery({ ...v, offset: undefined });
 }
+function searchNow() { clearTimeout(searchTimer); typing = false; filter({ q: search.value }); }
+function searchInput() { typing = true; clearTimeout(searchTimer); searchTimer = setTimeout(searchNow, 220); }
 function localBoundary(value: string | null, end = false) {
   return value
     ? new Date(value + (end ? "T23:59:59.999" : "T00:00:00")).toISOString()
@@ -70,8 +74,8 @@ function day(value: string | null) {
       ><p class="secondary" style="margin-top: 18px">
         有明确依据的交付、规范与决策。导入、索引、心跳和普通进程事件保留在诊断中。
       </p>
-      <div class="evolution-toolbar"><nav class="evolution-segments" aria-label="项目变化分类"><button v-for="[kind, title] in changeKinds" :key="kind" :class="{ chosen: (route.query.get('kind') || '') === kind }" :aria-pressed="(route.query.get('kind') || '') === kind" @click="filter({ kind })">{{ title }}</button></nav><form class="toolbar evolution-filters" @submit.prevent="filter({ q: search })">
-        <label class="search"><span class="visually-hidden">查找项目变化</span><input v-model="search" type="search" placeholder="搜索变化…" /></label><button type="submit">搜索</button>
+      <div class="evolution-toolbar"><nav class="evolution-segments" aria-label="项目变化分类"><button v-for="[kind, title] in changeKinds" :key="kind" :class="{ chosen: (route.query.get('kind') || '') === kind }" :aria-pressed="(route.query.get('kind') || '') === kind" @click="filter({ kind })">{{ title }}</button></nav><form class="toolbar evolution-filters" @submit.prevent="searchNow">
+        <label class="search"><AppIcon name="search"/><span class="visually-hidden">查找项目变化</span><input v-model="search" type="search" placeholder="搜索变化或原因…" @input="searchInput" /></label>
         <details class="evolution-more" :open="!!(route.query.get('scope') || route.query.get('from') || route.query.get('to'))"><summary>更多筛选</summary><div class="evolution-more-fields">
           <label>影响范围<select :value="route.query.get('scope') || ''" @change="filter({ scope: ($event.target as HTMLSelectElement).value })"><option value="">全部范围</option><option v-for="s in data.scopes" :key="s" :value="s">{{ s }}</option></select></label>
           <label>发生于 / 从<input type="date" :value="route.query.get('from') || ''" @change="filter({ from: ($event.target as HTMLInputElement).value })" /></label>
@@ -116,7 +120,7 @@ function day(value: string | null) {
             </h2>
             <p class="change-content">{{ c.content || "变化内容未单独记录，请查看原始依据。" }}</p>
             <p class="change-reason"><strong>为什么</strong> {{ c.reason }}</p>
-            <div class="change-footer"><span>{{ c.references.length }} 项真实关联</span><span class="status" :class="c.result">{{ label(c.result) }}</span></div>
+            <div class="change-footer"><span>{{ c.references.filter((ref: any) => ref.kind === 'task').length }} 项工作 · {{ c.references.filter((ref: any) => ref.kind !== 'task').length }} 份依据</span><span class="status" :class="c.result">{{ label(c.result) }}</span></div>
             <p v-if="c.delivery_facts?.length" class="secondary">
               真实关联结果：{{
                 c.delivery_facts
@@ -161,72 +165,36 @@ function day(value: string | null) {
         </div>
       </header>
       <div class="evolution-detail-layout"><div class="evolution-detail-main"><section class="content-section readable">
-        <h2>原状与变化原因</h2>
-        <p>{{ data.reason }}</p>
+        <h2>这次改变</h2>
+        <p>{{ data.content || "未单独记录变化说明，请查看关联工作结果。" }}</p>
+        <h3>为什么要改</h3><p>{{ data.reason }}</p>
         <div class="change-comparison"><div><h3>变化前</h3><p>未单独记录。</p></div><div><h3>变化后</h3><p>未单独记录；已记录的变化事实见下方结果。</p></div></div>
       </section>
       <section class="content-section readable">
-        <h2>变化内容与实际结果</h2>
-        <p>{{ data.content || "未单独记录变化说明，请查看关联工作结果。" }}</p>
+        <h2>取舍与没有采用的方案</h2>
+        <p class="secondary">方案取舍未作为独立字段记录；如有关联决策，可阅读其原文。</p>
+        <p v-if="data.result === 'rejected'">该方案被否决；具体理由保留在原决策中。</p>
+        <a v-if="data.superseded_by" :href="knowledgeHref(data.superseded_by)">查看明确记录的后继方案</a>
+      </section>
+      <section class="content-section readable">
+        <h2>关联工作与当前结果</h2>
         <p>来源能够证明的结论：{{ label(data.result) }}</p>
         <p v-if="data.delivery_facts?.length" class="secondary">
           规范或决策本身的记录日期：{{
             stamp(data.source_occurred_at)
           }}。关联任务的结果与发生时间分别保留如下。
         </p>
-        <article
-          v-for="f in data.delivery_facts || []"
-          :key="f.task"
-          class="record-row"
-        >
-          <a :href="taskHref(f.task)">{{ f.title }}</a>
-          <p>
-            <span class="status">{{ label(f.result) }}</span> ·
-            {{ stamp(f.occurred_at) }}
-          </p>
-          <p>{{ f.content }}</p>
-          <small
-            >对应当前候选与修订的产物
-            {{ f.artifacts.length }}
-            项；历史失败与旧产物在任务技术记录中查看。</small
-          >
+        <p v-if="!data.references.some((ref: any) => ref.kind === 'task')" class="secondary">未记录关联工作。</p>
+        <article v-for="ref in data.references.filter((ref: any) => ref.kind === 'task')" :key="ref.id" class="record-row">
+          <a :href="taskHref(ref.id)">{{ ref.title }}</a><small>{{ ref.id }}</small>
+          <template v-if="data.delivery_facts?.find((f: any) => f.task === ref.id)"><p><span class="status">{{ label(data.delivery_facts.find((f: any) => f.task === ref.id).result) }}</span> · {{ stamp(data.delivery_facts.find((f: any) => f.task === ref.id).occurred_at) }}</p><p>{{ data.delivery_facts.find((f: any) => f.task === ref.id).content }}</p></template>
         </article>
         <p>影响范围：{{ data.scopes?.join("、") || "未记录具体范围" }}</p>
         <p v-if="data.historical" class="secondary">
           历史资料未经本机复验；不据此推断当前代码、交付或发布状态。
         </p>
       </section>
-      <section class="content-section readable">
-        <h2>选择、取舍与证据</h2>
-        <p class="secondary">方案取舍未作为独立字段记录；如有关联决策，可阅读其原文。</p>
-        <p v-if="data.kind !== 'decision'" class="secondary">
-          仅通过显式任务和资料引用列出关联依据；未记录的方案与因果不作推断。
-        </p>
-        <p v-if="data.result === 'rejected'">
-          该方案被否决；具体理由保留在原决策中。
-        </p>
-        <div
-          class="record-row"
-          v-for="ref in data.references.filter(
-            (ref: any) =>
-              ref.kind !== 'task' ||
-              !data.delivery_facts?.some((f: any) => f.task === ref.id),
-          )"
-        >
-          <a :href="referenceLink(ref)">{{ ref.title }}</a
-          ><small>{{
-            ref.kind === "task" ? "实际关联任务" : label(ref.kind)
-          }}</small>
-        </div>
-        <p v-if="data.artifacts.length" class="secondary">
-          实际产物在对应任务“执行过程”中读取（{{ data.artifacts.length }}
-          项引用）。
-        </p>
-        <a v-if="data.superseded_by" :href="knowledgeHref(data.superseded_by)"
-          >查看明确记录的后继方案</a
-        >
-        <p v-else class="secondary">未记录明确后继关系。</p>
-      </section></div><aside class="evolution-aside"><section><h2>结果边界</h2><p>{{ label(data.result) }}</p><p>{{ data.historical ? '历史资料，未在本机复验。' : '结果以已记录的任务和交付为准。' }}</p></section><section><h2>变化依据</h2><p>发生时间：{{ stamp(data.occurred_at) }}</p><p>影响范围：{{ data.scopes?.join('、') || '未记录具体范围' }}</p><p>{{ data.references.length }} 项明确关联，见左侧证据。</p></section></aside></div></template
+      </div><aside class="evolution-aside"><section><h2>结果边界</h2><p>{{ label(data.result) }}</p><p>{{ data.historical ? '历史资料，未在本机复验。' : '结果以已记录的任务和交付为准。' }}</p></section><section><h2>变化依据</h2><div v-for="ref in data.references.filter((ref: any) => ref.kind !== 'task')" :key="ref.id" class="record-row"><a :href="referenceLink(ref)">{{ ref.title }}</a><small>{{ label(ref.kind) }}</small></div><p v-if="!data.references.some((ref: any) => ref.kind !== 'task')">未记录关联资料。</p></section><section><h2>记录信息</h2><p>发生时间：{{ stamp(data.occurred_at) }}</p><p>影响范围：{{ data.scopes?.join('、') || '未记录具体范围' }}</p><p v-if="data.artifacts.length">实际产物 {{ data.artifacts.length }} 项，见对应任务的执行过程。</p></section></aside></div></template
     >
   </div>
 </template>
