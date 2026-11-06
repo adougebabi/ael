@@ -28,7 +28,7 @@ import MarkdownBody from "../components/MarkdownBody.vue";
 import AppIcon from "../components/AppIcon.vue";
 import ScopeSummary from "../components/ScopeSummary.vue";
 import CopyButton from "../components/CopyButton.vue";
-import { pendingReviewForTask } from "../reviewDraft";
+import { pendingReviewForTask, preservePriorWork } from "../reviewDraft";
 const props = defineProps<{ id: string }>();
 const r = useResource<any>(null),
   { data: n, loading, error, last } = r;
@@ -72,8 +72,9 @@ const busy = ref(false),
   ack = ref(false),
   resumeTarget = ref(""),
   edit = ref("");
-const manualCheck = ref("");
-const pendingReviewCheck = ref("");
+const manualCheck = ref<string | null>(null);
+const pendingReviewCheck = ref<string | null>(null);
+const workFormOpen = ref(false);
 const taskMenu = ref<HTMLDetailsElement>();
 const availableHumanChecks = computed(() =>
   (t.value?.definition.checks || []).filter((c: any) => n.value?.check_access?.[c.id]?.can_review),
@@ -121,6 +122,15 @@ async function restoreClaim(id: string) {
     a.definition_revision === n.value.definition_revision && a.plan_revision === n.value.plan_revision &&
     a.definition_revision === saved.attempt.definition_revision && a.plan_revision === saved.attempt.plan_revision;
   if (!valid && !saved.pending) {
+    if (!a) {
+      if (claimed.value?.id === saved.attempt.id) claimed.value = null;
+      return;
+    }
+    if (!preservePriorWork(id, saved.attempt, saved.draft)) {
+      storageWarning.value = "浏览器无法另存旧接手的未提交内容；原记录暂时保留，请先复制需要的文字。";
+      if (claimed.value?.id === saved.attempt.id) claimed.value = null;
+      return;
+    }
     removeClaim(id, saved.attempt.id);
     if (claimed.value?.id === saved.attempt.id) claimed.value = null;
     return;
@@ -131,6 +141,7 @@ async function restoreClaim(id: string) {
     deliveryRef.value = saved.deliveryRef || "";
     pendingSubmission.value = saved.pending || null;
     claimed.value = saved.attempt;
+    workFormOpen.value = true;
     actor.value = saved.attempt.executor;
     if (valid && !saved.pending) await contextReader.read(() => api("/api/context?" + params({ id })));
   }
@@ -199,8 +210,9 @@ watch(
     pendingSubmission.value = null;
     result.value = emptyResult();
     technicalOpen.value = false;
-    manualCheck.value = "";
-    pendingReviewCheck.value = "";
+    manualCheck.value = null;
+    pendingReviewCheck.value = null;
+    workFormOpen.value = false;
     load();
   },
 );
@@ -241,7 +253,7 @@ const recoverable = computed(
       )),
 );
 const primaryKind = computed(() => {
-  if (pendingReviewCheck.value) return "review_pending";
+  if (pendingReviewCheck.value !== null) return "review_pending";
   if (claimed.value) return "submit";
   if (availableHumanChecks.value.length) return "review";
   if (recoverable.value) return "resume";
@@ -252,7 +264,7 @@ const primaryKind = computed(() => {
   if (t.value?.current_step === "verify" && t.value?.status === "open") return "checks";
   return "";
 });
-const primaryLabels: Record<string, string> = { review: "开始人工验收", review_pending: "查看待确认的验收", resume: "恢复任务", decision: "审阅当前方案", claim: "接手当前工作", checks: "查看验收与运行检查", submit: "提交本次工作结果", execution: "查看当前执行", delivery: "查看交付结果" };
+const primaryLabels: Record<string, string> = { review: "开始人工验收", review_pending: "查看待确认的验收", resume: "恢复任务", decision: "审阅当前方案", claim: "接手当前工作", checks: "查看验收与运行检查", submit: "填写实施结果", execution: "查看当前执行", delivery: "查看交付结果" };
 const bannerTitle = computed(() => {
   if (t.value?.status === "completed") return "已达到本次交付目标";
   if (t.value?.status === "cancelled") return "任务已取消，保留已有结果";
@@ -286,7 +298,12 @@ function primaryAction() {
   else if (primaryKind.value === "execution") setQuery({ section: "execution" });
   else if (primaryKind.value === "delivery") void showDelivery();
 }
-function closeReview() { manualCheck.value = ""; pendingReviewCheck.value = pendingReviewForTask(info.value.project || "", props.id); }
+function openTaskReview() {
+  if (busy.value) return;
+  workFormOpen.value = false;
+  manualCheck.value = pendingReviewCheck.value !== null ? pendingReviewCheck.value : availableHumanChecks.value[0]?.id || "";
+}
+function closeReview() { manualCheck.value = null; pendingReviewCheck.value = pendingReviewForTask(info.value.project || "", props.id); }
 function reviewSaved() { pendingReviewCheck.value = pendingReviewForTask(info.value.project || "", props.id); void load(true); }
 function technicalToggle(event: Event) {
   technicalOpen.value = (event.target as HTMLDetailsElement).open;
@@ -294,6 +311,8 @@ function technicalToggle(event: Event) {
 }
 async function showWorkForm() {
   setQuery({ section: "overview" });
+  await nextTick();
+  workFormOpen.value = true;
   await nextTick();
   document.getElementById("work-result")?.scrollIntoView({ block: "start" });
 }
@@ -390,6 +409,7 @@ async function perform() {
     sessionStorage.setItem("ael-actor", actor.value);
     if (current.action === "claim") {
       claimed.value = v.attempt;
+      workFormOpen.value = true;
       pendingSubmission.value = null;
       contextReader.clear();
       receiptReader.clear();
@@ -483,10 +503,12 @@ async function submit(advanced = false) {
   } catch (e) {
     // These errors are returned before a submission is committed; other failures
     // may mean the response was lost after commit and must be retried verbatim.
-    if (props.id === taskId && claimed.value?.id === attempt.id && e instanceof ApiError && ["RESULT_REQUIRED", "INVALID_RESULT", "ARTIFACT_REQUIRED", "ARTIFACT_MISSING", "UNSAFE_PATH", "SYMLINK_PATH", "TASK_CONTEXT_REQUIRED", "KNOWLEDGE_OUTCOME_REQUIRED", "KNOWLEDGE_ARTIFACT_REQUIRED", "DELIVERY_RECEIPT_REQUIRED", "DELIVERY_RECEIPT_INVALID", "DELIVERY_RECEIPT_MISMATCH", "WRONG_ENVIRONMENT", "TARGET_REQUIRED"].includes(e.code)) {
+    const stale = e instanceof ApiError && ["STALE_TOKEN", "ATTEMPT_MISSING", "STALE_EXECUTION_UNIT", "TERMINAL_TASK"].includes(e.code);
+    if (props.id === taskId && claimed.value?.id === attempt.id && e instanceof ApiError && (stale || ["RESULT_REQUIRED", "INVALID_RESULT", "ARTIFACT_REQUIRED", "ARTIFACT_MISSING", "UNSAFE_PATH", "SYMLINK_PATH", "TASK_CONTEXT_REQUIRED", "KNOWLEDGE_OUTCOME_REQUIRED", "KNOWLEDGE_ARTIFACT_REQUIRED", "DELIVERY_RECEIPT_REQUIRED", "DELIVERY_RECEIPT_INVALID", "DELIVERY_RECEIPT_MISMATCH", "WRONG_ENVIRONMENT", "TARGET_REQUIRED"].includes(e.code))) {
       pendingSubmission.value = null;
       saveClaim(taskId, attempt, result.value, null);
       if (e.code === "TASK_CONTEXT_REQUIRED") void contextReader.read(() => api("/api/context?" + params({ id: taskId })));
+      if (stale) await load(true);
     }
     if (props.id === taskId) error.value = String(e);
     else notices.value = "工作结果提交未确认，请回到对应任务查看并重试。";
@@ -583,7 +605,7 @@ function canCheck(c: any) {
 }
 function checkReason(c: any) {
   if (n.value?.check_access?.[c.id]?.effective_method === "human" && !n.value?.check_access?.[c.id]?.can_review)
-    return "当前检查不可验收，请核对任务状态、候选或已有执行。";
+    return "可先记录人工意见，候选和检查条件满足后再正式确认。";
   if (!canCheck(c)) return "当前未到此检查的可执行节点，或检查已在运行。";
   if (!c.command?.length && n.value?.check_access?.[c.id]?.effective_method !== "human")
     return "需要具备对应能力的执行者提交真实输入与报告。";
@@ -595,6 +617,7 @@ function checkReason(c: any) {
     <button class="back-link" @click="back('/tasks')">← 返回上一页</button>
     <LoadState :loading="loading" :error="error" :last="last" @retry="load()" />
     <template v-if="n && t">
+      <p v-if="storageWarning && !claimed" class="alert" role="alert">{{ storageWarning }}</p>
       <header class="object-header">
         <div>
           <p class="eyebrow">{{ t.definition.id }} · {{ label(t.definition.type) }}</p>
@@ -607,7 +630,7 @@ function checkReason(c: any) {
             ><span v-if="n.summary.activity_at" :title="stamp(n.summary.activity_at)">{{ relativeStamp(n.summary.activity_at) }}</span>
           </p>
         </div>
-        <div class="task-heading-actions"><button v-if="primaryKind" :class="{ primary: !['execution', 'delivery', 'checks'].includes(primaryKind) }" @click="primaryAction">{{ primaryKind === 'claim' ? '接手工作' : primaryKind === 'checks' ? '查看检查' : primaryLabels[primaryKind] }}</button><details ref="taskMenu" class="task-more"><summary aria-label="更多任务操作" title="更多任务操作">···</summary><div class="task-more-menu"><button v-if="t.status === 'open' && !t.paused" :disabled="busy" @click="startFromMenu('pause', '暂缓任务')">暂缓</button><button v-if="t.status === 'open'" :disabled="busy" @click="startFromMenu('edit', '修订任务定义')">编辑任务定义</button><button v-if="t.status === 'open'" :disabled="busy" class="danger-text" @click="startFromMenu('cancel', '取消任务')">取消任务</button><a :href="href('/evolution', { q: t.definition.title })">查看相关演进</a></div></details></div>
+        <div class="task-heading-actions"><button v-if="t.status === 'open' && !['review', 'review_pending'].includes(primaryKind)" class="primary" :disabled="busy" @click="openTaskReview">开始人工验收</button><button v-if="primaryKind" :class="{ primary: ['review', 'review_pending'].includes(primaryKind) }" :disabled="busy" @click="primaryAction">{{ primaryKind === 'claim' ? '接手工作' : primaryKind === 'checks' ? '查看检查' : primaryLabels[primaryKind] }}</button><details ref="taskMenu" class="task-more"><summary aria-label="更多任务操作" title="更多任务操作">···</summary><div class="task-more-menu"><button v-if="t.status === 'open' && !t.paused" :disabled="busy" @click="startFromMenu('pause', '暂缓任务')">暂缓</button><button v-if="t.status === 'open'" :disabled="busy" @click="startFromMenu('edit', '修订任务定义')">编辑任务定义</button><button v-if="t.status === 'open'" :disabled="busy" class="danger-text" @click="startFromMenu('cancel', '取消任务')">取消任务</button><a :href="href('/evolution', { q: t.definition.title })">查看相关演进</a></div></details></div>
       </header>
       <ol class="stage-track" aria-label="任务流程位置"><li v-for="(step, index) in t.plan.steps" :key="step" :class="{ current: t.status === 'open' && step === t.current_step, done: stageDone(step) && !(t.status === 'open' && step === t.current_step) }"><span class="stage-node">{{ stageDone(step) && !(t.status === 'open' && step === t.current_step) ? '✓' : Number(index) + 1 }}</span><span>{{ label(step) }}</span></li></ol>
       <nav class="tabs" aria-label="任务详情分区">
@@ -648,9 +671,9 @@ function checkReason(c: any) {
             }}；已尝试：{{ t.blocker.tried || "未记录" }}
           </p>
           <small v-if="t.historical">历史记录，未在本机复验</small>
-          <button v-if="pendingReviewCheck" class="primary banner-action" @click="manualCheck = pendingReviewCheck">查看待确认的验收</button>
-          <button v-else-if="availableHumanChecks.length" class="primary banner-action" @click="manualCheck = availableHumanChecks[0].id">开始人工验收</button>
-          <button v-else-if="n.next_action === 'wait_confirmation' && !t.confirmation" class="banner-action" @click="setQuery({ section: 'basis' })">查看待核实规范</button>
+          <p v-if="n.summary.pending_review_notes">已记录 {{ n.summary.pending_review_notes }} 条人工意见，待候选确认。</p>
+          <button v-if="t.status === 'open'" class="primary banner-action" :disabled="busy" @click="openTaskReview">{{ pendingReviewCheck !== null ? '查看待确认的验收' : '开始人工验收' }}</button>
+          <button v-if="n.next_action === 'wait_confirmation' && !t.confirmation" class="banner-action" @click="setQuery({ section: 'basis' })">查看待核实规范</button>
           </div>
         </div>
         <section class="content-section">
@@ -685,7 +708,8 @@ function checkReason(c: any) {
           </ul>
         </section>
         <div class="overview-cards"><section class="overview-card"><div class="section-heading"><h2>验收概况</h2><button @click="setQuery({ section: 'checks' })">全部检查 →</button></div><div class="overview-card-body"><div class="acceptance-summary"><p v-if="n.summary.checks.required" class="acceptance-count"><strong>{{ n.summary.checks.required_passed }}</strong> / {{ n.summary.checks.required }} 项必要检查通过</p><p v-else>尚未配置必需检查。</p><span class="status" :class="{ blocked: n.summary.checks.blocked || availableHumanChecks.length, pass: t.candidate && n.summary.checks.required && n.summary.checks.required_passed === n.summary.checks.required }">{{ acceptanceState }}</span></div><small>检查覆盖不等于研发进度；当前候选、验收方法和交付目标分别核对。</small></div></section><section class="overview-card"><div class="section-heading"><h2>最近进展</h2><button @click="setQuery({ section: 'execution' })">完整过程 →</button></div><div class="overview-card-body"><div v-if="work.length" class="work-timeline"><article v-for="a in work.slice(0, 3)" :key="a.id" class="timeline-item"><span class="timeline-marker"><AppIcon :name="a.status === 'pass' ? 'check' : 'clock'" /></span><div><h3>{{ label(a.unit) }} · {{ label(a.status) }}</h3><p>{{ a.reason || '已接手，尚未提交实际结果。' }}</p><time>{{ a.executor }} · {{ stamp(a.ended || a.started) }}</time></div></article></div><p v-else class="secondary">尚未提交有效工作进展。</p></div></section></div>
-        <div v-if="claimed" id="work-result" class="work-form">
+        <details v-if="claimed" id="work-result" class="work-form" :open="workFormOpen" @toggle="workFormOpen = ($event.target as HTMLDetailsElement).open">
+          <summary>填写实施工作结果</summary>
           <h2>提交本次工作结果</h2>
           <p>
             本次接手：{{ actor }} · {{ label(claimed.unit) }}。{{
@@ -799,7 +823,7 @@ function checkReason(c: any) {
               {{ busy ? "正在提交…" : pendingSubmission ? "原样重试提交" : "提交并查看下一步" }}
             </button>
           </form>
-        </div>
+        </details>
         <details id="delivery-result" class="source-detail delivery-detail">
           <summary>交付、规范处理与后续工作</summary>
           <p>
@@ -907,7 +931,7 @@ function checkReason(c: any) {
                 运行真实检查</button
               ><button
                 v-else-if="n.check_access?.[c.id]?.effective_method === 'human'"
-                :disabled="busy || !n.check_access?.[c.id]?.can_review"
+                :disabled="busy || t.status !== 'open'"
                 :title="checkReason(c)"
                 @click="manualCheck = c.id"
               >
@@ -1209,7 +1233,8 @@ function checkReason(c: any) {
         <section>
           <h2>下一步</h2>
           <p>{{ nextAction(n.summary) }}</p>
-          <button v-if="primaryKind" :class="{ primary: !['execution', 'delivery', 'checks'].includes(primaryKind) }" @click="primaryAction">{{ primaryLabels[primaryKind] }}</button>
+          <button v-if="t.status === 'open' && !['review', 'review_pending'].includes(primaryKind)" class="primary" :disabled="busy" @click="openTaskReview">开始人工验收</button>
+          <button v-if="primaryKind" :class="{ primary: ['review', 'review_pending'].includes(primaryKind) }" :disabled="busy" @click="primaryAction">{{ primaryLabels[primaryKind] }}</button>
           <div v-if="unownedRunning" class="lost-claim-help"><p>当前标签页没有这次接手的凭据。若原执行确已停止，可以确认后恢复任务并重新接手。</p><button @click="start('resume', '恢复无法继续的接手')">恢复无法继续的接手</button></div>
         </section>
         <section class="next-panel-facts">
@@ -1315,6 +1340,6 @@ function checkReason(c: any) {
         运行已配置的真实命令，结果绑定当前候选和修订。
       </p>
     </ActionDialog>
-    <ManualReviewDialog v-if="manualCheck" :task-id="id" :check-id="manualCheck" @close="closeReview" @saved="reviewSaved" />
+    <ManualReviewDialog v-if="manualCheck !== null" :task-id="id" :check-id="manualCheck" @close="closeReview" @saved="reviewSaved" />
   </div>
 </template>

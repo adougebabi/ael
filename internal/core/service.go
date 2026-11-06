@@ -758,6 +758,34 @@ func (s *Service) submitWithHash(sub Submission, evidence *Evidence, requestHash
 					return Error("REVIEW_EVIDENCE_CHANGED", ref)
 				}
 			}
+			if evidence.ReviewNoteID != "" {
+				var note *HumanReviewNote
+				for i := range t.HumanReviewNotes {
+					if t.HumanReviewNotes[i].ID == evidence.ReviewNoteID {
+						note = &t.HumanReviewNotes[i]
+						break
+					}
+				}
+				if note == nil {
+					return Error("REVIEW_NOTE_MISSING", evidence.ReviewNoteID)
+				}
+				if note.Status != "pending" {
+					return Error("REVIEW_NOTE_ALREADY_CONFIRMED", evidence.ReviewNoteID)
+				}
+				if note.Check != "" && note.Check != evidence.Check {
+					return Error("REVIEW_NOTE_CHECK_MISMATCH", evidence.Check)
+				}
+				if note.DefinitionRevision != t.Definition.Revision || note.PlanRevision != t.Plan.Revision {
+					return Error("REVIEW_NOTE_VERSION_MISMATCH", "record a new opinion for the current definition and plan")
+				}
+				for ref, hash := range note.ArtifactHashes {
+					data, err := s.artifactAt(a.Workspace, ref)
+					if err != nil || store.Hash(data) != hash {
+						return Error("REVIEW_EVIDENCE_CHANGED", ref)
+					}
+				}
+				note.Status, note.ConfirmedCandidate, note.ConfirmedAt, note.ConfirmedBy = "confirmed", t.Candidate, &now, evidence.Executor
+			}
 		}
 		a.Candidate = candidate
 		if sub.Result.Status == "blocked" && a.PID > 0 {

@@ -156,7 +156,7 @@ func (s *Service) Verify(id, check, executor string) (Next, error) {
 	return n, e
 }
 func (s *Service) Review(id, check, actor, reason string, refs []string) (Next, error) {
-	return s.review(id, check, actor, reason, "", "pass", refs, nil, "", "")
+	return s.review(id, check, actor, reason, "", "pass", refs, nil, "", "", "")
 }
 
 type ReviewExpectation struct {
@@ -166,12 +166,18 @@ type ReviewExpectation struct {
 }
 
 func (s *Service) ReviewExact(id, check, actor, reason string, refs []string, expected ReviewExpectation) (Next, error) {
-	return s.review(id, check, actor, reason, "", "pass", refs, &expected, "", "")
+	return s.review(id, check, actor, reason, "", "pass", refs, &expected, "", "", "")
 }
 
 // ReviewResultExact records a specific human outcome against the version the
 // reviewer saw. The request key makes a lost HTTP response safe to retry.
 func (s *Service) ReviewResultExact(id, check, actor, reason, recovery, result string, refs []string, requestKey string, expected ReviewExpectation) (Next, error) {
+	return s.ReviewResultWithNoteExact(id, check, actor, reason, recovery, result, refs, requestKey, expected, "")
+}
+
+// ReviewResultWithNoteExact lets a person explicitly apply a saved preliminary
+// opinion while recording a real human check against the current candidate.
+func (s *Service) ReviewResultWithNoteExact(id, check, actor, reason, recovery, result string, refs []string, requestKey string, expected ReviewExpectation, noteID string) (Next, error) {
 	if strings.TrimSpace(requestKey) == "" || len(requestKey) > 128 {
 		return Next{}, Error("IDEMPOTENCY_KEY_REQUIRED", "a unique review request key is required")
 	}
@@ -181,10 +187,13 @@ func (s *Service) ReviewResultExact(id, check, actor, reason, recovery, result s
 		Expected                                     ReviewExpectation
 	}{id, check, actor, reason, recovery, result, refs, expected})
 	key, hash := "human-review:"+requestKey, store.Hash(request)
+	if noteID != "" {
+		hash = store.Hash(append(request, []byte("\nreview-note:"+noteID)...))
+	}
 	if previous, found, err := s.reviewReplay(key, hash); found || err != nil {
 		return previous, err
 	}
-	return s.review(id, check, actor, reason, recovery, result, refs, &expected, key, hash)
+	return s.review(id, check, actor, reason, recovery, result, refs, &expected, key, hash, noteID)
 }
 
 func (s *Service) reviewReplay(key, hash string) (Next, bool, error) {
@@ -206,7 +215,7 @@ func (s *Service) reviewReplay(key, hash string) (Next, bool, error) {
 	return previous, true, s.Store.Flush()
 }
 
-func (s *Service) review(id, check, actor, reason, recovery, result string, refs []string, expected *ReviewExpectation, key, hash string) (Next, error) {
+func (s *Service) review(id, check, actor, reason, recovery, result string, refs []string, expected *ReviewExpectation, key, hash, noteID string) (Next, error) {
 	if result != "pass" && result != "fail" && result != "blocked" {
 		return Next{}, Error("INVALID_RESULT", "select pass, fail or blocked")
 	}
@@ -240,6 +249,27 @@ func (s *Service) review(id, check, actor, reason, recovery, result string, refs
 	if EffectiveCheckMethod(c) != "human" {
 		return Next{}, Error("CHECK_METHOD_MISMATCH", "declared check capability cannot be replaced with human review")
 	}
+	if noteID != "" {
+		var note *HumanReviewNote
+		for i := range t.HumanReviewNotes {
+			if t.HumanReviewNotes[i].ID == noteID {
+				note = &t.HumanReviewNotes[i]
+				break
+			}
+		}
+		if note == nil {
+			return Next{}, Error("REVIEW_NOTE_MISSING", noteID)
+		}
+		if note.Status != "pending" {
+			return Next{}, Error("REVIEW_NOTE_ALREADY_CONFIRMED", noteID)
+		}
+		if note.Check != "" && note.Check != check {
+			return Next{}, Error("REVIEW_NOTE_CHECK_MISMATCH", check)
+		}
+		if note.DefinitionRevision != t.Definition.Revision || note.PlanRevision != t.Plan.Revision {
+			return Next{}, Error("REVIEW_NOTE_VERSION_MISMATCH", "record a new opinion for the current definition and plan")
+		}
+	}
 	workspace := t.CandidateWorkspace
 	if workspace == "" {
 		workspace = s.Root
@@ -272,7 +302,7 @@ func (s *Service) review(id, check, actor, reason, recovery, result string, refs
 	}
 	a := n.Attempt
 	config, _ := json.Marshal(c)
-	ev := Evidence{Check: check, Candidate: t.Candidate, Revision: t.Definition.Revision, PlanRevision: t.Plan.Revision, Config: store.Hash(config), Result: result, Source: "human:" + actor, Executor: actor, Recovery: recovery, Environment: runtime.GOOS + "/" + runtime.GOARCH, Artifacts: refs, ArtifactHashes: hashes, Reason: reason, At: time.Now().UTC()}
+	ev := Evidence{ReviewNoteID: noteID, Check: check, Candidate: t.Candidate, Revision: t.Definition.Revision, PlanRevision: t.Plan.Revision, Config: store.Hash(config), Result: result, Source: "human:" + actor, Executor: actor, Recovery: recovery, Environment: runtime.GOOS + "/" + runtime.GOARCH, Artifacts: refs, ArtifactHashes: hashes, Reason: reason, At: time.Now().UTC()}
 	step := StepResult{Status: result, Summary: reason, Artifacts: refs}
 	if result == "blocked" {
 		step.Blocker = &Blocker{Category: "environment", Reason: reason, Scope: t.Definition.Scope, Tried: reason, Recovery: recovery, ResumeAt: "verify"}

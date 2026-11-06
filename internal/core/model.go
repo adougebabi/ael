@@ -98,6 +98,7 @@ type Attempt struct {
 	OwnerIdentity      string     `json:"owner_identity,omitempty" yaml:"owner_identity,omitempty"`
 }
 type Evidence struct {
+	ReviewNoteID   string            `json:"review_note_id,omitempty" yaml:"review_note_id,omitempty"`
 	ReusedFrom     string            `json:"reused_from,omitempty"`
 	Executor       string            `json:"executor,omitempty"`
 	Recovery       string            `json:"recovery,omitempty"`
@@ -115,6 +116,27 @@ type Evidence struct {
 	ArtifactHashes map[string]string `json:"artifact_hashes" yaml:"artifact_hashes"`
 	Reason         string            `json:"reason" yaml:"reason"`
 	At             time.Time         `json:"at" yaml:"at"`
+}
+
+// HumanReviewNote is an explicitly recorded observation, not check evidence.
+// It remains non-gating until a person separately reviews a specific candidate.
+type HumanReviewNote struct {
+	ID                 string            `json:"id"`
+	Check              string            `json:"check,omitempty"`
+	Actor              string            `json:"actor"`
+	Result             string            `json:"result"`
+	Reason             string            `json:"reason"`
+	Recovery           string            `json:"recovery,omitempty"`
+	Artifacts          []string          `json:"artifacts,omitempty"`
+	ArtifactHashes     map[string]string `json:"artifact_hashes,omitempty"`
+	Candidate          string            `json:"candidate,omitempty"`
+	DefinitionRevision int               `json:"definition_revision"`
+	PlanRevision       int               `json:"plan_revision"`
+	Status             string            `json:"status"`
+	RecordedAt         time.Time         `json:"recorded_at"`
+	ConfirmedCandidate string            `json:"confirmed_candidate,omitempty"`
+	ConfirmedAt        *time.Time        `json:"confirmed_at,omitempty"`
+	ConfirmedBy        string            `json:"confirmed_by,omitempty"`
 }
 type Confirmation struct {
 	Kind         string `json:"kind" yaml:"kind"`
@@ -159,6 +181,7 @@ type Task struct {
 	Attempts            []Attempt         `json:"attempts" yaml:"attempts"`
 	EvidenceHistory     []Evidence        `json:"evidence_history,omitempty"`
 	Evidence            []Evidence        `json:"evidence" yaml:"evidence"`
+	HumanReviewNotes    []HumanReviewNote `json:"human_review_notes,omitempty"`
 	Confirmation        *Confirmation     `json:"confirmation" yaml:"confirmation"`
 	Approvals           []Approval        `json:"approvals" yaml:"approvals"`
 	Candidate           string            `json:"candidate" yaml:"candidate"`

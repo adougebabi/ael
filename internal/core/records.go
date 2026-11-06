@@ -15,23 +15,24 @@ import (
 // TaskRecord is a reviewable checkpoint, not a second live scheduler. It carries
 // no leases, process identities, session IDs, workspace paths or approvals.
 type TaskRecord struct {
-	Schema           int           `json:"schema"`
-	ID               string        `json:"id"`
-	DefinitionHash   string        `json:"definition_hash"`
-	PolicyHash       string        `json:"policy_hash"`
-	Revision         int           `json:"definition_revision"`
-	Plan             Plan          `json:"plan"`
-	Step             string        `json:"current_step"`
-	Status           string        `json:"status"`
-	Candidate        string        `json:"candidate"`
-	Failure          string        `json:"failure"`
-	Result           string        `json:"result"`
-	Created          time.Time     `json:"created"`
-	Updated          time.Time     `json:"updated"`
-	Completed        *time.Time    `json:"completed"`
-	Feedback         []string      `json:"feedback"`
-	TimeLimitSeconds *int          `json:"time_limit_seconds,omitempty"`
-	History          RecordHistory `json:"history"`
+	Schema           int               `json:"schema"`
+	ID               string            `json:"id"`
+	DefinitionHash   string            `json:"definition_hash"`
+	PolicyHash       string            `json:"policy_hash"`
+	Revision         int               `json:"definition_revision"`
+	Plan             Plan              `json:"plan"`
+	Step             string            `json:"current_step"`
+	Status           string            `json:"status"`
+	Candidate        string            `json:"candidate"`
+	Failure          string            `json:"failure"`
+	Result           string            `json:"result"`
+	Created          time.Time         `json:"created"`
+	Updated          time.Time         `json:"updated"`
+	Completed        *time.Time        `json:"completed"`
+	Feedback         []string          `json:"feedback"`
+	TimeLimitSeconds *int              `json:"time_limit_seconds,omitempty"`
+	History          RecordHistory     `json:"history"`
+	HumanReviewNotes []HumanReviewNote `json:"human_review_notes,omitempty"`
 }
 type RecordHistory struct {
 	Attempts []RecordAttempt  `json:"attempts"`
@@ -64,6 +65,7 @@ func recordOf(t Task) TaskRecord {
 	r := TaskRecord{Schema: 1, ID: t.Definition.ID, DefinitionHash: t.DefinitionHash, PolicyHash: t.PolicyHash, Revision: t.Definition.Revision, Plan: t.Plan, Step: t.Step, Status: t.Status, Candidate: t.Candidate, Failure: t.Failure, Result: t.Result, Created: t.Created, Updated: t.Updated, Completed: t.Completed, Feedback: t.Feedback}
 	r.Plan.Approved = false
 	r.TimeLimitSeconds = t.TimeLimitSeconds
+	r.HumanReviewNotes = slices.Clone(t.HumanReviewNotes)
 	if t.History != nil {
 		r.History = *t.History
 		r.History.Attempts = slices.Clone(t.History.Attempts)
@@ -253,7 +255,12 @@ func (s *Service) recoverRecords() error {
 			if !slices.Contains(plan.Steps, r.Step) && !(r.Step == "done" && r.Status != "open") {
 				return Error("INVALID_RECORD_STEP", r.Step)
 			}
-			t := Task{PolicyHash: r.PolicyHash, Definition: d, DefinitionHash: r.DefinitionHash, Plan: plan, Step: r.Step, Status: r.Status, Candidate: r.Candidate, Failure: r.Failure, Result: r.Result, Created: r.Created, Updated: r.Updated, Completed: r.Completed, Feedback: r.Feedback, History: &r.History, Historical: r.Status != "open"}
+			t := Task{PolicyHash: r.PolicyHash, Definition: d, DefinitionHash: r.DefinitionHash, Plan: plan, Step: r.Step, Status: r.Status, Candidate: r.Candidate, Failure: r.Failure, Result: r.Result, Created: r.Created, Updated: r.Updated, Completed: r.Completed, Feedback: r.Feedback, History: &r.History, Historical: r.Status != "open", HumanReviewNotes: slices.Clone(r.HumanReviewNotes)}
+			// Imported notes are historical observations, never authorization to
+			// confirm or pass a new workspace's candidate automatically.
+			for i := range t.HumanReviewNotes {
+				t.HumanReviewNotes[i].Status = "historical"
+			}
 			t.Plan.Approved = false
 			t.TimeLimitSeconds = r.TimeLimitSeconds
 			if t.Status == "open" {

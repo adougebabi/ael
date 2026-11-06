@@ -88,6 +88,7 @@ type TaskSummary struct {
 	RequiresTaskDecision bool                      `json:"requires_task_decision"`
 	Checks               CheckSummary              `json:"checks"`
 	ManualReviews        []PendingHumanReview      `json:"manual_reviews"`
+	PendingReviewNotes   int                       `json:"pending_review_notes"`
 	CurrentRuns          map[string]CheckExecution `json:"-"`
 }
 
@@ -95,6 +96,11 @@ func (s *Service) Summarize(n Next) (TaskSummary, error) {
 	t := n.Task
 	r := TaskSummary{ID: t.Definition.ID, Title: t.Definition.Title, Type: t.Definition.Type, Board: n.Board, Step: n.Step, Action: n.Action, Reasons: n.Reasons, Executors: []string{}, ManualReviews: []PendingHumanReview{}, Completed: t.Completed, Historical: t.Historical}
 	r.RequiresTaskDecision = t.Status == "open" && t.Confirmation != nil
+	for _, note := range t.HumanReviewNotes {
+		if note.Status == "pending" {
+			r.PendingReviewNotes++
+		}
+	}
 	r.CurrentRuns = map[string]CheckExecution{}
 	running := map[string]bool{}
 	for _, a := range t.Attempts {
@@ -171,24 +177,28 @@ func (s *Service) Summarize(n Next) (TaskSummary, error) {
 	// Only actual work/results count. Heartbeats, claims, process starts and
 	// source observations never advance the displayed progress timestamp.
 	var raw, stamp, kind string
-	err := s.Store.DB.QueryRow(`SELECT body,created,kind FROM events WHERE task_id=? AND kind IN ('work_progress','submitted','verified','assessed','reviewed','confirmation','cancelled','paused','resumed','definition_revised') ORDER BY id DESC LIMIT 1`, r.ID).Scan(&raw, &stamp, &kind)
+	err := s.Store.DB.QueryRow(`SELECT body,created,kind FROM events WHERE task_id=? AND kind IN ('work_progress','submitted','verified','assessed','reviewed','human_review_recorded','human_review_confirmed','confirmation','cancelled','paused','resumed','definition_revised') ORDER BY id DESC LIMIT 1`, r.ID).Scan(&raw, &stamp, &kind)
 	if err != nil && err != sql.ErrNoRows {
 		return r, err
 	}
 	if err == nil {
 		var body struct {
-			Summary string     `json:"summary"`
-			Reason  string     `json:"reason"`
-			Failure string     `json:"failure"`
-			Next    string     `json:"next"`
-			Result  StepResult `json:"result"`
+			Summary string          `json:"summary"`
+			Reason  string          `json:"reason"`
+			Failure string          `json:"failure"`
+			Next    string          `json:"next"`
+			Result  json.RawMessage `json:"result"`
 		}
 		if err = json.Unmarshal([]byte(raw), &body); err != nil {
 			return r, err
 		}
 		r.LastResult = body.Summary
-		if r.LastResult == "" {
-			r.LastResult = body.Result.Summary
+		if r.LastResult == "" && len(body.Result) > 0 && body.Result[0] == '{' {
+			var result StepResult
+			if err = json.Unmarshal(body.Result, &result); err != nil {
+				return r, err
+			}
+			r.LastResult = result.Summary
 		}
 		if r.LastResult == "" {
 			r.LastResult = body.Reason

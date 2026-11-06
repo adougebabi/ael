@@ -288,6 +288,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				Result       string          `json:"result"`
 				Recovery     string          `json:"recovery"`
 				RequestKey   string          `json:"request_key"`
+				ReviewNoteID string          `json:"review_note_id"`
 				Kind         string          `json:"kind"`
 				Candidate    string          `json:"candidate"`
 				Revision     int             `json:"revision"`
@@ -316,7 +317,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			case "review":
 				v, e = h.Service.ReviewExact(a.ID, a.Unit, a.Executor, a.Reason, a.Artifacts, core.ReviewExpectation{Candidate: a.Candidate, DefinitionRevision: a.Revision, PlanRevision: a.PlanRevision})
 			case "review_result":
-				v, e = h.Service.ReviewResultExact(a.ID, a.Unit, a.Executor, a.Reason, a.Recovery, a.Result, a.Artifacts, a.RequestKey, core.ReviewExpectation{Candidate: a.Candidate, DefinitionRevision: a.Revision, PlanRevision: a.PlanRevision})
+				v, e = h.Service.ReviewResultWithNoteExact(a.ID, a.Unit, a.Executor, a.Reason, a.Recovery, a.Result, a.Artifacts, a.RequestKey, core.ReviewExpectation{Candidate: a.Candidate, DefinitionRevision: a.Revision, PlanRevision: a.PlanRevision}, a.ReviewNoteID)
+			case "review_pending":
+				v, e = h.Service.RecordPendingReview(a.ID, a.Unit, a.Executor, a.Reason, a.Recovery, a.Result, a.Artifacts, a.RequestKey, core.ReviewExpectation{Candidate: a.Candidate, DefinitionRevision: a.Revision, PlanRevision: a.PlanRevision})
+			case "review_confirm":
+				v, e = h.Service.ConfirmPendingReview(a.ID, a.ReviewNoteID, a.Executor, a.RequestKey, core.ReviewExpectation{Candidate: a.Candidate, DefinitionRevision: a.Revision, PlanRevision: a.PlanRevision})
 			case "confirm":
 				v, e = h.Service.Confirm(a.ID, a.Kind, a.Decision, a.Executor, a.Reason, a.Candidate, a.Revision, a.PlanRevision)
 			case "pause":

@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-const Version = "0.1.13"
+const Version = "0.1.14"
 
 type Config struct {
 	Schema    int    `json:"schema"`
