@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 func humanReviewFixture(t *testing.T, method string, goal string, extra bool) (*core.Service, string, core.ReviewExpectation) {
@@ -227,5 +228,190 @@ func TestHumanVisualReviewRequiresActualScreenshot(t *testing.T) {
 	n, err = s.ReviewResultExact(id, "visual", "reviewer", "inspected screenshot", "", "pass", []string{"runtime:screenshot.png"}, "with-image", expected)
 	if err != nil || n.Action != "completed" {
 		t.Fatal("valid screenshot was not accepted", n, err)
+	}
+}
+
+func TestBlockedHumanReviewCanResumeItsOwnCurrentCheck(t *testing.T) {
+	s := fixture(t)
+	checks := []core.Check{}
+	for _, id := range []string{"one", "two", "three"} {
+		checks = append(checks, core.Check{ID: id, Kind: "functional", Method: "command", Command: []string{"sh", "-c", "true"}, Covers: []string{"result"}, Required: true})
+	}
+	checks = append(checks,
+		core.Check{ID: "ui", Kind: "ui", Method: "human", Covers: []string{"result"}, Required: true},
+		core.Check{ID: "ux", Kind: "ux", Method: "human", Covers: []string{"result"}, Required: true})
+	id := atVerify(t, s, core.Definition{Title: "等待人工验收", Type: "feature", Goal: "verified", Acceptance: []string{"result"}, Checks: checks})
+	for _, name := range []string{"one", "two", "three"} {
+		if _, err := s.Verify(id, name, "isolated"); err != nil {
+			t.Fatal(name, err)
+		}
+	}
+	n, err := s.Next(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := core.ReviewExpectation{Candidate: n.Task.Candidate, DefinitionRevision: n.Revision, PlanRevision: n.PlanRevision}
+	if _, err = s.Assess(core.Assessment{Task: id, Check: "ui", Candidate: expected.Candidate, Method: "human", Executor: "reviewer", Result: "blocked", Reason: "awaiting human review"}); err != nil {
+		t.Fatal(err)
+	}
+	blocked, err := s.Next(id)
+	if err != nil || !blocked.Task.Paused || core.CurrentEvidence(blocked.Task, checks[3]).Result != "blocked" {
+		t.Fatal(blocked, err)
+	}
+	if _, err = s.ResumeBlockedHumanReview(id, "ux", expected); err == nil || !strings.Contains(err.Error(), "REVIEW_RESUME_NOT_ALLOWED") {
+		t.Fatal("another check must not clear the blocker", err)
+	}
+	bad := expected
+	bad.PlanRevision++
+	if _, err = s.ResumeBlockedHumanReview(id, "ui", bad); err == nil || !strings.Contains(err.Error(), "REVIEW_VERSION_MISMATCH") {
+		t.Fatal("a stale revision must not resume", err)
+	}
+	resumed, err := s.ResumeBlockedHumanReview(id, "ui", expected)
+	if err != nil || resumed.Task.Paused || resumed.Task.Candidate != expected.Candidate || len(resumed.Task.Evidence) != 4 || core.CurrentEvidence(resumed.Task, checks[3]).Result != "blocked" {
+		t.Fatal("resume must preserve the candidate and evidence", resumed, err)
+	}
+	file, err := os.Create(filepath.Join(s.Store.Dir, "ui.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = png.Encode(file, image.NewRGBA(image.Rect(0, 0, 2, 2))); err != nil {
+		t.Fatal(err)
+	}
+	if err = file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.ReviewResultExact(id, "ui", "reviewer", "looked at the actual page", "", "pass", []string{"runtime:ui.png"}, "ui-result", expected); err != nil {
+		t.Fatal(err)
+	}
+	current, err := s.Next(id)
+	if err != nil || current.Task.Status != "open" || core.CurrentEvidence(current.Task, checks[3]).Result != "pass" || core.CurrentEvidence(current.Task, checks[4]) != nil {
+		t.Fatal("the other human check must remain outstanding", current, err)
+	}
+	if err = os.WriteFile(filepath.Join(s.Store.Dir, "ux.md"), []byte("interaction review"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	final, err := s.ReviewResultExact(id, "ux", "reviewer", "checked the interaction", "", "pass", []string{"runtime:ux.md"}, "ux-result", expected)
+	if err != nil || final.Task.Status != "completed" {
+		t.Fatal("all required checks should complete normally", final, err)
+	}
+}
+
+func TestBlockedHumanReviewDoesNotResumeStaleOrExplicitPause(t *testing.T) {
+	for _, scenario := range []string{"candidate changed", "explicit pause", "explicit pause same reason"} {
+		t.Run(scenario, func(t *testing.T) {
+			s, id, expected := humanReviewFixture(t, "human", "verified", false)
+			if _, err := s.ReviewResultExact(id, "owner", "reviewer", "waiting for review", "continue later", "blocked", nil, "blocked", expected); err != nil {
+				t.Fatal(err)
+			}
+			if scenario == "candidate changed" {
+				if err := os.WriteFile(filepath.Join(s.Root, "changed.txt"), []byte("changed"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				reason := "explicit pause"
+				if scenario == "explicit pause same reason" {
+					reason = "waiting for review"
+				}
+				if _, err := s.Pause(id, reason); err != nil {
+					t.Fatal(err)
+				}
+			}
+			_, err := s.ResumeBlockedHumanReview(id, "owner", expected)
+			want := "CANDIDATE_CHANGED"
+			if scenario != "candidate changed" {
+				want = "REVIEW_RESUME_NOT_ALLOWED"
+			}
+			if err == nil || !strings.Contains(err.Error(), want) {
+				t.Fatal("unexpected resume outcome", err)
+			}
+			current, err := s.Next(id)
+			if err != nil || !current.Task.Paused || current.Task.Candidate != expected.Candidate || len(current.Task.Evidence) != 1 {
+				t.Fatal("a rejected resume changed the task", current, err)
+			}
+		})
+	}
+}
+
+func TestBlockedHumanReviewTracksLatestBlockerWithSameReason(t *testing.T) {
+	s := fixture(t)
+	checks := []core.Check{
+		{ID: "ui", Kind: "review", Method: "human", Required: true, Covers: []string{"result"}},
+		{ID: "ux", Kind: "review", Method: "human", Required: true, Covers: []string{"result"}},
+	}
+	id := atVerify(t, s, core.Definition{Title: "同理由阻塞", Type: "bug", Goal: "verified", Acceptance: []string{"result"}, Checks: checks})
+	n, err := s.Next(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := core.ReviewExpectation{Candidate: n.Task.Candidate, DefinitionRevision: n.Revision, PlanRevision: n.PlanRevision}
+	block := func(check, key string) {
+		t.Helper()
+		if _, err := s.ReviewResultExact(id, check, "reviewer", "waiting for review", "continue later", "blocked", nil, key, expected); err != nil {
+			t.Fatal(err)
+		}
+	}
+	block("ui", "ui-blocked")
+	if _, err = s.ResumeBlockedHumanReview(id, "ui", expected); err != nil {
+		t.Fatal(err)
+	}
+	block("ux", "ux-blocked")
+	status, err := s.ReviewCandidateStatus(id)
+	if err != nil || status["blocked_check"] != "ux" {
+		t.Fatal("the latest blocker should own the resume entry", status, err)
+	}
+	if _, err = s.ResumeBlockedHumanReview(id, "ui", expected); err == nil {
+		t.Fatal("the earlier blocker must not resume the newer one")
+	}
+	if _, err = s.ResumeBlockedHumanReview(id, "ux", expected); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestBlockedHumanReviewSurvivesLaterParallelCheckResult(t *testing.T) {
+	s := fixture(t)
+	signal := filepath.Join(s.Store.Dir, "finish-check")
+	defer os.WriteFile(signal, []byte("release"), 0600)
+	checks := []core.Check{
+		{ID: "command", Kind: "functional", Method: "command", Command: []string{"sh", "-c", `while [ ! -f "$1" ]; do sleep .02; done`, "sh", signal}, Required: true, Covers: []string{"result"}},
+		{ID: "ui", Kind: "review", Method: "human", Required: true, Covers: []string{"result"}},
+	}
+	id := atVerify(t, s, core.Definition{Title: "并发检查", Type: "bug", Goal: "verified", Acceptance: []string{"result"}, Checks: checks})
+	n, err := s.Next(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := core.ReviewExpectation{Candidate: n.Task.Candidate, DefinitionRevision: n.Revision, PlanRevision: n.PlanRevision}
+	done := make(chan error, 1)
+	go func() { _, err := s.Verify(id, "command", "parallel"); done <- err }()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		current, err := s.Next(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if current.Action == "wait_executor" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("parallel check did not start")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if _, err = s.ReviewResultExact(id, "ui", "reviewer", "waiting for review", "continue later", "blocked", nil, "parallel-blocked", expected); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(signal, []byte("release"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = <-done; err != nil {
+		t.Fatal(err)
+	}
+	status, err := s.ReviewCandidateStatus(id)
+	if err != nil || status["blocked_check"] != "ui" {
+		t.Fatal("later parallel pass hid the blocker", status, err)
+	}
+	resumed, err := s.ResumeBlockedHumanReview(id, "ui", expected)
+	if err != nil || resumed.Task.Paused || core.CurrentEvidence(resumed.Task, checks[0]).Result != "pass" {
+		t.Fatal("parallel pass or resume lost", resumed, err)
 	}
 }

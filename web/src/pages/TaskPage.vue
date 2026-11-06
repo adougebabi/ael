@@ -290,7 +290,7 @@ const acceptanceState = computed(() => {
 });
 const reviewState = computed(() => reviewNoteStatus(n.value?.summary));
 function primaryAction() {
-  if (primaryKind.value === "review") manualCheck.value = availableHumanChecks.value[0].id;
+  if (primaryKind.value === "review") manualCheck.value = availableHumanChecks.value.length === 1 ? availableHumanChecks.value[0].id : "";
   else if (primaryKind.value === "review_pending") manualCheck.value = pendingReviewCheck.value;
   else if (primaryKind.value === "resume") start("resume", "恢复任务");
   else if (primaryKind.value === "decision") setQuery({ section: "basis" });
@@ -303,7 +303,7 @@ function primaryAction() {
 function openTaskReview() {
   if (busy.value) return;
   workFormOpen.value = false;
-  manualCheck.value = pendingReviewCheck.value !== null ? pendingReviewCheck.value : availableHumanChecks.value[0]?.id || "";
+  manualCheck.value = pendingReviewCheck.value !== null ? pendingReviewCheck.value : availableHumanChecks.value.length === 1 ? availableHumanChecks.value[0].id : "";
 }
 function closeReview() { manualCheck.value = null; pendingReviewCheck.value = pendingReviewForTask(info.value.project || "", props.id); }
 function reviewSaved() { pendingReviewCheck.value = pendingReviewForTask(info.value.project || "", props.id); void load(true); }
@@ -1343,6 +1343,6 @@ function checkReason(c: any) {
         运行已配置的真实命令，结果绑定当前候选和修订。
       </p>
     </ActionDialog>
-    <ManualReviewDialog v-if="manualCheck !== null" :task-id="id" :check-id="manualCheck" @close="closeReview" @saved="reviewSaved" />
+    <ManualReviewDialog v-if="manualCheck !== null" :key="id + ':' + manualCheck" :task-id="id" :check-id="manualCheck" @select-check="manualCheck = $event" @close="closeReview" @saved="reviewSaved" />
   </div>
 </template>

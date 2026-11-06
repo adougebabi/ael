@@ -247,6 +247,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			v, e := h.Service.Attention()
 			reply(w, v, e)
+		case "/api/review-candidate":
+			if r.Method != "GET" {
+				http.Error(w, "METHOD", 405)
+				return
+			}
+			v, e := h.Service.ReviewCandidateStatus(r.URL.Query().Get("id"))
+			reply(w, v, e)
+		case "/api/review-image":
+			h.reviewImage(w, r)
 		case "/api/task":
 			v, e := h.Service.Next(r.URL.Query().Get("id"))
 			if e == nil {
@@ -322,6 +331,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				v, e = h.Service.RecordPendingReview(a.ID, a.Unit, a.Executor, a.Reason, a.Recovery, a.Result, a.Artifacts, a.RequestKey, core.ReviewExpectation{Candidate: a.Candidate, DefinitionRevision: a.Revision, PlanRevision: a.PlanRevision})
 			case "review_confirm":
 				v, e = h.Service.ConfirmPendingReview(a.ID, a.ReviewNoteID, a.Executor, a.RequestKey, core.ReviewExpectation{Candidate: a.Candidate, DefinitionRevision: a.Revision, PlanRevision: a.PlanRevision})
+			case "review_resume":
+				v, e = h.Service.ResumeBlockedHumanReview(a.ID, a.Unit, core.ReviewExpectation{Candidate: a.Candidate, DefinitionRevision: a.Revision, PlanRevision: a.PlanRevision})
 			case "confirm":
 				v, e = h.Service.Confirm(a.ID, a.Kind, a.Decision, a.Executor, a.Reason, a.Candidate, a.Revision, a.PlanRevision)
 			case "pause":

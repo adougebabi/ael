@@ -66,6 +66,21 @@ export async function api(
     if (timeout !== undefined) clearTimeout(timeout);
   }
 }
+
+export async function uploadReviewImage(taskId: string, file: File): Promise<string> {
+  if (!token) await authenticate();
+  const send = () => fetch("/api/review-image?" + params({ id: taskId }), {
+    method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": file.type || "application/octet-stream" }, body: file,
+  });
+  let response = await send();
+  if (response.status === 401) { await authenticate(); response = await send(); }
+  if (!response.ok) {
+    let code = String(response.status), detail = `HTTP ${response.status}`;
+    try { const value = await response.json(); code = value.code || code; detail = value.error || detail; } catch { /* Keep the HTTP status. */ }
+    throw new ApiError(code, detail);
+  }
+  return (await response.json()).ref;
+}
 export const info = ref<any>({});
 export const infoError = ref("");
 export const infoLast = ref("");
