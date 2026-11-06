@@ -6,6 +6,14 @@ export const boards = [
   ["cancelled", "已取消"],
 ] as const;
 const labels: Record<string, string> = {
+  bug: "缺陷",
+  feature: "功能",
+  improvement: "改进",
+  refactor: "重构",
+  docs: "文档",
+  chore: "维护",
+  test: "测试",
+  qa: "质量验证",
   define: "明确目标",
   analysis: "分析与方案",
   execute: "实施工作",
@@ -132,6 +140,16 @@ export const stamp = (s: string | null | undefined) =>
   s && Number.isFinite(Date.parse(s))
     ? new Date(s).toLocaleString("zh-CN", { hour12: false })
     : "日期未确认";
+export function relativeStamp(value: string | null | undefined) {
+  if (!value || !Number.isFinite(Date.parse(value))) return "日期未确认";
+  const seconds = Math.round((Date.parse(value) - Date.now()) / 1000);
+  const formatter = new Intl.RelativeTimeFormat("zh-CN", { numeric: "auto" });
+  if (Math.abs(seconds) < 60) return formatter.format(seconds, "second");
+  if (Math.abs(seconds) < 3600) return formatter.format(Math.round(seconds / 60), "minute");
+  if (Math.abs(seconds) < 86400) return formatter.format(Math.round(seconds / 3600), "hour");
+  if (Math.abs(seconds) < 7 * 86400) return formatter.format(Math.round(seconds / 86400), "day");
+  return stamp(value);
+}
 export function schedule(s: any) {
   if (s.manual_reviews?.length && !s.running) return "等待人工验收";
   if (

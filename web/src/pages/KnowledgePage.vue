@@ -16,6 +16,7 @@ const detail = ref<any>(null),
   search = ref(route.value.query.get("q") || "");
 const view = computed(() => route.value.query.get("view") || "current"),
   scope = computed(() => route.value.query.get("scope") || ""),
+  readerTab = computed(() => route.value.query.get("reader") || "body"),
   offset = computed(() => Number(route.value.query.get("offset") || 0));
 const views = [
   ["current", "现行规范"],
@@ -85,12 +86,14 @@ function searchAll() {
     </button>
     <LoadState :loading="loading" :error="error" :last="last" @retry="load" />
     <template v-if="!id"
-      ><div class="knowledge-library"><aside class="knowledge-scopes" aria-label="资料范围导航"><span>按适用范围</span><button :class="{ chosen: !scope }" @click="filter({ scope: '' })">全部范围</button><button :class="{ chosen: scope === 'unclassified' }" @click="filter({ scope: 'unclassified' })">未分类 / 项目级</button><button v-for="s in data.scopes.slice(0, 8)" :key="s" :class="{ chosen: scope === s }" :title="s" @click="filter({ scope: s })">{{ s }}</button><p>规范说明应该怎样做。<br />决策保留为什么。<br />历史不自动成为当前规则。</p></aside><div class="knowledge-main"><div class="library-heading"><div><h2>{{ views.find(([key]) => key === view)?.[1] || '跨资料搜索' }}</h2><small>{{ data.total }} 份资料 · 正文按需阅读</small></div><form class="toolbar library-search" @submit.prevent="searchAll"><label class="search">搜索全部资料<input v-model="search" type="search" placeholder="标题、正文、路径或符号" /></label><button type="submit">搜索</button><label>适用范围<select :value="scope" @change="filter({ scope: ($event.target as HTMLSelectElement).value })"><option value="">全部范围</option><option value="unclassified">未分类 / 项目级</option><option v-for="s in data.scopes" :key="s" :value="s">{{ s }}</option></select></label></form></div><p v-if="view === 'current'" class="secondary">
+      ><div class="knowledge-library"><aside class="knowledge-scopes" aria-label="资料范围导航"><span>按适用范围</span><button :class="{ chosen: !scope }" @click="filter({ scope: '' })">全部范围</button><button :class="{ chosen: scope === 'unclassified' }" @click="filter({ scope: 'unclassified' })">未分类 / 项目级</button><button v-for="s in data.scopes.slice(0, 8)" :key="s" :class="{ chosen: scope === s }" :title="s" @click="filter({ scope: s })">{{ s }}</button><p>规范说明应该怎样做。<br />决策保留为什么。<br />历史不自动成为当前规则。</p></aside><div class="knowledge-main"><div class="library-heading"><div><h2>{{ views.find(([key]) => key === view)?.[1] || '跨资料搜索' }}</h2><small>{{ data.total }} 份资料 · 正文按需阅读</small></div><form class="toolbar library-search" @submit.prevent="searchAll"><label class="search"><span class="visually-hidden">搜索全部资料</span><input v-model="search" type="search" placeholder="搜索资料…" /></label><button type="submit">搜索</button><details class="library-filter-more"><summary>更多范围</summary><label>适用范围<select :value="scope" @change="filter({ scope: ($event.target as HTMLSelectElement).value })"><option value="">全部范围</option><option value="unclassified">未分类 / 项目级</option><option v-for="s in data.scopes" :key="s" :value="s">{{ s }}</option></select></label></details></form></div><p v-if="view === 'current'" class="secondary">
         有效规范与待核实的规范分开标注；待决定、冲突内容保持原状态。
       </p>
+      <p v-if="view === 'history'" class="info-strip">历史资料用于追溯来源和变化，不自动作为当前规范。</p>
       <div v-if="!loading && !error && !data.items.length" class="large-empty">
         <h2>{{ search ? "没有匹配资料" : "当前分类暂无资料" }}</h2>
         <p>可切换分类或调整搜索；没有资料不会被补成虚构规范。</p>
+        <button v-if="search || scope" @click="search = ''; filter({ q: '', scope: '', view: 'current' })">清除筛选</button>
         <a href="#/settings?section=sources">查看资料接入与来源</a>
       </div>
       <div class="record-list">
@@ -142,7 +145,8 @@ function searchAll() {
       <p v-if="route.query.get('version')" class="notice">
         正在阅读任务实际使用的历史版本，不能据此认定当前实现已复验。
       </p>
-      <section class="knowledge-reader">
+      <nav class="tabs" aria-label="资料详情分区"><button v-for="[key, title] in [['body', '正文'], ['source', '来源与版本'], ['related', '关联工作']]" :key="key" :class="{ chosen: readerTab === key }" :aria-current="readerTab === key ? 'page' : undefined" @click="setQuery({ reader: key })">{{ title }}</button></nav>
+      <section v-if="readerTab === 'body'" class="knowledge-reader">
         <MarkdownBody :id="detail.id" :body="detail.body" toc-right><template #sidebar><section class="reader-related"><h2>关联任务与后继</h2><div class="related-links">
           <template v-for="link in detail.related_tasks || []" :key="link.id"
             ><a v-if="link.available" :href="taskHref(link.id)">{{
@@ -160,8 +164,8 @@ function searchAll() {
           >
         </div></section></template></MarkdownBody>
       </section>
-      <details class="source-details">
-        <summary>来源与版本</summary>
+      <section v-if="readerTab === 'source'" class="source-details content-section">
+        <h2>来源与版本</h2>
         <dl class="facts">
           <div>
             <dt>来源文件</dt>
@@ -188,8 +192,9 @@ function searchAll() {
         </p>
         <p v-else>原始发生日期未记录；不采用导入或文件更新时间代替。</p>
         <p class="secondary">{{ detail.reason }}</p>
-      </details>
-      <details>
+      </section>
+      <section v-if="readerTab === 'related'" class="content-section"><h2>关联工作</h2><p v-if="!detail.related_tasks?.length" class="secondary">尚未记录关联任务。</p><div class="related-links"><template v-for="link in detail.related_tasks || []" :key="link.id"><a v-if="link.available" :href="taskHref(link.id)">{{ link.title }}</a><span v-else class="secondary">一项关联任务已不可用（来源引用保留）</span></template></div><p v-if="detail.superseded_by"><a :href="knowledgeHref(detail.superseded_by)">查看后继资料</a></p><p><a :href="'#/evolution?' + params({ q: detail.title })">查找相关演进 →</a></p></section>
+      <details v-if="readerTab === 'source'">
         <summary>原始 Markdown</summary>
         <pre>{{ detail.body }}</pre>
       </details></template

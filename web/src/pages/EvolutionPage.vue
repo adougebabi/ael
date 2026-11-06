@@ -70,49 +70,14 @@ function day(value: string | null) {
       ><p class="secondary" style="margin-top: 18px">
         有明确依据的交付、规范与决策。导入、索引、心跳和普通进程事件保留在诊断中。
       </p>
-      <nav class="evolution-segments" aria-label="项目变化分类"><button v-for="[kind, title] in changeKinds" :key="kind" :class="{ chosen: (route.query.get('kind') || '') === kind }" :aria-pressed="(route.query.get('kind') || '') === kind" @click="filter({ kind })">{{ title }}</button></nav><form class="toolbar evolution-filters" @submit.prevent="filter({ q: search })">
-        <label class="search"
-          >查找项目变化<input
-            v-model="search"
-            type="search"
-            placeholder="变化标题、内容或原因" /></label
-        ><button type="submit">搜索</button
-        ><label
-          >变化类型<select
-            :value="route.query.get('kind') || ''"
-            @change="
-              filter({ kind: ($event.target as HTMLSelectElement).value })
-            "
-          >
-            <option value="">全部类型</option>
-            <option value="delivery">任务交付</option>
-            <option value="decision">决策与取舍</option>
-            <option value="spec">规范变更</option>
-          </select></label
-        ><label
-          >影响范围<select
-            :value="route.query.get('scope') || ''"
-            @change="
-              filter({ scope: ($event.target as HTMLSelectElement).value })
-            "
-          >
-            <option value="">全部范围</option>
-            <option v-for="s in data.scopes" :value="s">{{ s }}</option>
-          </select></label
-        ><label
-          >发生于 / 从<input
-            type="date"
-            :value="route.query.get('from') || ''"
-            @change="
-              filter({ from: ($event.target as HTMLInputElement).value })
-            " /></label
-        ><label
-          >至<input
-            type="date"
-            :value="route.query.get('to') || ''"
-            @change="filter({ to: ($event.target as HTMLInputElement).value })"
-        /></label>
-      </form>
+      <div class="evolution-toolbar"><nav class="evolution-segments" aria-label="项目变化分类"><button v-for="[kind, title] in changeKinds" :key="kind" :class="{ chosen: (route.query.get('kind') || '') === kind }" :aria-pressed="(route.query.get('kind') || '') === kind" @click="filter({ kind })">{{ title }}</button></nav><form class="toolbar evolution-filters" @submit.prevent="filter({ q: search })">
+        <label class="search"><span class="visually-hidden">查找项目变化</span><input v-model="search" type="search" placeholder="搜索变化…" /></label><button type="submit">搜索</button>
+        <details class="evolution-more" :open="!!(route.query.get('scope') || route.query.get('from') || route.query.get('to'))"><summary>更多筛选</summary><div class="evolution-more-fields">
+          <label>影响范围<select :value="route.query.get('scope') || ''" @change="filter({ scope: ($event.target as HTMLSelectElement).value })"><option value="">全部范围</option><option v-for="s in data.scopes" :key="s" :value="s">{{ s }}</option></select></label>
+          <label>发生于 / 从<input type="date" :value="route.query.get('from') || ''" @change="filter({ from: ($event.target as HTMLInputElement).value })" /></label>
+          <label>至<input type="date" :value="route.query.get('to') || ''" @change="filter({ to: ($event.target as HTMLInputElement).value })" /></label>
+        </div></details>
+      </form></div>
       <p
         v-if="route.query.get('from') || route.query.get('to')"
         class="secondary"
@@ -131,6 +96,7 @@ function day(value: string | null) {
       ><div class="evolution-layout"><div class="evolution-main"><div v-if="!loading && !error && !data.items.length" class="large-empty">
         <h2>暂无可追溯的项目变化</h2>
         <p>现有记录尚不足以证明变化，或当前筛选没有匹配结果。</p>
+        <button v-if="route.query.get('q') || route.query.get('kind') || route.query.get('scope') || route.query.get('from') || route.query.get('to')" @click="search = ''; filter({ q: '', kind: '', scope: '', from: '', to: '' })">清除筛选</button>
         <div class="related-links">
           <a href="#/tasks">查看任务</a
           ><a href="#/knowledge?view=decisions">查看决策</a

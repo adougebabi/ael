@@ -103,16 +103,17 @@ async function step(
 test("A01 单任务：紧凑五分组与真实等待接手", async ({ page }) => {
   await goto(page, "single");
   await expect(page.locator(".task-row")).toHaveCount(1);
-  await expect(page.locator("[data-board]")).toHaveCount(5);
+  await expect(page.getByRole("navigation", { name: "任务分组定位" }).getByRole("link")).toHaveCount(6);
+  await expect(page.locator("[data-board]")).toHaveCount(1);
   await expect(page.locator(".task-table-head")).toContainText("必要验收");
   await expect(page.locator(".dashboard-bottom")).toContainText("最近交付");
   await expect(page.locator(".dashboard-bottom")).toContainText("项目依据");
   const row = page.locator(".task-row");
   await expect(row).toContainText("等待接手");
   await expect(row).toContainText("当前无人执行");
-  await expect(row).toContainText("下一步：领取");
+  await expect(row.getByRole("link", { name: /只有一个任务/ })).toBeVisible();
   const rect = await row.boundingBox();
-  expect(rect!.width).toBeGreaterThan(850);
+  expect(rect!.width).toBeGreaterThan(750);
   expect(rect!.height).toBeLessThan(190);
   expect(
     await page.locator(".board").evaluate((el) => getComputedStyle(el).display),
@@ -148,9 +149,9 @@ test("A02 多任务：并行执行、等待接手、环境、确认分组同源"
   await expect(deliveries.locator(".dashboard-item")).toHaveCount(2);
   await expect(deliveries).toContainText("已验证");
   await expect(deliveries).not.toContainText("已实现 · 尚无发布依据");
-  await page.getByLabel("状态分组").selectOption("active");
+  await page.getByRole("navigation", { name: "任务分组定位" }).getByRole("link", { name: /^推进中/ }).click();
   await expect(page.locator("[data-board]")).toHaveCount(1);
-  await page.getByLabel("状态分组").selectOption("");
+  await page.getByRole("navigation", { name: "任务分组定位" }).getByRole("link", { name: /^当前工作/ }).click();
   await expect(page.locator("[data-board=active] .task-row")).toContainText(
     "2 项执行中 · 1 项检查待接手",
   );
@@ -173,7 +174,9 @@ test("A02 多任务：并行执行、等待接手、环境、确认分组同源"
   await expect(page.locator(".task-row")).toHaveCount(1);
   await expect(page.locator(".task-row")).toContainText("环境标记尚未准备好");
   await expect(page.locator(".task-row .task-state .status")).not.toContainText("执行中");
+  await page.getByRole("button", { name: "查看全部记录 →" }).click();
   await page.getByLabel("完成历史").selectOption("7");
+  await page.getByRole("navigation", { name: "任务分组定位" }).getByRole("link", { name: /^当前工作/ }).click();
   await expect(page.locator(".task-row")).toHaveCount(1);
   await shot(page, "A02-environment");
   await goto(page, "many", "/tasks/current-block");
@@ -210,7 +213,7 @@ test("A03 分组分页、详情直达、返回保留筛选位置", async ({ page
   await link.scrollIntoViewIfNeeded();
   const name = await link.locator("h3").innerText();
   const y = await page.evaluate(() => window.scrollY);
-  await link.click();
+  await link.locator(".task-title-link").click();
   await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
   await expect(
     page.getByRole("navigation", { name: "任务详情分区" }).getByRole("button"),
@@ -231,10 +234,10 @@ test("A03 分组分页、详情直达、返回保留筛选位置", async ({ page
   await goto(page, "many", "/tasks?days=all");
   await page
     .getByRole("navigation", { name: "任务分组定位" })
-    .getByRole("link", { name: /^最近完成/ })
+    .getByRole("link", { name: /^已完成/ })
     .click();
   await expect(page.locator("[data-board=completed] .task-row")).toHaveCount(3);
-  await page.locator("[data-board=completed] .task-row").first().click();
+  await page.locator("[data-board=completed] .task-title-link").first().click();
   await expect(
     page.getByRole("navigation", { name: "任务详情分区" }),
   ).toBeVisible();
@@ -272,6 +275,7 @@ test("A05 千条资料：分类搜索分页与正文懒加载", async ({ page, r
   });
   await goto(page, "many", "/knowledge?view=history");
   await expect(page.locator(".knowledge-scopes")).toContainText("按适用范围");
+  await page.getByText("更多范围", { exact: true }).click();
   await page.getByLabel("适用范围").selectOption("archive");
   await expect(page.locator(".knowledge")).toHaveCount(25);
   expect(bodyRequests).toBe(0);
@@ -319,6 +323,7 @@ test("A06 状态不改写、Markdown、真实链接、来源与替代关系", as
     ".ael/knowledge/current.md",
   );
   await shot(page, "A06-markdown-source");
+  await page.getByRole("button", { name: "正文", exact: true }).click();
   await page
     .locator(".markdown")
     .getByRole("link", { name: "读取决策" })
@@ -446,7 +451,8 @@ test("A09 日期未知、实现未发布、决定与否决均保持原事实", a
   await expect(page.locator("main")).toContainText("日期未确认");
   await shot(page, "A09-rejected-undated");
   await goto(page, "many", "/evolution");
-  await page.getByLabel("变化类型").selectOption("decision");
+  await page.getByRole("navigation", { name: "项目变化分类" }).getByRole("button", { name: "决策与取舍" }).click();
+  await page.getByText("更多筛选", { exact: true }).click();
   await page.getByLabel("发生于 / 从").fill("2026-10-20");
   await page.getByLabel("至", { exact: true }).fill("2026-10-20");
   await expect(page.locator(".change-row")).toHaveCount(1);
@@ -525,9 +531,9 @@ test("A11 断线恢复、真实空、后端错误与快速搜索无旧响应覆�
   await expect(page.locator(".task-row")).toContainText("等待环境标记");
   await page.unroute("**/api/tasks?**");
   await goto(page, "empty");
-  await expect(page.locator("[data-board]")).toHaveCount(5);
+  await expect(page.locator("[data-board]")).toHaveCount(0);
   await expect(page.locator(".task-row")).toHaveCount(0);
-  await expect(page.locator("main")).toContainText("暂无待处理");
+  await expect(page.locator("main")).toContainText("当前分组暂无工作");
   await goto(page, "empty", "/evolution");
   await expect(
     page.getByRole("heading", { name: "暂无可追溯的项目变化" }),
@@ -567,10 +573,11 @@ test("A12a 创建、接手、暂缓、恢复、检查、取消与删除均写入
     page.getByRole("heading", { level: 1, name: title }),
   ).toBeVisible();
   await expect(page.locator("h1 img")).toHaveCount(0);
+  await page.locator(".task-more > summary").click();
   await page.getByRole("button", { name: "暂缓", exact: true }).click();
   await confirmDialog(page, "隔离浏览器暂停验证");
   await expect(page.locator(".conclusion")).toContainText("隔离浏览器暂停验证");
-  await page.getByRole("button", { name: "恢复任务", exact: true }).click();
+  await page.locator(".next-panel").getByRole("button", { name: "恢复任务", exact: true }).click();
   await page.getByRole("dialog").getByRole("checkbox").check();
   await confirmDialog(page);
   await expect(
@@ -625,6 +632,7 @@ test("A12a 创建、接手、暂缓、恢复、检查、取消与删除均写入
     acceptance: ["保留取消理由"],
   });
   await goto(page, "single", "/tasks/" + id);
+  await page.locator(".task-more > summary").click();
   await page.getByRole("button", { name: "取消任务", exact: true }).click();
   await confirmDialog(page, "浏览器隔离取消记录");
   await expect(page.locator(".conclusion")).toContainText("浏览器隔离取消记录");
@@ -664,7 +672,7 @@ test("A12a 创建、接手、暂缓、恢复、检查、取消与删除均写入
     reason: "隔离复验需要回到实施",
   });
   await goto(page, "single", "/tasks/" + recoveryId);
-  await page.getByRole("button", { name: "恢复任务", exact: true }).click();
+  await page.locator(".next-panel").getByRole("button", { name: "恢复任务", exact: true }).click();
   await page.getByRole("dialog").getByLabel("恢复位置").selectOption("execute");
   await page.getByRole("dialog").getByRole("checkbox").check();
   await confirmDialog(page);
@@ -818,13 +826,14 @@ test("A13 深路由刷新、键盘焦点和多尺寸无全页溢出", async ({
   context,
 }) => {
   await goto(page, "many", "/tasks/failed-check");
+  await page.locator(".task-more > summary").click();
   await page.getByRole("button", { name: "暂缓", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "暂缓", exact: true }),
+    page.locator(".task-more > summary"),
   ).toBeFocused();
   for (const viewport of [
     { width: 1480, height: 1000 },
@@ -1505,8 +1514,8 @@ test("A26 工作台任务行可直接进入符合条件的人工验收", async (
   await step(client, id, ["app/ui-output.txt"]);
   await goto(page, "single", "/tasks?q=" + id);
   const row = page.locator(".task-row").filter({ hasText: id });
-  await expect(row).toContainText("开始验收");
-  await row.click();
+  await expect(row.getByRole("button", { name: "验收", exact: true })).toBeVisible();
+  await row.getByRole("button", { name: "验收", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "记录人工验收" })).toBeVisible();
   await expect(page.getByRole("dialog")).toContainText("人工核验产物");
   await page.getByRole("dialog").getByRole("button", { name: "取消" }).click();
@@ -1542,4 +1551,164 @@ test("A27 提交响应返回前切换任务不会误清另一任务状态", asyn
   await expect(page.getByRole("heading", { name: "提交本次工作结果" })).toHaveCount(0);
   expect((await client.get("/api/task?id=" + id)).task.attempts.filter((a: any) => a.status === "pass")).toHaveLength(1);
   expect((await client.get("/api/task?id=" + other)).task.attempts || []).toHaveLength(0);
+});
+
+test("A28 详情长范围可完整展开，侧栏列出可阅读的真实依据", async ({ page, request }) => {
+  const client = await connect(request, "single"), id = "long-scope-" + Date.now();
+  const scope = Array.from({ length: 9 }, (_, i) => `app/a-very-long-isolated-subdirectory-${i}/actual-source-file.ts`);
+  await client.post("/api/tasks", { id, title: "隔离详情长范围", type: "bug", goal: "verified", scope, acceptance: ["范围完整可查"] });
+  await page.setViewportSize({ width: 940, height: 1000 });
+  await goto(page, "single", "/tasks/" + id);
+  const goal = page.locator(".overview > .content-section").filter({ hasText: "目标与范围" });
+  await expect(goal.locator(".scope-preview")).toHaveCount(2);
+  await goal.getByText("查看完整范围（9 项）", { exact: true }).click();
+  await expect(goal.locator(".scope-details li")).toHaveCount(9);
+  await expect(goal.locator(".scope-details li").last()).toHaveText(scope[8]);
+  await expect(page.locator(".task-more > summary")).toBeVisible();
+  await goto(page, "many", "/tasks/verified-change");
+  const sidebar = page.locator(".sidebar-basis");
+  await expect(sidebar.locator(".sidebar-basis-link")).toHaveCount(2);
+  await expect(sidebar).toContainText("隔离夹具：当前交付规范");
+  await sidebar.getByRole("button", { name: "隔离夹具：当前交付规范" }).click();
+  await expect(page).toHaveURL(/section=basis/);
+  await expect(page.locator("#basis-reading")).toContainText("此处是任务实际提供版本");
+  await shot(page, "A28-detail-basis");
+});
+
+test("A29 人工验收草稿重开保留输入，未知提交可安全重放", async ({ page, request }) => {
+  ensureIsolatedOutput();
+  const client = await connect(request, "single"), id = "human-draft-" + Date.now();
+  await client.post("/api/tasks", { id, title: "隔离验收草稿", type: "bug", goal: "verified", scope: ["app"], acceptance: ["人工核对实际产物"], checks: [{ id: "owner", kind: "review", method: "human", covers: ["人工核对实际产物"], required: true }] });
+  await step(client, id);
+  await step(client, id, ["app/ui-output.txt"]);
+  await goto(page, "single", `/tasks/${id}?section=checks`);
+  await page.getByRole("button", { name: "记录人工验收", exact: true }).click();
+  let dialog = page.getByRole("dialog");
+  await dialog.getByRole("radio", { name: "通过", exact: true }).check();
+  await dialog.getByLabel("记录人").fill("isolated reviewer");
+  await dialog.getByLabel("实际观察与理由").fill("关闭并重开后保留真实隔离观察");
+  await dialog.getByLabel("app/ui-output.txt").check();
+  await dialog.getByLabel("我确认以上结论针对所示候选和修订。").check();
+  await dialog.getByRole("button", { name: "取消", exact: true }).click();
+  await page.getByRole("button", { name: "记录人工验收", exact: true }).click();
+  dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("radio", { name: "通过", exact: true })).toBeChecked();
+  await expect(dialog.getByLabel("实际观察与理由")).toHaveValue("关闭并重开后保留真实隔离观察");
+  await expect(dialog.getByLabel("app/ui-output.txt")).toBeChecked();
+  await expect(dialog.getByLabel("我确认以上结论针对所示候选和修订。")).not.toBeChecked();
+  await dialog.getByLabel("我确认以上结论针对所示候选和修订。").check();
+  await page.route("**/api/action", async (route) => {
+    if (route.request().postDataJSON()?.action === "review_result") { const response = await route.fetch(); expect(response.ok()).toBeTruthy(); await route.abort(); }
+    else await route.continue();
+  });
+  await dialog.getByRole("button", { name: "提交验收结果" }).click();
+  await expect(dialog.getByRole("button", { name: "原样重试提交" })).toBeVisible();
+  await page.unroute("**/api/action");
+  await dialog.getByRole("button", { name: "取消", exact: true }).click();
+  await page.reload();
+  await page.locator(".next-panel").getByRole("button", { name: "查看待确认的验收" }).click();
+  dialog = page.getByRole("dialog");
+  await expect(dialog.getByLabel("实际观察与理由")).toHaveValue("关闭并重开后保留真实隔离观察");
+  await expect(dialog.getByLabel("实际观察与理由")).toBeDisabled();
+  await dialog.getByRole("button", { name: "原样重试提交" }).click();
+  await expect(dialog).toContainText("任务已完成");
+  expect((await client.get("/api/task?id=" + id)).task.evidence).toHaveLength(1);
+});
+
+test("A30 四项检查通过且待人工验收时对齐工作台与详情入口", async ({ page, request }) => {
+  ensureIsolatedOutput();
+  const client = await connect(request, "single"), id = "reference-review-" + Date.now();
+  const checks = Array.from({ length: 4 }, (_, index) => ({ id: `command-${index + 1}`, kind: "functional", method: "command", command: ["sh", "-c", "test -f app/ui-output.txt"], covers: ["实际产物可核验"], required: true }));
+  checks.push({ id: "human-review", kind: "review", method: "human", command: [], covers: ["实际产物可核验"], required: true });
+  await client.post("/api/tasks", { id, title: "隔离参考：等待人工验收", type: "bug", goal: "verified", scope: ["app/ui-output.txt"], acceptance: ["实际产物可核验"], checks });
+  await step(client, id);
+  await step(client, id, ["app/ui-output.txt"]);
+  for (const check of checks.slice(0, 4)) await client.post("/api/action", { action: "verify", id, unit: check.id });
+  const current = await client.get("/api/task?id=" + id);
+  expect(current.summary.checks.required_passed).toBe(4);
+  expect(current.check_access["human-review"].can_review).toBeTruthy();
+  await page.setViewportSize({ width: 940, height: 1000 });
+  await goto(page, "single", "/tasks?q=" + id);
+  const row = page.locator(".task-row").filter({ hasText: id });
+  await expect(page.locator(".attention-card").filter({ hasText: "隔离参考：等待人工验收" })).toContainText("4 / 5 项必要检查通过");
+  await expect(row).toContainText("等待人工验收");
+  await expect(row).toContainText("4 / 5 通过");
+  await expect(row.getByRole("button", { name: "验收", exact: true })).toBeVisible();
+  await shot(page, "A30-workbench-human-940");
+  await row.locator(".task-title-link").click();
+  await expect(page.locator(".result-banner")).toContainText("还有人工验收需要你处理");
+  await expect(page.locator(".result-banner").getByRole("button", { name: "开始人工验收" })).toBeVisible();
+  await expect(page.locator(".acceptance-summary")).toContainText("4 / 5 项必要检查通过");
+  await expect(page.locator(".next-panel").getByRole("button", { name: "开始人工验收" })).toBeVisible();
+  await shot(page, "A30-overview-human-940");
+  await page.screenshot({ path: path.join(output, "A30-overview-human-940-viewport.png") });
+});
+
+test("A31 资料分区、筛选清除和诊断摘要连接真实数据", async ({ page }) => {
+  await goto(page, "many", "/knowledge/current-rule");
+  await expect(page.locator(".markdown")).toBeVisible();
+  await page.getByRole("navigation", { name: "资料详情分区" }).getByRole("button", { name: "来源与版本" }).click();
+  await expect(page.locator(".source-details")).toContainText(".ael/knowledge/current.md");
+  await page.getByRole("navigation", { name: "资料详情分区" }).getByRole("button", { name: "关联工作" }).click();
+  await expect(page.getByRole("link", { name: "真实隔离交付 verified-change" })).toBeVisible();
+  await goto(page, "many", "/knowledge?view=all&q=not-present-in-fixture-2026");
+  await page.getByRole("button", { name: "清除筛选" }).click();
+  await expect(page).not.toHaveURL(/q=/);
+  await expect(page.locator(".knowledge").first()).toBeVisible();
+  await goto(page, "many", "/evolution?q=not-present-in-fixture-2026");
+  await page.getByRole("button", { name: "清除筛选" }).click();
+  await expect(page).not.toHaveURL(/q=/);
+  await expect(page.locator(".change-row").first()).toBeVisible();
+  await goto(page, "many", "/settings?section=diagnostics");
+  await expect(page.getByRole("button", { name: "复制诊断摘要" })).toBeVisible();
+});
+
+test("A32 工作台可恢复已提交但响应丢失的人工验收", async ({ page, request }) => {
+  ensureIsolatedOutput();
+  const client = await connect(request, "single"), id = "human-workbench-pending-" + Date.now();
+  await client.post("/api/tasks", { id, title: "隔离工作台验收回执恢复", type: "bug", goal: "verified", scope: ["app"], acceptance: ["人工核验隔离产物"], checks: [{ id: "owner", kind: "review", method: "human", covers: ["人工核验隔离产物"], required: true }] });
+  await step(client, id);
+  await step(client, id, ["app/ui-output.txt"]);
+  await goto(page, "single", "/tasks?q=" + id);
+  await page.locator(".task-row").filter({ hasText: id }).getByRole("button", { name: "验收", exact: true }).click();
+  let dialog = page.getByRole("dialog");
+  await dialog.getByRole("radio", { name: "通过", exact: true }).check();
+  await dialog.getByLabel("记录人").fill("isolated reviewer");
+  await dialog.getByLabel("实际观察与理由").fill("工作台验收已持久化但响应丢失");
+  await dialog.getByLabel("app/ui-output.txt").check();
+  await dialog.getByLabel("我确认以上结论针对所示候选和修订。").check();
+  await page.route("**/api/action", async (route) => {
+    if (route.request().postDataJSON()?.action === "review_result") { const response = await route.fetch(); expect(response.ok()).toBeTruthy(); await route.abort(); }
+    else await route.continue();
+  });
+  await dialog.getByRole("button", { name: "提交验收结果" }).click();
+  await expect(dialog.getByRole("button", { name: "原样重试提交" })).toBeVisible();
+  await page.unroute("**/api/action");
+  await dialog.getByRole("button", { name: "取消", exact: true }).click();
+  await page.reload();
+  const pending = page.locator(".attention-card").filter({ hasText: "验收提交待确认" });
+  await expect(pending).toContainText("隔离工作台验收回执恢复");
+  await pending.getByRole("button", { name: "查看并重试" }).click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "原样重试提交" }).click();
+  await expect(dialog).toContainText("任务已完成");
+  expect((await client.get("/api/task?id=" + id)).task.evidence).toHaveLength(1);
+});
+
+test("A33 不会把同端口其他项目的人工验收草稿当成本项目输入", async ({ page, request }) => {
+  ensureIsolatedOutput();
+  const client = await connect(request, "single"), id = "human-project-scope-" + Date.now();
+  await client.post("/api/tasks", { id, title: "隔离验收项目边界", type: "bug", goal: "verified", scope: ["app"], acceptance: ["人工核验"], checks: [{ id: "owner", kind: "review", method: "human", covers: ["人工核验"], required: true }] });
+  await step(client, id);
+  await step(client, id, ["app/ui-output.txt"]);
+  await goto(page, "single", `/tasks/${id}?section=checks`);
+  await page.evaluate((taskId) => {
+    const key = "ael-manual-review-v2:" + encodeURIComponent("/another/project") + ":" + encodeURIComponent(taskId) + ":owner";
+    sessionStorage.setItem(key, JSON.stringify({ checkId: "owner", outcome: "pass", reason: "其他项目的观察", selected: ["app/ui-output.txt"] }));
+  }, id);
+  await page.getByRole("button", { name: "记录人工验收", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("radio", { name: "通过", exact: true })).not.toBeChecked();
+  await expect(dialog.getByLabel("实际观察与理由")).toHaveValue("");
+  await dialog.getByRole("button", { name: "取消", exact: true }).click();
 });

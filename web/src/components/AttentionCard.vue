@@ -7,7 +7,9 @@ const props = defineProps<{ kind: "human" | "decision" | "blocked"; task: any }>
 const emit = defineEmits<{ review: [id: string, check: string] }>();
 const heading = computed(() => ({ human: "需要你的验收", decision: "需要你的决定", blocked: "环境或执行受阻" })[props.kind]);
 const detail = computed(() => props.kind === "human"
-  ? props.task.manual_reviews[0]?.covers?.join("；") || "请根据当前候选记录人工检查结果。"
+  ? props.task.checks?.required
+    ? `${props.task.checks.required_passed} / ${props.task.checks.required} 项必要检查通过，仍需人工验收。`
+    : props.task.manual_reviews[0]?.covers?.join("；") || "请根据当前候选记录人工检查结果。"
   : props.kind === "decision"
     ? "审阅当前定义、计划和实际依据后作出决定。"
     : blockerText(props.task.blocker_reason || props.task.blocking_reasons?.[0] || "请查看任务中的阻塞原因和恢复条件。"));

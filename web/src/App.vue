@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { info, infoError, infoLast, notices, refreshInfo, refreshCurrentView } from "./api";
+import { api, info, infoError, infoLast, notices, refreshInfo, refreshCurrentView } from "./api";
 import { route, href } from "./router";
 import TaskList from "./pages/TaskList.vue";
 import TaskPage from "./pages/TaskPage.vue";
@@ -37,7 +37,11 @@ const projectInitials = computed(() => {
 function focusMain() {
   document.getElementById("main-content")?.focus();
 }
-const mobileMenu = ref(false), showSearch = ref(false);
+const mobileMenu = ref(false), showSearch = ref(false), attentionCount = ref(0);
+async function refreshAttention() {
+  try { attentionCount.value = (await api('/api/attention')).items?.length || 0; }
+  catch { attentionCount.value = 0; }
+}
 function keyboard(e: KeyboardEvent) {
   const target = e.target as HTMLElement;
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k' || e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName) && !target?.isContentEditable) {
@@ -47,9 +51,10 @@ function keyboard(e: KeyboardEvent) {
 let timer: ReturnType<typeof setInterval>;
 onMounted(() => {
   refreshInfo();
+  refreshAttention();
   applyTheme();
   window.addEventListener('keydown', keyboard);
-  timer = setInterval(refreshInfo, 10000);
+  timer = setInterval(() => { refreshInfo(); void refreshAttention(); }, 10000);
 });
 onUnmounted(() => { clearInterval(timer); window.removeEventListener('keydown', keyboard); });
 </script>
@@ -84,7 +89,7 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener('keydown', 
           :href="href('/' + key)"
           :aria-current="area === key ? 'page' : undefined"
           :class="{ chosen: area === key }"
-          ><AppIcon :name="key"/>{{ name }}</a
+          ><AppIcon :name="key"/>{{ name }}<span v-if="key === 'tasks' && attentionCount" class="sidebar-attention-count" :aria-label="attentionCount + ' 项需要处理'">{{ attentionCount }}</span></a
         >
       </nav>
       <div class="sidebar-bottom">
