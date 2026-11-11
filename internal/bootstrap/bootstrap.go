@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-const Version = "0.1.17"
+const Version = "0.1.18"
 
 type Config struct {
 	Schema    int    `json:"schema"`
@@ -75,7 +75,7 @@ const begin = "<!-- AEL:BEGIN -->"
 const end = "<!-- AEL:END -->"
 
 func block(mode string) string {
-	return begin + "\nAEL project (" + mode + "). For an engineering work request, use $ael-work; resume an existing task first. From the project root run `./ael doctor` and `./ael task list`; load exact task rules with `./ael context --task <id>`. Discussion/query alone creates no task.\nUse $ael-work for authorized task execution; $ael-migrate-legacy only for reviewed legacy proposals.\nDo not treat historical imports as current constraints or verified checks.\n" + end
+	return begin + "\nAEL project (" + mode + "). Before any AEL command, first decide whether the user's goal is a project iteration, bug fix, or other engineering change to the project itself.\nFor discussion, lookup, analysis, review, or review-only materials, even when saved to a file, work directly and communicate with the user; do not run AEL commands or create tasks or enter implementation/acceptance workflows for that request. Read relevant project files normally as needed.\nFor an authorized engineering change, use $ael-work and resume a relevant existing task first. From the project root run `./ael doctor` and `./ael task list`; load exact task rules with `./ael context --task <id>`. If the request later becomes an authorized engineering change, enter $ael-work before making that change.\nIf the user explicitly requests an AEL command or an AEL task, follow that request. Use $ael-migrate-legacy only for reviewed legacy proposals.\nDo not treat historical imports as current constraints or verified checks.\n" + end
 }
 func Init(root string, dry, updating bool) (Report, error) {
 	root, e := Canonical(root)
