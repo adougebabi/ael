@@ -15,6 +15,10 @@ import (
 // TaskRecord is a reviewable checkpoint, not a second live scheduler. It carries
 // no leases, process identities, session IDs, workspace paths or approvals.
 type TaskRecord struct {
+	UnboundArtifacts []string                `json:"unbound_artifacts,omitempty"`
+	ExecutionBase    *CandidateBaseline      `json:"execution_base,omitempty"`
+	Integration      *EpicIntegration        `json:"integration,omitempty"`
+	CandidateProof   *CandidateProof         `json:"candidate_proof,omitempty"`
 	EvidenceProgress *EvidenceProgress       `json:"evidence_progress,omitempty"`
 	FailureCycles    map[string]FailureCycle `json:"failure_cycles,omitempty"`
 	ActiveFailure    string                  `json:"active_failure,omitempty"`
@@ -78,6 +82,10 @@ func recordOf(t Task) TaskRecord {
 	r.FailureCycles = t.FailureCycles
 	r.ActiveFailure = t.ActiveFailure
 	r.EvidenceProgress = t.EvidenceProgress
+	r.CandidateProof = t.CandidateProof
+	r.ExecutionBase = t.ExecutionBase
+	r.UnboundArtifacts = slices.Clone(t.UnboundArtifacts)
+	r.Integration = t.Integration
 	if t.ActiveFailure != "" {
 		r.FailureBlocker = t.Blocker
 	}
@@ -274,6 +282,18 @@ func (s *Service) recoverRecords() error {
 			if e == nil && hasUnresolvedFailures(&old) && (r.ActiveFailure != old.ActiveFailure || !equivalent(old.FailureCycles, r.FailureCycles) || !equivalent(old.EvidenceProgress, r.EvidenceProgress)) {
 				return Error("TASK_FAILURE_CYCLE_CONFLICT", "checkpoint would replace the retained failure budget: "+r.ID)
 			}
+			if e == nil && old.Integration != nil && !equivalent(old.Integration, r.Integration) {
+				return Error("TASK_INTEGRATION_CONFLICT", "checkpoint would replace the retained integration candidate: "+r.ID)
+			}
+			if e == nil && old.CandidateProof != nil && !equivalent(old.CandidateProof, r.CandidateProof) {
+				return Error("TASK_CANDIDATE_PROOF_CONFLICT", "checkpoint would replace the retained content proof: "+r.ID)
+			}
+			if e == nil && old.ExecutionBase != nil && !equivalent(old.ExecutionBase, r.ExecutionBase) {
+				return Error("TASK_CANDIDATE_PROOF_CONFLICT", "checkpoint would replace the retained execution baseline: "+r.ID)
+			}
+			if e == nil && len(old.UnboundArtifacts) > 0 && !slices.Equal(old.UnboundArtifacts, r.UnboundArtifacts) {
+				return Error("TASK_CANDIDATE_PROOF_CONFLICT", "checkpoint would discard unbound artifact history: "+r.ID)
+			}
 			p, e := s.taskPath(r.ID)
 			if e != nil {
 				return e
@@ -291,6 +311,12 @@ func (s *Service) recoverRecords() error {
 			// The portable plan is history, not permission to skip responsibilities.
 			// Regenerate its steps from the authoritative definition/risk signals.
 			plan := MakePlan(&d)
+			if d.Type == "epic" && r.Integration != nil {
+				plan.Steps = []string{"define", "integrate", "verify"}
+				if d.Goal == "released" || d.Goal == "merged" {
+					plan.Steps = append(plan.Steps, "delivery")
+				}
+			}
 			if r.Plan.Revision < 1 {
 				return Error("INVALID_RECORD_PLAN_REVISION", r.ID)
 			}
@@ -301,6 +327,10 @@ func (s *Service) recoverRecords() error {
 			}
 			t := Task{PolicyHash: r.PolicyHash, Definition: d, DefinitionHash: r.DefinitionHash, Plan: plan, Step: r.Step, Status: r.Status, Candidate: r.Candidate, Failure: r.Failure, Result: r.Result, Created: r.Created, Updated: r.Updated, Completed: r.Completed, Feedback: r.Feedback, History: &r.History, Historical: r.Status != "open", HumanReviewNotes: slices.Clone(r.HumanReviewNotes)}
 			t.FailureCycles, t.ActiveFailure = r.FailureCycles, r.ActiveFailure
+			t.CandidateProof = r.CandidateProof
+			t.ExecutionBase = r.ExecutionBase
+			t.UnboundArtifacts = slices.Clone(r.UnboundArtifacts)
+			t.Integration = r.Integration
 			t.EvidenceProgress = r.EvidenceProgress
 			if t.EvidenceProgress != nil {
 				// Preserve de-duplication history, but do not present another
@@ -326,7 +356,12 @@ func (s *Service) recoverRecords() error {
 				t.Candidate = ""
 				// A clone has no live evidence. Re-run verification of the current files.
 				if t.Step == "verify" || t.Step == "delivery" {
-					t.Step = "execute"
+					if d.Type == "epic" {
+						t.Step = "integrate"
+						t.Integration = nil
+					} else {
+						t.Step = "execute"
+					}
 				}
 				t.Confirmation = &Confirmation{"restore", "checkpoint imported from project; review files and historical checks before resuming", d.Revision, r.Plan.Revision, ""}
 			}

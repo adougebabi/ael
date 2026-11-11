@@ -144,6 +144,10 @@ func (s *Service) verifyClaimed(id, check, executor string, n Next) (Next, error
 		}
 		after, err := Fingerprint(a.Workspace)
 		if err != nil || after != a.Input {
+			if t.Definition.Type == "epic" {
+				ev.Result, ev.Reason = result.Status, result.Summary
+				ev.Recovery = "candidate changed during the command; its observed exit is historical and cannot pass the current gate"
+			}
 			result.Status = "blocked"
 			result.Summary = "input changed during verification; result invalid"
 		}
@@ -179,8 +183,10 @@ func (s *Service) verifyClaimed(id, check, executor string, n Next) (Next, error
 		data, _ := s.artifact(ref)
 		ev.ArtifactHashes[ref] = store.Hash(data)
 	}
-	ev.Result = result.Status
-	ev.Reason = result.Summary
+	if ev.Recovery == "" {
+		ev.Result = result.Status
+		ev.Reason = result.Summary
+	}
 	n, e = s.submit(Submission{id, a.ID, a.Token, ID("verify-"), result}, &ev)
 	if e == nil {
 		finished = true

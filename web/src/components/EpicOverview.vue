@@ -7,6 +7,7 @@ import { useResource } from "../resource";
 import LoadState from "./LoadState.vue";
 
 const props = defineProps<{ id: string }>();
+defineEmits<{ openArtifact: [ref: string] }>();
 const r = useResource<any>(null);
 const { data: tree, loading, error, last } = r;
 const showAll = computed(() => route.value.query.get("leaves") === "all");
@@ -56,7 +57,8 @@ function mappedLeaf(key: string) {
         <dl class="epic-counts">
           <div><dt>已实施</dt><dd>{{ tree.summary.implemented }}</dd></div>
           <div><dt>已验收</dt><dd>{{ tree.summary.accepted }}</dd></div>
-          <div><dt>已集成 / 交付</dt><dd>{{ tree.summary.delivered }}</dd></div>
+          <div><dt>已集成</dt><dd>{{ tree.summary.integrated }}</dd></div>
+          <div><dt>叶子已交付</dt><dd>{{ tree.summary.delivered }}</dd></div>
           <div><dt>待开始</dt><dd>{{ tree.summary.not_started }}</dd></div>
           <div><dt>部分检查通过</dt><dd>{{ tree.summary.partial_checks }}</dd></div>
           <div><dt>失败</dt><dd>{{ tree.summary.failed }}</dd></div>
@@ -64,11 +66,25 @@ function mappedLeaf(key: string) {
           <div><dt>等待接手</dt><dd>{{ tree.summary.waiting_handoff }}</dd></div>
           <div><dt>已取消</dt><dd>{{ tree.summary.cancelled }}</dd></div>
         </dl>
-        <p class="secondary">各项可重叠；检查通过数量不是项目完成百分比。父任务整体验收仍需单独完成。</p>
+        <p class="secondary">各项可重叠；检查通过数量不是项目完成百分比。已集成数量绑定通过检查的父候选。</p>
         <div v-if="tree.summary.issues.length" class="epic-issues">
           <h3>当前问题</h3>
           <p v-for="issue in tree.summary.issues" :key="issue.task"><a :href="taskHref(issue.task, issue.check ? 'checks' : 'overview', issue.check || '')">{{ issue.title }}<template v-if="issue.check"> · 检查 {{ issue.check }}</template></a>：{{ blockerText(issue.reason) }}</p>
         </div>
+      </section>
+
+      <section class="content-section">
+        <h2>父级集成候选</h2>
+        <template v-if="tree.root.task.integration">
+          <p>候选：<code>{{ tree.root.task.integration.candidate }}</code> · 已核对 {{ tree.root.task.integration.leaves.length }} 个必要叶子内容。</p>
+          <p v-if="tree.root.task.integration.git_head">Git 提交：<code :title="tree.root.task.integration.git_head">{{ tree.root.task.integration.git_head.slice(0, 12) }}</code> · 本地仓库身份已记录。</p>
+          <p v-else class="secondary">非 Git 候选：仅记录本地内容证明，不声称仓库或提交身份。</p>
+          <p v-if="tree.root.task.integration.impact_evidence">影响范围依据：{{ tree.root.task.integration.impact_evidence }} <button class="inline-link" @click="$emit('openArtifact', tree.root.task.integration.impact_evidence)">查看依据</button></p>
+          <p v-else class="secondary">影响范围未声明为完整；按未知影响保守复验。</p>
+          <details class="source-detail"><summary>查看叶子纳入与复验依据</summary><ul><li v-for="leaf in tree.root.task.integration.leaves" :key="leaf.id"><a :href="taskHref(leaf.id)">{{ leaf.id }}</a> · {{ leaf.method === 'same_candidate' ? '相同候选' : leaf.method === 'same_candidate_rechecked' ? '相同候选并要求跨工作区复验' : leaf.method === 'content_changes_rechecked' ? '内容核对并要求复验' : '内容核对' }}<span v-if="leaf.git_ancestry_verified"> · Git 祖先已核对</span><span v-for="check in leaf.rechecks || []" :key="check.parent_check"> · {{ check.leaf_check }} → 父检查 {{ check.parent_check }}</span></li><li v-for="support in tree.root.task.integration.supporting || []" :key="'support:' + support.id"><a :href="taskHref(support.id)">{{ support.id }}</a> · 可选任务的内容作为范围差异依据</li></ul></details>
+        </template>
+        <p v-else class="secondary">尚未准备最终集成候选；所有必要叶子及父级检查条件满足后可准备。</p>
+        <p v-if="tree.root.next_action === 'wait_integration' && tree.root.task.integration" class="blocked-reason">候选或必要范围已变化，请重新准备后验证。</p>
       </section>
 
       <section class="content-section">

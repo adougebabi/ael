@@ -219,7 +219,7 @@ func writeOutput(w io.Writer, value any, machine, verbose bool) error {
 
 func writeEpicSummary(w io.Writer, s core.EpicSummary) {
 	fmt.Fprintf(w, "叶子任务：%d（必需 %d）\n", s.Total, s.Required)
-	fmt.Fprintf(w, "已实施：%d；已验收：%d；已集成/交付：%d\n", s.Implemented, s.Accepted, s.Delivered)
+	fmt.Fprintf(w, "已实施：%d；已验收：%d；已集成：%d；叶子已交付：%d\n", s.Implemented, s.Accepted, s.Integrated, s.Delivered)
 	fmt.Fprintf(w, "待开始：%d；部分检查通过：%d；失败：%d；阻塞：%d；等待接手：%d；取消：%d\n", s.NotStarted, s.PartialChecks, s.Failed, s.Blocked, s.WaitingHandoff, s.Cancelled)
 	fmt.Fprintln(w, "各项是可重叠的叶子状态；父级集成验收另行确认。")
 	for _, issue := range s.Issues {
@@ -268,6 +268,32 @@ func writeNext(w io.Writer, n core.Next, summary *core.TaskSummary, verbose, sho
 		fmt.Fprintf(w, "实际成果：%s\n", t.Result)
 	} else {
 		fmt.Fprintln(w, "实际成果：暂无可用摘要")
+	}
+	if t.Integration != nil {
+		integration := t.Integration
+		fmt.Fprintf(w, "父级集成候选：%s；项目：%s\n", integration.Candidate, integration.ProjectID)
+		if integration.ToolBuild != "" {
+			fmt.Fprintf(w, "AEL 工具构建：%s\n", integration.ToolBuild)
+		}
+		if integration.GitHead != "" {
+			fmt.Fprintf(w, "Git 提交：%s；本地仓库标识：%s\n", integration.GitHead, integration.LocalRepository)
+		} else {
+			fmt.Fprintln(w, "仓库身份：非 Git 或提交未知，仅保留本地内容证明。")
+		}
+		if integration.ImpactEvidence != "" {
+			fmt.Fprintf(w, "影响范围依据：%s (%s)\n", integration.ImpactEvidence, integration.ImpactHash)
+		} else {
+			fmt.Fprintln(w, "影响范围：未知，按需保守复验。")
+		}
+		for _, leaf := range integration.Leaves {
+			fmt.Fprintf(w, "  叶子 %s：%s\n", leaf.ID, leaf.Method)
+			for _, check := range leaf.Rechecks {
+				fmt.Fprintf(w, "    叶子检查 %s → 父检查 %s\n", check.LeafCheck, check.ParentCheck)
+			}
+		}
+		for _, support := range integration.Supporting {
+			fmt.Fprintf(w, "  可选任务 %s：作为范围差异的内容依据\n", support.ID)
+		}
 	}
 	health := n.Health
 	if summary != nil && summary.Health != nil {
@@ -320,6 +346,13 @@ func writeNext(w io.Writer, n core.Next, summary *core.TaskSummary, verbose, sho
 			state = "running"
 		}
 		fmt.Fprintf(w, "  - %s: %s\n", check.ID, state)
+		if t.Definition.Type == "epic" {
+			if len(check.Affected) > 0 {
+				fmt.Fprintf(w, "    关联排查任务：%s\n", strings.Join(check.Affected, ", "))
+			} else {
+				fmt.Fprintln(w, "    影响范围未知；按实际证据保守复核。")
+			}
+		}
 	}
 	if count == 0 {
 		fmt.Fprintln(w, "  无")

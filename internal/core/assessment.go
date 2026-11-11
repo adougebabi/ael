@@ -74,11 +74,22 @@ func (s *Service) assess(r Assessment, a *Attempt) (Next, error) {
 	if workspace == "" {
 		workspace = s.Root
 	}
+	changedClaimedEpic := false
+	if a != nil && t.Definition.Type == "epic" && r.Method != "human" {
+		if current, err := Fingerprint(workspace); err == nil && (current != a.Input || a.WorkspaceConflict != "") {
+			changedClaimedEpic = true
+		}
+	}
 	hashes := map[string]string{}
+	status := map[string]string{}
 	screenshot := false
 	for _, ref := range append(slices.Clone(r.Inputs), r.Artifacts...) {
 		b, e := s.artifactAt(workspace, ref)
 		if e != nil {
+			if changedClaimedEpic && strings.HasPrefix(e.Error(), "ARTIFACT_MISSING:") {
+				status[ref] = "missing_after_candidate_change"
+				continue
+			}
 			return Next{}, e
 		}
 		hashes[ref] = store.Hash(b)
@@ -87,7 +98,7 @@ func (s *Service) assess(r Assessment, a *Attempt) (Next, error) {
 			screenshot = true
 		}
 	}
-	if c.Kind == "ui" && r.Result != "blocked" && !screenshot {
+	if c.Kind == "ui" && r.Result != "blocked" && !screenshot && !changedClaimedEpic {
 		return Next{}, Error("SCREENSHOT_REQUIRED", r.Check)
 	}
 	if a == nil {
@@ -102,6 +113,6 @@ func (s *Service) assess(r Assessment, a *Attempt) (Next, error) {
 	}
 	config, _ := json.Marshal(c)
 	source := r.Method + ":" + r.Executor
-	ev := Evidence{Check: c.ID, Candidate: t.Candidate, Revision: t.Definition.Revision, PlanRevision: t.Plan.Revision, Config: store.Hash(config), Result: r.Result, Source: source, Executor: r.Executor, Inputs: r.Inputs, Environment: runtime.GOOS + "/" + runtime.GOARCH, Artifacts: r.Artifacts, ArtifactHashes: hashes, Reason: r.Reason, At: time.Now().UTC()}
+	ev := Evidence{Check: c.ID, Candidate: t.Candidate, Revision: t.Definition.Revision, PlanRevision: t.Plan.Revision, Config: store.Hash(config), Result: r.Result, Source: source, Executor: r.Executor, Inputs: r.Inputs, Environment: runtime.GOOS + "/" + runtime.GOARCH, Artifacts: r.Artifacts, ArtifactHashes: hashes, ArtifactStatus: status, Reason: r.Reason, At: time.Now().UTC()}
 	return s.submit(Submission{Task: r.Task, Attempt: a.ID, Token: a.Token, Key: a.ID + "-assessment", Result: StepResult{Status: r.Result, Summary: r.Reason, Artifacts: r.Artifacts, ReturnTo: r.ReturnTo, FailureClass: r.FailureClass}}, &ev)
 }

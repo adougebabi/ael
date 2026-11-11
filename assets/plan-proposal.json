@@ -125,6 +125,12 @@
                         "type": "string"
                       }
                     },
+                    "affected_tasks": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "required": {
                       "type": "boolean"
                     },

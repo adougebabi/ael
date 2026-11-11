@@ -264,7 +264,7 @@ func Open(root string) (*core.Service, Report, error) {
 	if e != nil {
 		return nil, r, e
 	}
-	svc := &core.Service{Store: s, Root: root, Active: c.Mode == "active"}
+	svc := &core.Service{Store: s, Root: root, Active: c.Mode == "active", ToolBuild: Build}
 	svc.ResolveBasis = func(d core.Definition) ([]core.BasisReference, error) { return knowledge.Basis(root, d) }
 	svc.ConstraintCheck = func(d core.Definition) []string { return knowledge.Conflicts(root, d) }
 	svc.SnapshotConstraints = func() core.ConstraintResolvers {

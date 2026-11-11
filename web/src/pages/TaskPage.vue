@@ -272,6 +272,7 @@ const recoverable = computed(
 );
 const primaryKind = computed(() => {
   if (needsRootReview.value) return "root_review";
+  if (t.value?.definition.type === "epic" && n.value?.next_action === "wait_integration") return "prepare_integration";
   if (pendingReviewCheck.value !== null) return "review_pending";
   if (claimed.value) return "submit";
   if (availableHumanChecks.value.length) return "review";
@@ -283,7 +284,7 @@ const primaryKind = computed(() => {
   if (t.value?.current_step === "verify" && t.value?.status === "open") return "checks";
   return "";
 });
-const primaryLabels: Record<string, string> = { root_review: "记录根因复核", review: "开始人工验收", review_pending: "查看待确认的验收", resume: "恢复任务", decision: "审阅当前方案", claim: "接手当前工作", checks: "查看验收与运行检查", submit: "填写实施结果", execution: "查看当前执行", delivery: "查看交付结果" };
+const primaryLabels: Record<string, string> = { prepare_integration: "准备整体验收", root_review: "记录根因复核", review: "开始人工验收", review_pending: "查看待确认的验收", resume: "恢复任务", decision: "审阅当前方案", claim: "接手当前工作", checks: "查看验收与运行检查", submit: "填写实施结果", execution: "查看当前执行", delivery: "查看交付结果" };
 const bannerTitle = computed(() => {
   if (t.value?.status === "completed") return "已达到本次交付目标";
   if (t.value?.status === "cancelled") return "任务已取消，保留已有结果";
@@ -312,7 +313,8 @@ const acceptanceState = computed(() => {
 });
 const reviewState = computed(() => reviewNoteStatus(n.value?.summary));
 function primaryAction() {
-  if (primaryKind.value === "root_review") start("review_failure", "记录根因复核");
+  if (primaryKind.value === "prepare_integration") start("prepare_integration", "准备整体验收");
+  else if (primaryKind.value === "root_review") start("review_failure", "记录根因复核");
   else if (primaryKind.value === "review") manualCheck.value = availableHumanChecks.value.length === 1 ? availableHumanChecks.value[0].id : "";
   else if (primaryKind.value === "review_pending") manualCheck.value = pendingReviewCheck.value;
   else if (primaryKind.value === "resume") start("resume", "恢复任务");
@@ -721,7 +723,7 @@ function checkReason(c: any) {
           <button v-if="n.next_action === 'wait_confirmation' && !t.confirmation" class="banner-action" @click="setQuery({ section: 'basis' })">查看待核实规范</button>
           </div>
         </div>
-        <EpicOverview v-if="t.definition.type === 'epic'" :key="id" :id="id" />
+        <EpicOverview v-if="t.definition.type === 'epic'" :key="id" :id="id" @open-artifact="openArtifact" />
         <section class="content-section">
           <h2>目标与范围</h2>
           <p>
@@ -949,6 +951,8 @@ function checkReason(c: any) {
               }}
             </p>
             <div class="check-tags"><span>{{ label(n.check_access?.[c.id]?.effective_method || c.method) }}</span> {{ c.required ? '必需检查' : '辅助检查' }}<template v-if="n.current_runs[c.id]"> · {{ n.current_runs[c.id].executors.join('、') }}</template></div>
+            <p v-if="t.definition.type === 'epic' && c.affected_tasks?.length">关联排查任务：<template v-for="affected in c.affected_tasks" :key="affected"><a :href="taskHref(affected)">{{ affected }}</a> </template>（关联范围不自动证明根因）</p>
+            <p v-else-if="t.definition.type === 'epic'" class="secondary">影响范围未声明；按实际证据保守复核。</p>
             <p
               v-if="!n.current_checks[c.id] && priorCheck(c)"
               :class="{ failure: priorCheck(c).result === 'fail' }"
@@ -1354,7 +1358,7 @@ function checkReason(c: any) {
       <label v-if="['claim', 'confirm', 'review_failure'].includes(op.action)"
         >执行者 / 决策者<input v-model="actor" required
       /></label>
-      <label v-if="!['claim', 'verify', 'resume', 'review_failure'].includes(op.action)"
+      <label v-if="!['claim', 'verify', 'resume', 'review_failure', 'prepare_integration'].includes(op.action)"
         >操作理由<textarea v-model="reason" required rows="3"></textarea>
       </label>
       <template v-if="op.action === 'review_failure'">
@@ -1399,6 +1403,7 @@ function checkReason(c: any) {
       <p v-if="op.action === 'verify'">
         运行已配置的真实命令，结果绑定当前候选和修订。
       </p>
+      <p v-if="op.action === 'prepare_integration'">核对必要叶子的验收和内容纳入，并记录当前父候选；准备后仍需运行实际整体验收检查。</p>
     </ActionDialog>
     <ManualReviewDialog v-if="manualCheck !== null" :key="id + ':' + manualCheck" :task-id="id" :check-id="manualCheck" @select-check="manualCheck = $event" @close="closeReview" @saved="reviewSaved" />
   </div>

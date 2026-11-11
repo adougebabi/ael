@@ -16,6 +16,7 @@ import (
 )
 
 type Service struct {
+	ToolBuild           string
 	Store               *store.Store
 	Root                string
 	Active              bool
@@ -575,7 +576,7 @@ func (s *Service) nextWithConstraints(id string, includeArtifacts bool, resolveB
 		}
 	}
 	if t.Definition.Type == "epic" && t.Status == "open" {
-		if e = s.summarizeEpicNext(&n, t.Definition.ID); e != nil {
+		if e = s.summarizeEpicNext(&n, &t); e != nil {
 			return Next{}, e
 		}
 	}
@@ -672,9 +673,18 @@ func (s *Service) claimGuarded(id, unit, executor, workspace, session string, ex
 			return Next{}, Error("WORKSPACE_NOT_BOUND", "run workspace bind --path WORKTREE")
 		}
 	}
-	candidate, e := Fingerprint(workspace)
+	inputSnapshot, e := captureCandidate(workspace)
 	if e != nil {
 		return Next{}, e
+	}
+	candidate := inputSnapshot.Fingerprint
+	inputRepository := ""
+	inputRepositoryUnknown := false
+	if n.Step == "execute" {
+		inputRepository, e = localGitRepository(workspace, inputSnapshot.Head)
+		if e != nil {
+			inputRepositoryUnknown = true
+		}
 	}
 	leaseDuration, e := s.leaseDuration()
 	if e != nil {
@@ -743,6 +753,12 @@ func (s *Service) claimGuarded(id, unit, executor, workspace, session string, ex
 			if !found {
 				return Error("CHECK_REQUIRED", "claim a specific check id")
 			}
+			if t.Definition.Type == "epic" {
+				preparedWorkspace, err := filepath.EvalSymlinks(t.CandidateWorkspace)
+				if err != nil || filepath.Clean(preparedWorkspace) != filepath.Clean(workspace) {
+					return Error("EPIC_CHECK_WORKSPACE_MISMATCH", "run the parent check in its prepared candidate workspace")
+				}
+			}
 			if candidate != t.Candidate {
 				return Error("CANDIDATE_CHANGED", "return to execute with resume --return-to execute")
 			}
@@ -783,6 +799,33 @@ func (s *Service) claimGuarded(id, unit, executor, workspace, session string, ex
 		// when any process changes the workspace under verification.
 		now := time.Now().UTC()
 		a = Attempt{DefinitionRevision: t.Definition.Revision, PlanRevision: t.Plan.Revision, ID: ID("AT-"), Unit: claimUnit, Executor: executor, Session: session, Workspace: workspace, Input: candidate, Started: now, LastContact: &now, Lease: now.Add(leaseDuration), Token: ID("lease-"), Fence: len(t.Attempts) + 1, Status: "running"}
+		if t.Definition.Type == "epic" && t.Step == "verify" {
+			if a.WorkspaceConflict, e = epicWorkspaceWait(tx, t); e != nil {
+				return e
+			}
+			for i := range t.Attempts {
+				other := &t.Attempts[i]
+				if other.Status == "running" && strings.HasPrefix(other.Unit, "check:") && overlappingWorkspaces(other.Workspace, workspace) {
+					other.WorkspaceConflict = fmt.Sprintf("parent check %s overlapped this check in the same workspace", a.ID)
+					a.WorkspaceConflict = fmt.Sprintf("parent check %s overlapped this check in the same workspace", other.ID)
+				}
+			}
+		}
+		if e = s.markOverlappingEpicChecks(tx, t.Definition.ID, a.ID, workspace); e != nil {
+			return e
+		}
+		if t.Step == "execute" && t.ExecutionBase == nil {
+			unknown := false
+			for _, old := range t.Attempts {
+				unknown = unknown || old.Unit == "execute"
+			}
+			if t.History != nil {
+				for _, old := range t.History.Attempts {
+					unknown = unknown || old.Unit == "execute"
+				}
+			}
+			t.ExecutionBase = &CandidateBaseline{Fingerprint: candidate, Head: inputSnapshot.Head, LocalRepository: inputRepository, Files: inputSnapshot.Files, Exclusions: inputSnapshot.Exclusions, PolicyExclusions: inputSnapshot.PolicyExclusions, Unknown: unknown || inputRepositoryUnknown}
+		}
 		t.Attempts = append(t.Attempts, a)
 		return nil
 	})
@@ -894,11 +937,27 @@ func (s *Service) submitWithHash(sub Submission, evidence *Evidence, requestHash
 		a.Ended = &now
 		a.Reason = sub.Result.Summary
 		a.Outputs = sub.Result.Artifacts
-		candidate, e := Fingerprint(a.Workspace)
+		outputSnapshot, e := captureCandidate(a.Workspace)
 		if e != nil {
 			return e
 		}
+		candidate := outputSnapshot.Fingerprint
+		if a.Unit == "execute" && t.ExecutionBase != nil {
+			t.ExecutionBase.Exclusions = uniqueSorted(t.ExecutionBase.Exclusions, outputSnapshot.Exclusions)
+			for _, ref := range sub.Result.Artifacts {
+				if strings.HasPrefix(ref, "runtime:") {
+					continue
+				}
+				path := filepath.ToSlash(filepath.Clean(ref))
+				if _, ok := outputSnapshot.Files[path]; !ok {
+					t.ExecutionBase.UnboundArtifacts = uniqueSorted(t.ExecutionBase.UnboundArtifacts, []string{path})
+				}
+			}
+		}
 		if t.Step == "verify" && evidence != nil && strings.HasPrefix(evidence.Source, "human:") {
+			if t.Definition.Type == "epic" && a.WorkspaceConflict != "" {
+				return Error("REVIEW_VERSION_MISMATCH", "workspace activity overlapped the review; review a stable candidate")
+			}
 			var check Check
 			for _, c := range t.Definition.Checks {
 				if c.ID == evidence.Check {
@@ -966,7 +1025,8 @@ func (s *Service) submitWithHash(sub Submission, evidence *Evidence, requestHash
 				return e
 			}
 		}
-		if t.Definition.Intent == "inspect" && (candidate != a.Input || (t.InspectionCandidate != "" && candidate != t.InspectionCandidate)) {
+		staleEpicCheck := t.Definition.Type == "epic" && t.Step == "verify" && evidence != nil && !strings.HasPrefix(evidence.Source, "human:") && (candidate != t.Candidate || a.Input != t.Candidate || evidence.Candidate != t.Candidate || a.WorkspaceConflict != "")
+		if t.Definition.Intent == "inspect" && !staleEpicCheck && (candidate != a.Input || (t.InspectionCandidate != "" && candidate != t.InspectionCandidate)) {
 			return Error("INSPECTION_WRITE_DETECTED", "inspection may write reports only into runtime; source candidate must remain unchanged")
 		}
 		if sub.Result.Status == "pass" && t.Step == "execute" {
@@ -974,7 +1034,43 @@ func (s *Service) submitWithHash(sub Submission, evidence *Evidence, requestHash
 				return e
 			}
 		}
-		if sub.Result.Status == "blocked" {
+		if staleEpicCheck {
+			if evidence.Candidate != a.Input {
+				return Error("CANDIDATE_CHANGED", "check evidence does not match the claimed input")
+			}
+			// Files read after a change cannot be presented as hashes of the
+			// claimed candidate. Keep the conclusion and runtime report as
+			// historical facts, explicitly marking workspace references.
+			if evidence.ArtifactStatus == nil {
+				evidence.ArtifactStatus = map[string]string{}
+			}
+			if a.WorkspaceConflict != "" {
+				evidence.Recovery = a.WorkspaceConflict + "; recheck after the workspace is stable"
+			}
+			for _, ref := range append(slices.Clone(evidence.Inputs), evidence.Artifacts...) {
+				if !strings.HasPrefix(ref, "runtime:") {
+					if evidence.ArtifactStatus[ref] == "" {
+						evidence.ArtifactStatus[ref] = "unverified_after_candidate_change"
+					}
+					delete(evidence.ArtifactHashes, ref)
+				}
+			}
+			t.EvidenceHistory = append(t.EvidenceHistory, t.Evidence...)
+			t.EvidenceHistory = append(t.EvidenceHistory, *evidence)
+			t.Evidence = nil
+			if t.Integration != nil {
+				t.Integration.StaleReason = "parent candidate changed or another workspace attempt overlapped the check; prepare integration again"
+				t.Integration.WaitReason = ""
+			}
+			t.Failure = "父级集成候选在检查期间变化；保留历史结果并重新准备"
+			if sub.Result.Status == "blocked" {
+				t.Paused = true
+				t.Blocker = sub.Result.Blocker
+				if t.Blocker == nil {
+					t.Blocker = &Blocker{Category: "environment", Reason: sub.Result.Summary, Scope: t.Definition.Scope, Tried: sub.Result.Summary, Recovery: "restore the missing capability and prepare a stable candidate again", ResumeAt: t.Step, Unit: a.Unit, Input: a.Input, Next: "解除阻塞后重新准备父级候选并复验"}
+				}
+			}
+		} else if sub.Result.Status == "blocked" {
 			t.Blocker = sub.Result.Blocker
 			if t.Blocker == nil {
 				t.Blocker = &Blocker{Category: "environment", Reason: sub.Result.Summary, Scope: t.Definition.Scope, Tried: sub.Result.Summary, Recovery: "restore the missing capability or dependency; verify any old writer stopped then resume", ResumeAt: t.Step}
@@ -1000,7 +1096,21 @@ func (s *Service) submitWithHash(sub Submission, evidence *Evidence, requestHash
 			t.Failure = sub.Result.Summary
 		} else if sub.Result.Status == "fail" {
 			t.Failure = sub.Result.Summary
-			if (t.Definition.Goal == "report" || (t.Definition.Goal == "analysis" && t.Definition.Intent == "inspect")) && t.Step == "verify" {
+			if t.Definition.Type == "epic" && t.Step == "verify" {
+				if evidence.Candidate != t.Candidate || candidate != t.Candidate {
+					return Error("CANDIDATE_CHANGED", "integration check input changed")
+				}
+				t.Evidence = append(t.Evidence, *evidence)
+				evidence = nil
+				if (t.Definition.Goal == "report" || (t.Definition.Goal == "analysis" && t.Definition.Intent == "inspect")) && ChecksComplete(&t) && !failureWouldStop(&t, a, sub.Result, failureHashes) {
+					t.Route = ""
+					if e = s.advance(tx, &t); e != nil {
+						return e
+					}
+				} else {
+					t.Route = "repair"
+				}
+			} else if (t.Definition.Goal == "report" || (t.Definition.Goal == "analysis" && t.Definition.Intent == "inspect")) && t.Step == "verify" {
 				if evidence.Candidate != t.Candidate || candidate != t.Candidate {
 					return Error("CANDIDATE_CHANGED", "report check input changed")
 				}
@@ -1053,6 +1163,7 @@ func (s *Service) submitWithHash(sub Submission, evidence *Evidence, requestHash
 				}
 				t.Evidence = append(t.Evidence, *evidence)
 				if gates(&t) || ((t.Definition.Goal == "report" || (t.Definition.Goal == "analysis" && t.Definition.Intent == "inspect")) && ChecksComplete(&t)) {
+					t.Route = ""
 					if e = s.advance(tx, &t); e != nil {
 						return e
 					}
@@ -1071,6 +1182,13 @@ func (s *Service) submitWithHash(sub Submission, evidence *Evidence, requestHash
 				t.Failure = ""
 				t.Candidate = candidate
 				t.CandidateWorkspace = a.Workspace
+				t.CandidateProof = nil
+				outputRepository, repoErr := localGitRepository(a.Workspace, outputSnapshot.Head)
+				if base := t.ExecutionBase; base != nil && !base.Unknown && repoErr == nil && base.LocalRepository == outputRepository && slices.Equal(base.PolicyExclusions, outputSnapshot.PolicyExclusions) {
+					t.CandidateProof = &CandidateProof{Input: base.Fingerprint, InputHead: base.Head, Candidate: candidate, Head: outputSnapshot.Head, LocalRepository: outputRepository,
+						Changes: candidateChanges(base.Files, outputSnapshot.Files), Files: outputSnapshot.Files,
+						Exclusions: uniqueSorted(base.Exclusions, outputSnapshot.Exclusions), UnboundArtifacts: slices.Clone(base.UnboundArtifacts)}
+				}
 				t.EvidenceHistory = append(t.EvidenceHistory, t.Evidence...)
 				t.Evidence = nil
 				t.Step = "verify"
@@ -1113,14 +1231,14 @@ func (s *Service) submitWithHash(sub Submission, evidence *Evidence, requestHash
 				}
 			}
 		}
-		if sub.Result.Status == "fail" {
+		if sub.Result.Status == "fail" && !staleEpicCheck {
 			noteFailure(&t, a, sub.Result, failureHashes)
 		}
-		if evidence != nil && sub.Result.Status != "pass" {
+		if evidence != nil && sub.Result.Status != "pass" && !staleEpicCheck {
 			t.Evidence = append(t.Evidence, *evidence)
 		}
 		progressChanged := s.recordSubmittedProgress(&t, a, sub.Result, progressEvidence, priorEvidence, now)
-		if sub.Result.Status == "pass" {
+		if sub.Result.Status == "pass" && !staleEpicCheck {
 			noteSuccess(&t, a)
 		}
 		if e = s.save(tx, &t); e != nil {
@@ -1130,6 +1248,13 @@ func (s *Service) submitWithHash(sub Submission, evidence *Evidence, requestHash
 			return e
 		}
 		response = t.BaseNext()
+		if t.Definition.Type == "epic" && t.Integration != nil && t.Integration.StaleReason != "" && t.Status == "open" {
+			response.Action = "wait_integration"
+			response.Reasons = append(response.Reasons, t.Integration.StaleReason)
+		} else if t.Definition.Type == "epic" && t.Integration != nil && t.Integration.WaitReason != "" && t.Status == "open" {
+			response.Action = "wait_integration"
+			response.Reasons = append(response.Reasons, t.Integration.WaitReason)
+		}
 		if sub.Result.Status == "fail" && t.Step == "execute" && !t.Paused {
 			response.Action = "repair"
 		}
@@ -1173,6 +1298,54 @@ func (s *Service) advance(tx *store.Tx, t *Task) error {
 	if pendingFailureKey(t) != "" {
 		return nil
 	}
+	if t.Definition.Type == "epic" {
+		if t.Paused {
+			return nil
+		}
+		if t.Step != "verify" && t.Step != "delivery" {
+			return Error("EPIC_INTEGRATION_REQUIRED", "prepare and verify the parent candidate")
+		}
+		if err := validateEpicIntegration(tx, t); err != nil {
+			if !strings.HasPrefix(err.Error(), "EPIC_") && !strings.HasPrefix(err.Error(), "PLAN_APPLY_INCOMPLETE:") {
+				return err
+			}
+			if t.Integration != nil {
+				t.Integration.StaleReason = err.Error()
+			}
+			t.EvidenceHistory = append(t.EvidenceHistory, t.Evidence...)
+			t.Evidence = nil
+			t.Failure = "父级集成候选需重新核对：" + err.Error()
+			if t.Step == "delivery" && t.Delivery != nil {
+				t.Confirmation = &Confirmation{"delivery", "scope changed after delivery; reconcile the existing receipt before retry", t.Definition.Revision, t.Plan.Revision, t.Candidate}
+			}
+			return nil
+		}
+		// Never use an old passing result to finish while another check on
+		// this parent is still running or awaiting stopped-process recovery.
+		if hasWriter(*t) {
+			return nil
+		}
+		wait, err := epicWorkspaceWait(tx, t)
+		if err != nil {
+			return err
+		}
+		if wait != "" {
+			t.Integration.WaitReason = wait
+			return nil
+		}
+		t.Integration.WaitReason = ""
+		current, err := Fingerprint(t.CandidateWorkspace)
+		if err != nil || current != t.Candidate {
+			t.Integration.StaleReason = "parent workspace changed before completion; prepare integration again"
+			t.EvidenceHistory = append(t.EvidenceHistory, t.Evidence...)
+			t.Evidence = nil
+			t.Failure = "父级集成候选已变化；保留历史结果并重新准备"
+			if t.Step == "delivery" && t.Delivery != nil {
+				t.Confirmation = &Confirmation{"delivery", "candidate changed after delivery; reconcile the existing receipt before retry", t.Definition.Revision, t.Plan.Revision, t.Candidate}
+			}
+			return nil
+		}
+	}
 	for i, step := range t.Plan.Steps {
 		if step == t.Step {
 			if i+1 < len(t.Plan.Steps) {
@@ -1184,6 +1357,10 @@ func (s *Service) advance(tx *store.Tx, t *Task) error {
 			}
 			now := time.Now().UTC()
 			t.Status = "completed"
+			if t.ExecutionBase != nil {
+				t.UnboundArtifacts = uniqueSorted(t.UnboundArtifacts, t.ExecutionBase.UnboundArtifacts)
+			}
+			t.ExecutionBase = nil
 			t.Completed = &now
 			t.Result = "verified"
 			if t.Definition.Goal == "report" {
@@ -1238,7 +1415,10 @@ func (s *Service) Confirm(id, kind, decision, actor, reason, candidate string, r
 		if !slices.Contains([]string{"approve", "adjust", "reject"}, decision) {
 			return Error("INVALID_DECISION", decision)
 		}
-		if c.Candidate != "" {
+		// Rejecting or adjusting a stale epic delivery reconciliation records
+		// what happened to the old run; it does not approve the new candidate.
+		reconcileOldDelivery := t.Definition.Type == "epic" && c.Kind == "delivery" && decision != "approve" && t.Delivery != nil && t.Integration != nil && t.Integration.StaleReason != "" && c.Candidate == t.Delivery.Candidate
+		if c.Candidate != "" && !reconcileOldDelivery {
 			workspace := t.CandidateWorkspace
 			if workspace == "" {
 				workspace = s.Root
@@ -1278,7 +1458,8 @@ func (s *Service) Resume(id, returnTo string, ack bool) (Next, error) {
 	if err != nil {
 		return Next{}, err
 	}
-	canAdvance := returnTo == "" && snapshot.Step == "verify" && snapshot.Candidate != "" && s.Active
+	resumeEpicDelivery := snapshot.Definition.Type == "epic" && snapshot.Step == "delivery" && snapshot.Delivery != nil && snapshot.Integration != nil && snapshot.Integration.WaitReason != ""
+	canAdvance := returnTo == "" && (snapshot.Step == "verify" || resumeEpicDelivery) && snapshot.Candidate != "" && s.Active
 	if canAdvance {
 		if policy, e := s.policyHash(); e != nil || policy != snapshot.PolicyHash {
 			canAdvance = false
@@ -1294,10 +1475,11 @@ func (s *Service) Resume(id, returnTo string, ack bool) (Next, error) {
 		}
 	}
 	return s.mutate(id, "resumed", func(tx *store.Tx, t *Task) error {
-		if t.Status != "open" {
+		terminalCleanup := t.Status == "completed" && returnTo == "" && hasWriter(*t)
+		if t.Status != "open" && !terminalCleanup {
 			return Error("TERMINAL_TASK", id)
 		}
-		if pendingFailureKey(t) != "" {
+		if !terminalCleanup && pendingFailureKey(t) != "" {
 			return Error("ROOT_CAUSE_REVIEW_REQUIRED", "record a bounded review before resuming the retained failed unit")
 		}
 		for i := range t.Attempts {
@@ -1325,6 +1507,12 @@ func (s *Service) Resume(id, returnTo string, ack bool) (Next, error) {
 		}
 		if _, e := tx.Exec("DELETE FROM workspace_locks WHERE task=?", id); e != nil {
 			return e
+		}
+		if terminalCleanup {
+			// Older versions could close a task while a parallel check was
+			// still active. End only the acknowledged stopped attempts; retain
+			// its original outcome and completed time.
+			return nil
 		}
 		if returnTo != "" {
 			if slices.Index(t.Plan.Steps, returnTo) > slices.Index(t.Plan.Steps, t.Step) {
@@ -1365,7 +1553,7 @@ func (s *Service) Resume(id, returnTo string, ack bool) (Next, error) {
 		t.Paused = false
 		t.Blocker = nil
 		t.ActiveFailure = ""
-		if canAdvance && t.DefinitionHash == snapshot.DefinitionHash && t.Plan.Revision == snapshot.Plan.Revision && t.Candidate == snapshot.Candidate && t.Step == "verify" && t.Confirmation == nil {
+		if canAdvance && t.DefinitionHash == snapshot.DefinitionHash && t.Plan.Revision == snapshot.Plan.Revision && t.Candidate == snapshot.Candidate && t.Step == snapshot.Step && t.Confirmation == nil {
 			if policy, e := s.policyHash(); e != nil || policy != t.PolicyHash {
 				canAdvance = false
 			}
@@ -1376,7 +1564,11 @@ func (s *Service) Resume(id, returnTo string, ack bool) (Next, error) {
 					break
 				}
 			}
-			if canAdvance && (gates(t) || ((t.Definition.Goal == "report" || (t.Definition.Goal == "analysis" && t.Definition.Intent == "inspect")) && ChecksComplete(t))) {
+			ready := t.Step == "verify" && (gates(t) || ((t.Definition.Goal == "report" || (t.Definition.Goal == "analysis" && t.Definition.Intent == "inspect")) && ChecksComplete(t)))
+			if resumeEpicDelivery && t.Step == "delivery" && t.Integration != nil && t.Integration.WaitReason != "" && equivalent(t.Delivery, snapshot.Delivery) {
+				ready = true
+			}
+			if canAdvance && ready {
 				if e := s.advance(tx, t); e != nil {
 					return e
 				}

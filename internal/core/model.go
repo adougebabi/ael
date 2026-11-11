@@ -9,6 +9,7 @@ import (
 )
 
 type Check struct {
+	Affected  []string `json:"affected_tasks,omitempty" yaml:"affected_tasks,omitempty"`
 	Method    string   `json:"method,omitempty" yaml:"method,omitempty"`
 	ID        string   `json:"id" yaml:"id"`
 	Kind      string   `json:"kind" yaml:"kind"`
@@ -51,33 +52,40 @@ type EpicMembership struct {
 	Required  bool   `json:"required"`
 	Milestone string `json:"milestone,omitempty"`
 }
+
+type IntegrationImpact struct {
+	Complete bool   `json:"complete" yaml:"complete"`
+	Evidence string `json:"evidence" yaml:"evidence"`
+}
+
 type Definition struct {
-	Intent          string         `json:"intent,omitempty" yaml:"intent,omitempty"`
-	OriginalRequest string         `json:"original_request,omitempty" yaml:"original_request,omitempty"`
-	Legacy          map[string]any `json:"legacy,omitempty" yaml:"legacy,omitempty"`
-	Target          string         `json:"target" yaml:"target"`
-	ID              string         `json:"id" yaml:"id"`
-	Title           string         `json:"title" yaml:"title"`
-	Type            string         `json:"type" yaml:"type"`
-	Source          string         `json:"source" yaml:"source"`
-	Scope           []string       `json:"scope" yaml:"scope"`
-	NonGoals        []string       `json:"non_goals" yaml:"non_goals"`
-	Acceptance      []string       `json:"acceptance" yaml:"acceptance"`
-	Priority        int            `json:"priority" yaml:"priority"`
-	Dependencies    []string       `json:"dependencies" yaml:"dependencies"`
-	Parent          string         `json:"parent" yaml:"parent"`
-	Goal            string         `json:"goal" yaml:"goal"`
-	Environment     string         `json:"environment" yaml:"environment"`
-	Preset          string         `json:"preset" yaml:"preset"`
-	Risk            []string       `json:"risk" yaml:"risk"`
-	UI              bool           `json:"ui" yaml:"ui"`
-	UX              bool           `json:"ux" yaml:"ux"`
-	Checks          []Check        `json:"checks" yaml:"checks"`
-	Knowledge       []string       `json:"knowledge" yaml:"knowledge"`
-	FeedbackOf      string         `json:"feedback_of" yaml:"feedback_of"`
-	Revision        int            `json:"definition_revision" yaml:"definition_revision"`
-	MaxRetries      int            `json:"max_retries" yaml:"max_retries"`
-	MaxSeconds      int            `json:"max_seconds" yaml:"max_seconds"`
+	IntegrationImpact *IntegrationImpact `json:"integration_impact,omitempty" yaml:"integration_impact,omitempty"`
+	Intent            string             `json:"intent,omitempty" yaml:"intent,omitempty"`
+	OriginalRequest   string             `json:"original_request,omitempty" yaml:"original_request,omitempty"`
+	Legacy            map[string]any     `json:"legacy,omitempty" yaml:"legacy,omitempty"`
+	Target            string             `json:"target" yaml:"target"`
+	ID                string             `json:"id" yaml:"id"`
+	Title             string             `json:"title" yaml:"title"`
+	Type              string             `json:"type" yaml:"type"`
+	Source            string             `json:"source" yaml:"source"`
+	Scope             []string           `json:"scope" yaml:"scope"`
+	NonGoals          []string           `json:"non_goals" yaml:"non_goals"`
+	Acceptance        []string           `json:"acceptance" yaml:"acceptance"`
+	Priority          int                `json:"priority" yaml:"priority"`
+	Dependencies      []string           `json:"dependencies" yaml:"dependencies"`
+	Parent            string             `json:"parent" yaml:"parent"`
+	Goal              string             `json:"goal" yaml:"goal"`
+	Environment       string             `json:"environment" yaml:"environment"`
+	Preset            string             `json:"preset" yaml:"preset"`
+	Risk              []string           `json:"risk" yaml:"risk"`
+	UI                bool               `json:"ui" yaml:"ui"`
+	UX                bool               `json:"ux" yaml:"ux"`
+	Checks            []Check            `json:"checks" yaml:"checks"`
+	Knowledge         []string           `json:"knowledge" yaml:"knowledge"`
+	FeedbackOf        string             `json:"feedback_of" yaml:"feedback_of"`
+	Revision          int                `json:"definition_revision" yaml:"definition_revision"`
+	MaxRetries        int                `json:"max_retries" yaml:"max_retries"`
+	MaxSeconds        int                `json:"max_seconds" yaml:"max_seconds"`
 }
 type Plan struct {
 	Revision int      `json:"revision" yaml:"revision"`
@@ -88,6 +96,7 @@ type Plan struct {
 }
 type Attempt struct {
 	LastContact        *time.Time `json:"last_contact,omitempty"`
+	WorkspaceConflict  string     `json:"workspace_conflict,omitempty" yaml:"workspace_conflict,omitempty"`
 	Stage              string     `json:"stage,omitempty"`
 	ExpectedUntil      *time.Time `json:"expected_until,omitempty"`
 	DefinitionRevision int        `json:"definition_revision,omitempty"`
@@ -179,6 +188,10 @@ type Delivery struct {
 	Status      string `json:"status" yaml:"status"`
 }
 type Task struct {
+	UnboundArtifacts    []string                `json:"unbound_artifacts,omitempty"`
+	ExecutionBase       *CandidateBaseline      `json:"execution_base,omitempty"`
+	Integration         *EpicIntegration        `json:"integration,omitempty"`
+	CandidateProof      *CandidateProof         `json:"candidate_proof,omitempty"`
 	EvidenceProgress    *EvidenceProgress       `json:"evidence_progress,omitempty"`
 	FailureCycles       map[string]FailureCycle `json:"failure_cycles,omitempty"`
 	ActiveFailure       string                  `json:"active_failure,omitempty"`
@@ -275,6 +288,9 @@ func Validate(d Definition) error {
 	}
 	if d.Intent != "" && d.Intent != "inspect" && d.Intent != "change" {
 		return Error("INVALID_INTENT", d.Intent)
+	}
+	if d.IntegrationImpact != nil && d.Type != "epic" {
+		return Error("INVALID_INTEGRATION_IMPACT", "only an epic may declare integration impact")
 	}
 	if d.Intent == "inspect" && d.Goal != "report" && d.Goal != "analysis" {
 		return Error("INSPECTION_GOAL_REQUIRED", "inspection delivers a report or analysis; it cannot authorize source modification")

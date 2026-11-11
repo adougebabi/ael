@@ -453,6 +453,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				v, e = h.Service.Resume(a.ID, a.Unit, a.Ack)
 			case "review_failure":
 				v, e = h.Service.ReviewFailure(a.ID, a.FailureReview)
+			case "prepare_integration":
+				v, e = h.Service.PrepareEpicIntegration(a.ID)
 			case "cancel":
 				v, e = h.Service.Cancel(a.ID, a.Reason)
 			case "delete":

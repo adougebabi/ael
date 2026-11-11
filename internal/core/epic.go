@@ -2,6 +2,7 @@ package core
 
 import (
 	"ael/internal/store"
+	"database/sql"
 	"encoding/json"
 	"strings"
 )
@@ -35,6 +36,7 @@ type EpicSummary struct {
 	Required       int         `json:"required"`
 	Implemented    int         `json:"implemented"`
 	Accepted       int         `json:"accepted"`
+	Integrated     int         `json:"integrated"`
 	Delivered      int         `json:"delivered"`
 	NotStarted     int         `json:"not_started"`
 	PartialChecks  int         `json:"partial_checks"`
@@ -259,8 +261,20 @@ func (s *Service) epicMembers(parent string) ([]Task, error) {
 	return members, rows.Err()
 }
 
-func (s *Service) summarizeEpicNext(n *Next, id string) error {
-	members, err := s.epicMembers(id)
+func (s *Service) summarizeEpicNext(n *Next, parent *Task) error {
+	var activePlan string
+	planErr := s.Store.DB.QueryRow("SELECT body FROM metadata WHERE key=?", planActiveKey(parent.Definition.ID)).Scan(&activePlan)
+	if planErr != nil && planErr != sql.ErrNoRows {
+		return planErr
+	}
+	if planErr == nil {
+		if n.Action == "continue" || n.Action == "repair" {
+			n.Action = "wait_integration"
+		}
+		n.Reasons = append(n.Reasons, "active decomposition plan must be finished or recovered")
+		return nil
+	}
+	members, err := s.epicMembers(parent.Definition.ID)
 	if err != nil {
 		return err
 	}
@@ -270,10 +284,12 @@ func (s *Service) summarizeEpicNext(n *Next, id string) error {
 			continue
 		}
 		required++
-		if member.Status == "completed" && !member.Historical {
+		if acceptedEpicLeaf(*parent, member) {
 			completed++
 		} else if member.Historical {
 			n.Reasons = append(n.Reasons, "required child "+member.Definition.ID+" is historical and has not been revalidated here")
+		} else if member.Status == "completed" {
+			n.Reasons = append(n.Reasons, "required child "+member.Definition.ID+" has no passing acceptance for this goal")
 		} else {
 			n.Reasons = append(n.Reasons, "required child "+member.Definition.ID+" is "+member.Status)
 		}
@@ -284,9 +300,42 @@ func (s *Service) summarizeEpicNext(n *Next, id string) error {
 			if required == 0 {
 				n.Reasons = append(n.Reasons, "add required leaf tasks before integration")
 			}
-		} else {
+		} else if parent.Integration == nil || (parent.Step != "verify" && parent.Step != "delivery") {
 			n.Action = "wait_integration"
 			n.Reasons = append(n.Reasons, "required leaves completed; parent integration remains to be accepted")
+		} else if parent.Integration.StaleReason != "" {
+			n.Action = "wait_integration"
+			n.Reasons = append(n.Reasons, parent.Integration.StaleReason)
+		} else if parent.Integration.WaitReason != "" {
+			n.Action = "wait_integration"
+			n.Reasons = append(n.Reasons, parent.Integration.WaitReason)
+		} else {
+			digest := ""
+			if parent.EpicPlan != nil {
+				digest = parent.EpicPlan.Digest
+			}
+			current, err := Fingerprint(parent.CandidateWorkspace)
+			if err != nil || current != parent.Candidate || parent.Integration.Candidate != parent.Candidate || parent.Integration.Definition != parent.Definition.Revision || parent.Integration.Plan != parent.Plan.Revision || parent.Integration.PlanDigest != digest || !validSupportingLeaves(*parent, members) {
+				n.Action = "wait_integration"
+				n.Reasons = append(n.Reasons, "parent candidate changed; prepare integration again")
+			} else {
+				index := 0
+				for _, member := range members {
+					if !member.EpicMembership.Required {
+						continue
+					}
+					if index >= len(parent.Integration.Leaves) || parent.Integration.Leaves[index].ID != member.Definition.ID || parent.Integration.Leaves[index].Candidate != member.Candidate {
+						n.Action = "wait_integration"
+						n.Reasons = append(n.Reasons, "required scope changed; prepare integration again")
+						break
+					}
+					index++
+				}
+				if index != len(parent.Integration.Leaves) && n.Action != "wait_integration" {
+					n.Action = "wait_integration"
+					n.Reasons = append(n.Reasons, "required scope changed; prepare integration again")
+				}
+			}
 		}
 	}
 	return nil
@@ -322,11 +371,25 @@ func (s *Service) epicTree(id string, timeline bool) (EpicTree, error) {
 		m := member.EpicMembership
 		result.Children = append(result.Children, EpicTreeMember{Required: m.Required, Milestone: m.Milestone, Task: next, Summary: view})
 		result.Summary.add(next, view, m.Required)
+		if root.Task.Integration != nil && root.Action != "wait_integration" && root.Action != "wait_children" && gates(root.Task) && root.Task.Integration.Candidate == root.Task.Candidate && root.Task.Integration.Definition == root.Task.Definition.Revision && root.Task.Integration.Plan == root.Task.Plan.Revision {
+			for _, included := range root.Task.Integration.Leaves {
+				if included.ID == next.Task.Definition.ID && included.Candidate == next.Task.Candidate {
+					result.Summary.Integrated++
+					break
+				}
+			}
+		}
 		if m.Required {
 			result.Required++
 			if next.Task.Status == "completed" && !next.Task.Historical {
 				result.RequiredCompleted++
 			}
+		}
+	}
+	for _, check := range root.Task.Definition.Checks {
+		if evidence := CurrentEvidence(root.Task, check); evidence != nil && evidence.Result == "fail" {
+			issue := EpicIssue{Task: id, Title: root.Task.Definition.Title, Kind: "integration_failed", Check: check.ID, Reason: evidence.Reason}
+			result.Summary.Issues = append([]EpicIssue{issue}, result.Summary.Issues...)
 		}
 	}
 	if timeline {

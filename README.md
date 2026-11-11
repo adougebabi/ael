@@ -132,7 +132,7 @@ ael confirm --kind review --task ID --check review --executor person --reason '�
 
 ## 本地任务树
 
-使用 `type: "epic"` 创建父任务；叶子可在定义中指定 `parent`，或用 `./ael task link --parent EPIC --task LEAF --milestone 阶段 --json` 关联已有叶子。可选成员加 `--required=false`，用 `./ael task tree --task EPIC --json` 查看各叶子真实状态；父级不会因子任务完成自动通过集成。完整命令、HTTP 入口和隔离演示见 [本地任务树](docs/epic-tree.md)。已有分项可复用，Agent 或用户可通过 [拆分计划](docs/decomposition.md) 准备、预览并幂等应用结构化提议。
+使用 `type: "epic"` 创建父任务；叶子可在定义中指定 `parent`，或用 `./ael task link --parent EPIC --task LEAF --milestone 阶段 --json` 关联已有叶子。可选成员加 `--required=false`，用 `./ael task tree --task EPIC --json` 查看各叶子真实状态；父级不会因子任务完成自动通过集成。`task integrate` 核对叶子内容并记录父候选，父级必需检查和交付门禁仍须单独通过。完整命令、HTTP 入口和隔离演示见 [本地任务树](docs/epic-tree.md)。已有分项可复用，Agent 或用户可通过 [拆分计划](docs/decomposition.md) 准备、预览并幂等应用结构化提议。
 
 ## 连续执行与交接
 
