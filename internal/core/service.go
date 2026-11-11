@@ -20,6 +20,8 @@ type Service struct {
 	Store               *store.Store
 	Root                string
 	Active              bool
+	RemoteAuthority     bool
+	remoteOperation     *RemoteOperation
 	ResolveBasis        func(Definition) ([]BasisReference, error)
 	ConstraintCheck     func(Definition) []string
 	SnapshotConstraints func() ConstraintResolvers
@@ -175,19 +177,19 @@ func (s *Service) create(d Definition, membership *EpicMembership, expectedPolic
 				return Error("DEPENDENCY_MISSING", dep)
 			}
 		}
+		// Plan-created feedback links are applied when the plan finishes or
+		// is abandoned, so they do not invalidate later planned task states.
 		if d.FeedbackOf != "" {
 			old, e := load(tx, d.FeedbackOf)
 			if e != nil {
 				return e
 			}
-			old.Feedback = append(old.Feedback, d.ID)
-			if planKey != "" {
-				e = s.savePlan(tx, &old)
-			} else {
+			if planKey == "" {
+				old.Feedback = append(old.Feedback, d.ID)
 				e = s.save(tx, &old)
-			}
-			if e != nil {
-				return e
+				if e != nil {
+					return e
+				}
 			}
 		}
 		if planKey != "" {
@@ -225,6 +227,9 @@ func (s *Service) Get(id string) (Task, error) {
 	}
 	if e = json.Unmarshal([]byte(b), &t); e != nil {
 		return t, e
+	}
+	if s.RemoteAuthority {
+		return t, nil
 	}
 	currentPolicy, e := s.policyHash()
 	if e != nil {

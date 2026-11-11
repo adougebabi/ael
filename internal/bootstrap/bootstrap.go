@@ -4,6 +4,7 @@ import (
 	"ael/assets"
 	"ael/internal/core"
 	"ael/internal/knowledge"
+	"ael/internal/projectmode"
 	"ael/internal/store"
 	"encoding/json"
 	"fmt"
@@ -13,6 +14,8 @@ import (
 )
 
 const Version = "0.1.18"
+
+const DefaultPolicy = "{\"schema\":1,\"max_retries\":3,\"max_seconds\":0,\"lease_seconds\":1800,\"checks\":[],\"critical_knowledge\":[],\"delivery_requires_confirmation\":true}\n"
 
 type Config struct {
 	Schema    int    `json:"schema"`
@@ -41,6 +44,19 @@ func Canonical(root string) (string, error) {
 		return "", e
 	}
 	return filepath.EvalSymlinks(p)
+}
+
+// A remote binding is authoritative even if malformed: opening or initializing
+// a local runtime must never silently create a second authority.
+func RefuseRemote(root string) error {
+	_, err := os.Lstat(filepath.Join(root, ".ael", "remote.json"))
+	if err == nil {
+		return core.Error("REMOTE_MODE", "use the configured remote client; local runtime import is disabled")
+	}
+	if !os.IsNotExist(err) {
+		return core.Error("REMOTE_BINDING_UNAVAILABLE", "cannot determine project mode")
+	}
+	return nil
 }
 func DataDir(root string) string {
 	if canonical, e := Canonical(root); e == nil {
@@ -81,6 +97,22 @@ func Init(root string, dry, updating bool) (Report, error) {
 	root, e := Canonical(root)
 	r := Report{Root: root, Data: DataDir(root), Files: []string{}, Detected: []string{}, Warnings: []string{}}
 	if e != nil {
+		return r, e
+	}
+	exclusive := !dry
+	if exclusive {
+		if _, statErr := os.Lstat(filepath.Join(root, ".ael", "project.yaml")); statErr == nil {
+			exclusive = false // Existing local projects already exclude remote connect.
+		} else if !os.IsNotExist(statErr) {
+			return r, statErr
+		}
+	}
+	unlock, e := projectmode.Lock(root, exclusive)
+	if e != nil {
+		return r, e
+	}
+	defer unlock()
+	if e = RefuseRemote(root); e != nil {
 		return r, e
 	}
 	if e = ValidateDataLocation(root, r.Data); e != nil {
@@ -124,7 +156,7 @@ func Init(root string, dry, updating bool) (Report, error) {
 	if newProject {
 		b, _ := json.MarshalIndent(c, "", "  ")
 		targets[".ael/project.yaml"] = b
-		targets[".ael/policy.yaml"] = []byte("{\"schema\":1,\"max_retries\":3,\"max_seconds\":0,\"lease_seconds\":1800,\"checks\":[],\"critical_knowledge\":[],\"delivery_requires_confirmation\":true}\n")
+		targets[".ael/policy.yaml"] = []byte(DefaultPolicy)
 		targets[".ael/executor.example.json"] = []byte(`{"command":[],"codex":false,"workspace":"","session":"","max_steps":20,"timeout_seconds":0}` + "\n")
 		targets[".ael/project.md"] = []byte("# 项目定义\n\n请填写目标、非目标与关键边界。尚未配置自动验收或发布命令。\n")
 	}
@@ -252,6 +284,18 @@ func Open(root string) (*core.Service, Report, error) {
 	if e != nil {
 		return nil, r, e
 	}
+	unlock, e := projectmode.Lock(root, false)
+	if e != nil {
+		return nil, r, e
+	}
+	defer func() {
+		if unlock != nil {
+			unlock()
+		}
+	}()
+	if e = RefuseRemote(root); e != nil {
+		return nil, r, e
+	}
 	if e = ValidateDataLocation(root, r.Data); e != nil {
 		return nil, r, e
 	}
@@ -264,6 +308,8 @@ func Open(root string) (*core.Service, Report, error) {
 	if e != nil {
 		return nil, r, e
 	}
+	s.OnClose(unlock)
+	unlock = nil
 	svc := &core.Service{Store: s, Root: root, Active: c.Mode == "active", ToolBuild: Build}
 	svc.ResolveBasis = func(d core.Definition) ([]core.BasisReference, error) { return knowledge.Basis(root, d) }
 	svc.ConstraintCheck = func(d core.Definition) []string { return knowledge.Conflicts(root, d) }
@@ -284,6 +330,9 @@ func Doctor(root string) (Report, error) {
 	root, e := Canonical(root)
 	r := Report{Root: root, Data: DataDir(root)}
 	if e != nil {
+		return r, e
+	}
+	if e = RefuseRemote(root); e != nil {
 		return r, e
 	}
 	r.ServiceVersion = Version

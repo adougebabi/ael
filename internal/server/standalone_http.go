@@ -1,10 +1,12 @@
 package server
 
 import (
+	"bytes"
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
 	"net"
 	"net/http"
@@ -196,7 +198,7 @@ func (h *standaloneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.URL.Path == "/api/v1/meta" && r.Method == http.MethodGet {
-		standaloneReply(w, http.StatusOK, map[string]any{"mode": "server", "protocol": 1, "capabilities": []string{"login", "projects", "project_roles", "revocable_tokens"}})
+		standaloneReply(w, http.StatusOK, map[string]any{"mode": "server", "protocol": 1, "capabilities": []string{"login", "projects", "project_roles", "revocable_tokens", "remote_tasks", "remote_plans", "operation_receipts"}})
 		return
 	}
 	if !strings.HasPrefix(r.URL.Path, "/api/") {
@@ -251,21 +253,43 @@ func (h *standaloneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		standaloneFail(w, http.StatusUnauthorized, "AUTH_REQUIRED")
 		return
 	}
+	if r.Method != http.MethodGet {
+		if method == "session" && (r.Header.Get("Origin") != h.origin.String() || !h.csrf(r, p)) {
+			standaloneFail(w, http.StatusForbidden, "CSRF_REJECTED")
+			return
+		}
+		// Read before acquiring the fence: a slow client must not prevent a
+		// concurrent revocation from completing.
+		raw, err := io.ReadAll(io.LimitReader(r.Body, (2<<20)+1))
+		if err != nil || len(raw) > 2<<20 {
+			standaloneFail(w, http.StatusBadRequest, "INVALID_REQUEST")
+			return
+		}
+		_ = r.Body.Close()
+		r.Body = io.NopCloser(bytes.NewReader(raw))
+	}
+	exclusive := r.Method != http.MethodGet && (r.URL.Path == "/api/v1/auth/logout" || r.URL.Path == "/api/v1/tokens/revoke" || strings.HasSuffix(r.URL.Path, "/members"))
+	unlock, err := h.server.lockAuthorization(exclusive)
+	if err != nil {
+		standaloneFail(w, http.StatusInternalServerError, "SERVER_ERROR")
+		return
+	}
+	defer unlock()
+	fresh, freshMethod, err := h.authenticate(r)
+	if err != nil || freshMethod != method || fresh.UserID != p.UserID || fresh.TokenID != p.TokenID {
+		standaloneFail(w, http.StatusUnauthorized, "AUTH_REQUIRED")
+		return
+	}
+	p = fresh
 	if method == "session" {
 		cookie, err := r.Cookie("ael_csrf")
-		if err != nil || subtle.ConstantTimeCompare(standaloneHash(cookie.Value), p.CSRFHash) != 1 {
+		if err != nil || subtle.ConstantTimeCompare(standaloneHash(cookie.Value), p.CSRFHash) != 1 || (r.Method != http.MethodGet && !h.csrf(r, p)) {
 			standaloneFail(w, http.StatusUnauthorized, "AUTH_REQUIRED")
 			return
 		}
 		// Allows an existing tab to detect that another tab replaced its
 		// browser session before applying an authenticated response.
 		w.Header().Set("X-AEL-Session-Context", cookie.Value)
-	}
-	if r.Method != http.MethodGet {
-		if method == "session" && (r.Header.Get("Origin") != h.origin.String() || !h.csrf(r, p)) {
-			standaloneFail(w, http.StatusForbidden, "CSRF_REJECTED")
-			return
-		}
 	}
 	if r.URL.Path == "/api/v1/auth/session" && r.Method == http.MethodGet && method == "session" {
 		cookie, err := r.Cookie("ael_csrf")
@@ -327,6 +351,14 @@ func (h *standaloneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.HasPrefix(r.URL.Path, "/api/v1/projects/") {
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v1/projects/"), "/")
+		if len(parts) >= 2 && parts[1] == "tasks" {
+			h.remoteTasks(w, r, p, parts[0], parts[2:])
+			return
+		}
+		if len(parts) == 3 && parts[1] == "operations" && r.Method == http.MethodGet {
+			h.remoteOperation(w, p, parts[0], parts[2])
+			return
+		}
 		if len(parts) == 1 && r.Method == http.MethodGet {
 			project, err := h.server.project(p, parts[0])
 			if err != nil {
@@ -418,5 +450,5 @@ func ListenStandalone(s *Standalone, addr string, options StandaloneHTTPOptions,
 	if ready != nil {
 		ready(options.Origin)
 	}
-	return (&http.Server{Handler: h, ReadHeaderTimeout: 5 * time.Second}).Serve(ln)
+	return (&http.Server{Handler: h, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 64 << 10}).Serve(ln)
 }

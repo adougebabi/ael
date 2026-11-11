@@ -366,6 +366,9 @@ func (s *Service) ApplyPlan(p PlanProposal, digest string) (PlanApplyResult, err
 	}
 	hash := proposalHash(p)
 	if found {
+		if err := s.remoteCheckPlanReplay(p.ID); err != nil {
+			return empty, err
+		}
 		if j.ProposalHash != hash {
 			return empty, Error("IDEMPOTENCY_CONFLICT", p.ID)
 		}
@@ -474,6 +477,18 @@ func (s *Service) registerPlan(key string, j planJournal, preview PlanPreview) (
 		parent, err := load(tx, j.Proposal.Parent)
 		if err != nil || !equivalent(parent, preview.parent) {
 			return Error("PLAN_PARENT_CHANGED", j.Proposal.Parent)
+		}
+		members, err := epicMembersTx(tx, j.Proposal.Parent)
+		if err != nil {
+			return err
+		}
+		for _, member := range members {
+			if _, present := preview.existing[member.Definition.ID]; !present {
+				return Error("PLAN_PARENT_CHANGED", "membership changed after preview")
+			}
+		}
+		if err = s.remoteReservePlan(tx, &parent, j.Proposal.ID, j.Operations); err != nil {
+			return err
 		}
 		policy, err := s.policyHash()
 		if err != nil || policy != j.PolicyHash {
@@ -641,6 +656,9 @@ func (s *Service) applyPlanOperation(j planJournal, op planOperation) error {
 			return Error("PLAN_TASK_CHANGED", op.TaskID)
 		}
 	}
+	if op.Revise && (current.Status != "open" || hasWriter(current)) {
+		return Error("PLAN_TASK_CHANGED", op.TaskID)
+	}
 	if op.Revise && !sameDefinition(current.Definition, op.Definition) {
 		if current.DefinitionHash != op.BeforeHash || taskStateHash(current) != op.BeforeStateHash || current.Status != "open" || hasWriter(current) {
 			return Error("PLAN_TASK_CHANGED", op.TaskID)
@@ -669,6 +687,41 @@ func (s *Service) applyPlanOperation(j planJournal, op planOperation) error {
 		return Error("PLAN_MEMBERSHIP_CONFLICT", op.TaskID)
 	}
 	return nil
+}
+
+func (s *Service) applyPlanFeedback(tx *store.Tx, parent *Task, j planJournal, retainedOnly bool) (bool, error) {
+	parentChanged := false
+	for _, operation := range j.Operations {
+		if !operation.Create || operation.Definition.FeedbackOf == "" {
+			continue
+		}
+		if retainedOnly {
+			if _, err := load(tx, operation.TaskID); err == sql.ErrNoRows {
+				continue
+			} else if err != nil {
+				return false, err
+			}
+		}
+		targetID := operation.Definition.FeedbackOf
+		if targetID == parent.Definition.ID {
+			if !slicesContains(parent.Feedback, operation.TaskID) {
+				parent.Feedback = append(parent.Feedback, operation.TaskID)
+				parentChanged = true
+			}
+			continue
+		}
+		target, err := load(tx, targetID)
+		if err != nil {
+			return false, err
+		}
+		if !slicesContains(target.Feedback, operation.TaskID) {
+			target.Feedback = append(target.Feedback, operation.TaskID)
+			if err = s.savePlan(tx, &target); err != nil {
+				return false, err
+			}
+		}
+	}
+	return parentChanged, nil
 }
 
 func (s *Service) finishPlan(key string, j planJournal) (PlanApplyResult, error) {
@@ -706,14 +759,23 @@ func (s *Service) finishPlan(key string, j planJournal) (PlanApplyResult, error)
 		if err != nil || policy != j.PolicyHash {
 			return Error("PLAN_STALE_POLICY", j.Proposal.Parent)
 		}
+		if _, err = s.applyPlanFeedback(tx, &parent, j, false); err != nil {
+			return err
+		}
 		if parent.EpicPlan != nil {
 			parent.EpicPlanHistory = append(parent.EpicPlanHistory, *parent.EpicPlan)
 		}
 		parent.EpicPlan = &EpicPlanSnapshot{ProposalHash: j.ProposalHash, Digest: j.Digest, Proposal: j.Proposal, TaskIDs: j.TaskIDs, Changes: j.Changes}
+		if err = s.remoteBeforeSave(tx, &parent); err != nil {
+			return err
+		}
 		if err = s.savePlan(tx, &parent); err != nil {
 			return err
 		}
 		result = PlanApplyResult{Status: "applied", Parent: j.Proposal.Parent, PlanID: j.Proposal.ID, ProposalHash: j.ProposalHash, Changes: j.Changes}
+		if err = s.remoteAfterSaveResult(tx, &parent, result); err != nil {
+			return err
+		}
 		latest.Status, latest.Result = "applied", &result
 		b, err := json.Marshal(latest)
 		if err != nil {
@@ -764,6 +826,13 @@ func (s *Service) AbandonPlan(parent, id, reason string) (map[string]any, error)
 		if j.Status != "applying" && j.Status != "restore_review_required" {
 			return Error("PLAN_NOT_RESUMABLE", id)
 		}
+		parentTask, err := load(tx, parent)
+		if err != nil {
+			return err
+		}
+		if err = s.remoteBeforeSave(tx, &parentTask); err != nil {
+			return err
+		}
 		retained := []string{}
 		for _, op := range j.Operations {
 			if _, err := load(tx, op.TaskID); err == nil {
@@ -783,7 +852,22 @@ func (s *Service) AbandonPlan(parent, id, reason string) (map[string]any, error)
 		if _, err = tx.Exec("DELETE FROM metadata WHERE key=? AND body=?", planActiveKey(parent), key); err != nil {
 			return err
 		}
+		parentChanged, err := s.applyPlanFeedback(tx, &parentTask, j, true)
+		if err != nil {
+			return err
+		}
+		if parentChanged {
+			if err = s.savePlan(tx, &parentTask); err != nil {
+				return err
+			}
+		}
 		result = map[string]any{"status": "abandoned", "plan_id": id, "parent": parent, "retained_tasks": retained}
+		if err = s.remoteAbandonPending(tx, &parentTask, id, result); err != nil {
+			return err
+		}
+		if err = s.remoteAfterSaveResult(tx, &parentTask, result); err != nil {
+			return err
+		}
 		return tx.Event(parent, "plan_abandoned", map[string]any{"plan_id": id, "reason": reason, "retained_tasks": retained})
 	})
 	return result, err

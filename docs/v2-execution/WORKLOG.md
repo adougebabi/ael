@@ -3,7 +3,7 @@
 > 本账本初始状态不代表任何实施已开始。只有实际执行者才能根据代码和验收结果更新状态。
 > 状态仅允许 PENDING、ACTIVE、VERIFYING、DONE、BLOCKED。
 
-当前任务: V2-09
+当前任务: V2-10
 
 | ID | 任务 | 状态 | 回执 |
 |---|---|---|---|
@@ -16,7 +16,7 @@
 | V2-06 | 停滞检测、重复失败与可恢复停止 | DONE | receipts/V2-06.md |
 | V2-07 | 父级集成验收与整体验收门禁 | DONE | receipts/V2-07.md |
 | V2-08 | 独立 Server 与远程身份边界 | DONE | receipts/V2-08.md |
-| V2-09 | 远程任务与 CLI：唯一权威的第一条路径 | PENDING | — |
+| V2-09 | 远程任务与 CLI：唯一权威的第一条路径 | DONE | receipts/V2-09.md |
 | V2-10 | 中心证据存储与授权上传下载 | PENDING | — |
 | V2-11 | 跨设备候选、规范快照与执行上下文 | PENDING | — |
 | V2-12 | 远程 Runner 的真实单任务闭环 | PENDING | — |
@@ -36,10 +36,10 @@
 
 - 本地工作目录：/Users/vinson/Documents/project/个人/ael
 - 当前分支 / 基线提交：main / c3f3da2e264c3a0cb99d28c3fa6c04e9cd7d8bf4；开工工作区干净。
-- 当前任务未完成的验收项：V2-09 尚未开始；读取当前任务文件后逐项实施和验收。
-- 最近实际进展：V2-08 已完成独立 Server、登录/项目授权、可撤销令牌、协议发现和浏览器入口；Go 全量、竞态、四平台打包、双标签登录/重启和本地 Dashboard 回归通过，详见 `receipts/V2-08.md`。完成前补丁检查点为 `/private/tmp/ael-v2-v200.xLJaSd/v2-08-before-done.tar`。
+- 当前任务未完成的验收项：V2-10 尚未开始；读取当前任务文件后逐项实施和验收。
+- 最近实际进展：V2-09 已完成远程 profile、项目绑定、Server 任务与计划、revision/幂等、令牌撤销及离线保护；双客户端真实 HTTP、Go 全量/竞态、打包和 V2-07/08 回归通过，见 `receipts/V2-09.md`。完成前补丁检查点为 `/private/tmp/ael-v2-v200.xLJaSd/v2-09-before-done.tar`。
 - 阻塞：无已知阻塞。
-- 下一具体动作：完成 V2-08 的本地 Git 检查点并检查账本，然后读取并开始 V2-09。任务外非阻断问题记于 `NON-BLOCKING-ISSUES.md`。
+- 下一具体动作：完成 V2-09 的本地 Git 检查点并检查账本，然后读取并开始 V2-10。任务外非阻断问题记于 `NON-BLOCKING-ISSUES.md`。
 
 ## 修订记录
 
@@ -54,3 +54,4 @@
 - V2-06 完成：停滞判断、限定复核、安全恢复及打包验收见 receipts/V2-06.md。
 - V2-07 完成：父级候选、集成与交付门禁、三叶及八叶打包验收见 receipts/V2-07.md。
 - V2-08 完成：独立 Server、账户与项目授权、浏览器登录和打包重启验收见 receipts/V2-08.md。
+- V2-09 完成：远程单权威任务、计划和双客户端验收见 receipts/V2-09.md。

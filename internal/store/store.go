@@ -14,14 +14,18 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
 )
 
 type Store struct {
-	DB  *sql.DB
-	Dir string
+	DB        *sql.DB
+	Dir       string
+	closeOnce sync.Once
+	closeErr  error
+	closeHook func()
 }
 type Tx struct{ Conn *sql.Conn }
 
@@ -35,7 +39,7 @@ func Open(dir string) (*Store, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	s := &Store{db, dir}
+	s := &Store{DB: db, Dir: dir}
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS tasks(id TEXT PRIMARY KEY, body TEXT NOT NULL, status TEXT NOT NULL, step TEXT NOT NULL, updated TEXT NOT NULL, completed TEXT NOT NULL DEFAULT '');
  CREATE INDEX IF NOT EXISTS task_status ON tasks(status,updated);
  CREATE INDEX IF NOT EXISTS task_completed ON tasks(completed);
@@ -51,7 +55,16 @@ func Open(dir string) (*Store, error) {
 	}
 	return s, nil
 }
-func (s *Store) Close() error { return s.DB.Close() }
+func (s *Store) OnClose(fn func()) { s.closeHook = fn }
+func (s *Store) Close() error {
+	s.closeOnce.Do(func() {
+		s.closeErr = s.DB.Close()
+		if s.closeHook != nil {
+			s.closeHook()
+		}
+	})
+	return s.closeErr
+}
 func (s *Store) Write(fn func(*Tx) error) (err error) {
 	c, err := s.DB.Conn(context.Background())
 	if err != nil {

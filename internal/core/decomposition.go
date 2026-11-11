@@ -285,8 +285,13 @@ func (s *Service) PreparePlan(parent string, input PlanInput) (PlanPreparation, 
 		if err != nil || !equivalent(current, root) {
 			return Error("PLAN_PARENT_CHANGED", parent)
 		}
-		_, err = tx.Exec("INSERT INTO metadata(key,body) VALUES(?,?) ON CONFLICT(key) DO NOTHING", planInputKey(result.InputHash), string(raw))
-		return err
+		if err = s.remoteBeforeSave(tx, &current); err != nil {
+			return err
+		}
+		if _, err = tx.Exec("INSERT INTO metadata(key,body) VALUES(?,?) ON CONFLICT(key) DO NOTHING", planInputKey(result.InputHash), string(raw)); err != nil {
+			return err
+		}
+		return s.remoteAfterSaveResult(tx, &current, result)
 	})
 	if err != nil {
 		return result, err

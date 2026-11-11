@@ -1,6 +1,7 @@
 package server
 
 import (
+	"ael/internal/core"
 	"ael/internal/store"
 	"crypto/pbkdf2"
 	"crypto/rand"
@@ -14,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -21,7 +23,11 @@ const standalonePasswordRounds = 600000
 
 var standaloneID = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
 
-type Standalone struct{ store *store.Store }
+type Standalone struct {
+	store           *store.Store
+	projectMu       sync.Mutex
+	projectServices map[string]*core.Service
+}
 
 type standalonePrincipal struct {
 	UserID    string
@@ -149,10 +155,23 @@ CREATE TABLE IF NOT EXISTS server_tokens(id TEXT PRIMARY KEY, secret_hash BLOB N
 		db.Close()
 		return nil, err
 	}
-	return &Standalone{store: db}, nil
+	return &Standalone{store: db, projectServices: map[string]*core.Service{}}, nil
 }
 
-func (s *Standalone) Close() error { return s.store.Close() }
+func (s *Standalone) Close() error {
+	s.projectMu.Lock()
+	defer s.projectMu.Unlock()
+	var first error
+	for _, project := range s.projectServices {
+		if err := project.Store.Close(); err != nil && first == nil {
+			first = err
+		}
+	}
+	if err := s.store.Close(); err != nil && first == nil {
+		first = err
+	}
+	return first
+}
 
 func (s *Standalone) Bootstrapped() (bool, error) {
 	var count int

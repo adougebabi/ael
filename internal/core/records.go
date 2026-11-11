@@ -154,16 +154,25 @@ func (s *Service) writeRecordWithGuard(tx *store.Tx, t Task, guarded bool) error
 }
 
 func (s *Service) savePlan(tx *store.Tx, t *Task) error {
+	if err := s.remoteBeforeSave(tx, t); err != nil {
+		return err
+	}
 	if err := save(tx, t); err != nil {
 		return err
 	}
 	return s.writeRecordWithGuard(tx, *t, true)
 }
 func (s *Service) save(tx *store.Tx, t *Task) error {
+	if e := s.remoteBeforeSave(tx, t); e != nil {
+		return e
+	}
 	if e := save(tx, t); e != nil {
 		return e
 	}
-	return s.writeRecord(tx, *t)
+	if e := s.writeRecord(tx, *t); e != nil {
+		return e
+	}
+	return s.remoteAfterSave(tx, t)
 }
 func hasWriter(t Task) bool {
 	for _, a := range t.Attempts {

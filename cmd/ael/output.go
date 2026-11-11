@@ -74,6 +74,18 @@ func writeOutput(w io.Writer, value any, machine, verbose bool) error {
 		return json.NewEncoder(w).Encode(value)
 	}
 	switch v := value.(type) {
+	case remoteOutput:
+		if online, _ := v["online"].(bool); online {
+			if authoritative, _ := v["authoritative"].(bool); !authoritative {
+				fmt.Fprintf(w, "远程模式：在线，但投影待修复（读取时间 %v）；不能作为完整回执。\n", v["observed_at"])
+			} else {
+				fmt.Fprintf(w, "远程模式：在线（读取时间 %v）\n", v["observed_at"])
+			}
+		} else {
+			fmt.Fprintf(w, "远程模式：离线，仅显示缓存（缓存时间 %v）；不能作为当前完成证明。\n", v["cached_at"])
+		}
+		writeTextValue(w, "", map[string]any(v), 0)
+		return nil
 	case core.WorkResult:
 		fmt.Fprintf(w, "父任务：%s；Runner：%s\n状态：%s\n", v.Checkpoint.Parent, v.Checkpoint.Runner, v.Action)
 		if v.Checkpoint.Task != "" {

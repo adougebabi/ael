@@ -3,6 +3,7 @@
 package server
 
 import (
+	"ael/internal/securityfs"
 	"errors"
 
 	"golang.org/x/sys/unix"
@@ -25,4 +26,4 @@ func standaloneLocalFilesystem(path string) error {
 
 // Linux POSIX ACL effective permissions are reflected in mode bits, which
 // are checked separately for the directory and each SQLite file.
-func standaloneNoACL(string) error { return nil }
+func standaloneNoACL(path string) error { return securityfs.NoACL(path) }

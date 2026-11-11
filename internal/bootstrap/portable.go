@@ -205,6 +205,9 @@ func InitProject(root string, dry, updating bool, source string) (Report, error)
 	if e != nil {
 		return Report{}, e
 	}
+	if e = RefuseRemote(canonical); e != nil {
+		return Report{}, e
+	}
 	b, e := DiscoverBundle(source)
 	if e != nil {
 		return Report{}, e
