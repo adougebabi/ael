@@ -4,6 +4,8 @@ import { onMounted, onUnmounted, ref } from "vue";
 type Session = { username: string; admin: boolean; csrf: string };
 type Project = { id: string; name: string; role: string };
 type Token = { id: string; username: string; project_id: string; label: string; revoked: boolean };
+type TaskItem = { task: { definition: { id: string; title: string }; status: string } };
+type Artifact = { id: string; filename: string; mime: string; size: number; sha256: string; status: string };
 
 const session = ref<Session | null>(null);
 const loading = ref(true), busy = ref(false), error = ref(""), notice = ref("");
@@ -14,11 +16,23 @@ const memberProject = ref(""), memberUsername = ref(""), memberRole = ref("reade
 const tokenProject = ref(""), tokenUsername = ref(""), tokenLabel = ref("");
 const tokenSecret = ref(""), tokenID = ref("");
 const projects = ref<Project[]>([]), tokens = ref<Token[]>([]), selected = ref<Project | null>(null);
+const tasks = ref<TaskItem[]>([]), selectedTask = ref(""), artifacts = ref<Artifact[]>([]);
+const previewID = ref(""), previewURL = ref(""), previewText = ref(""), previewError = ref("");
+const taskLookup = ref("");
+let previewEpoch = 0, previewChecking = false;
+let previewTimer: ReturnType<typeof setInterval> | undefined;
 const roles: Record<string, string> = { admin: "管理员", executor: "执行者", reviewer: "验收者", reader: "只读者" };
 const sessionChannel = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel("ael-standalone-session");
 
+function clearPreview() {
+  previewEpoch++;
+  if (previewURL.value) URL.revokeObjectURL(previewURL.value);
+  previewID.value = ""; previewURL.value = ""; previewText.value = ""; previewError.value = "";
+}
+
 function clearSession() {
   session.value = null; projects.value = []; tokens.value = []; selected.value = null;
+  tasks.value = []; selectedTask.value = ""; taskLookup.value = ""; artifacts.value = []; clearPreview();
   tokenSecret.value = ""; tokenID.value = ""; tokenProject.value = ""; tokenUsername.value = ""; tokenLabel.value = "";
   projectID.value = ""; projectName.value = ""; newUsername.value = ""; newPassword.value = "";
   memberProject.value = ""; memberUsername.value = ""; memberRole.value = "reader";
@@ -63,6 +77,16 @@ async function request(path: string, body?: unknown) {
 async function refresh() {
   projects.value = (await request("/api/v1/projects")).projects;
   tokens.value = session.value?.admin ? (await request("/api/v1/tokens")).tokens : [];
+  if (selected.value) {
+    if (!projects.value.some((project) => project.id === selected.value?.id)) {
+      selected.value = null; tasks.value = []; selectedTask.value = ""; artifacts.value = []; clearPreview();
+      return;
+    }
+    const base = `/api/v1/projects/${encodeURIComponent(selected.value.id)}`;
+    tasks.value = (await request(`${base}/tasks?limit=100`)).items;
+    if (selectedTask.value) artifacts.value = (await request(`${base}/tasks/${encodeURIComponent(selectedTask.value)}/artifacts`)).items;
+    clearPreview();
+  }
 }
 
 async function restore() {
@@ -125,11 +149,79 @@ async function revoke(id: string) {
   await action(async () => { await request("/api/v1/tokens/revoke", { id }); }, "令牌已撤销。");
 }
 async function view(id: string) {
-  await action(async () => { selected.value = await request(`/api/v1/projects/${encodeURIComponent(id)}`); }, "");
+  await action(async () => { selected.value = null; tasks.value = []; selectedTask.value = ""; artifacts.value = []; clearPreview(); selected.value = await request(`/api/v1/projects/${encodeURIComponent(id)}`); }, "");
 }
 
-onMounted(restore);
-onUnmounted(() => sessionChannel?.close());
+async function viewArtifacts(id: string) {
+  if (!selected.value) return;
+  busy.value = true; error.value = ""; clearPreview(); selectedTask.value = id; artifacts.value = [];
+  try {
+    artifacts.value = (await request(`/api/v1/projects/${encodeURIComponent(selected.value.id)}/tasks/${encodeURIComponent(id)}/artifacts`)).items;
+  } catch (e) { error.value = e instanceof Error ? e.message : "证据读取失败。"; }
+  finally { busy.value = false; }
+}
+
+async function findTask() {
+  if (!selected.value || !taskLookup.value.trim()) return;
+  busy.value = true; error.value = ""; clearPreview();
+  try {
+    const id = taskLookup.value.trim();
+    const base = `/api/v1/projects/${encodeURIComponent(selected.value.id)}`;
+    const result: TaskItem = await request(`${base}/tasks/${encodeURIComponent(id)}`);
+    tasks.value = [result, ...tasks.value.filter((item) => item.task.definition.id !== id)];
+    selectedTask.value = id;
+    artifacts.value = (await request(`${base}/tasks/${encodeURIComponent(id)}/artifacts`)).items;
+  } catch (e) { error.value = e instanceof Error ? e.message : "任务读取失败。"; }
+  finally { busy.value = false; }
+}
+
+async function checkPreview() {
+  if (previewChecking || !previewID.value || !selected.value || !session.value) return;
+  const epoch = previewEpoch, id = previewID.value, project = selected.value.id;
+  previewChecking = true;
+  try {
+    const item: Artifact = await request(`/api/v1/projects/${encodeURIComponent(project)}/artifacts/${encodeURIComponent(id)}`);
+    if (previewEpoch === epoch && item.status !== "finalized") {
+      clearPreview(); previewError.value = "原件已清理或不可用，预览已关闭。";
+    }
+  } catch {
+    if (previewEpoch === epoch) { clearPreview(); previewError.value = "无法确认原件状态，预览已关闭。"; }
+  } finally { previewChecking = false; }
+}
+
+async function preview(item: Artifact) {
+  if (!selected.value || !session.value) return;
+  clearPreview(); busy.value = true;
+  const expectedSession = session.value.csrf, project = selected.value.id, task = selectedTask.value;
+  try {
+    const response = await fetch(`/api/v1/projects/${encodeURIComponent(project)}/artifacts/${encodeURIComponent(item.id)}/content`, { cache: "no-store" });
+    if (session.value?.csrf !== expectedSession || response.headers.get("X-AEL-Session-Context") !== expectedSession) {
+      if (session.value?.csrf === expectedSession) clearSession();
+      throw new Error("登录状态已变化，请重新打开工作台。");
+    }
+    if (!response.ok) {
+      if (response.status === 401) clearSession();
+      throw new Error("原件不可用，可能已被清理或内容校验失败。请刷新列表。");
+    }
+    if (selected.value?.id !== project || selectedTask.value !== task) return;
+    if (item.mime === "image/png" || item.mime === "image/jpeg") {
+      const blob = await response.blob();
+      if (session.value?.csrf !== expectedSession || selected.value?.id !== project || selectedTask.value !== task) return;
+      previewURL.value = URL.createObjectURL(blob);
+    } else if (item.mime === "text/plain") {
+      const text = await response.text();
+      if (session.value?.csrf !== expectedSession || selected.value?.id !== project || selectedTask.value !== task) return;
+      previewText.value = text;
+    } else {
+      throw new Error("此类型不支持页面预览，请下载原件。");
+    }
+    previewID.value = item.id;
+  } catch (e) { previewError.value = e instanceof Error ? e.message : "证据读取失败。"; }
+  finally { busy.value = false; }
+}
+
+onMounted(() => { void restore(); previewTimer = setInterval(() => { void checkPreview(); }, 2000); });
+onUnmounted(() => { if (previewTimer) clearInterval(previewTimer); clearPreview(); sessionChannel?.close(); });
 </script>
 
 <template>
@@ -167,6 +259,35 @@ onUnmounted(() => sessionChannel?.close());
           </ul>
           <p v-if="selected" class="standalone-selection">{{ selected.name }} · {{ roles[selected.role] || selected.role }}</p>
         </section>
+        <section v-if="selected" class="standalone-card" aria-label="项目证据">
+          <h2>{{ selected.name }} · 任务与证据</h2>
+          <form class="standalone-evidence-lookup" @submit.prevent="findTask"><label>按任务 ID 查找<input v-model="taskLookup" required /></label><button type="submit" :disabled="busy">查找任务</button></form>
+          <p v-if="!tasks.length" class="secondary">此项目暂无任务。</p>
+          <ul v-else class="standalone-list">
+            <li v-for="item in tasks" :key="item.task.definition.id">
+              <div><strong>{{ item.task.definition.title }}</strong><small>{{ item.task.definition.id }} · {{ item.task.status }}</small></div>
+              <button type="button" :disabled="busy" @click="viewArtifacts(item.task.definition.id)">查看证据</button>
+            </li>
+          </ul>
+          <div v-if="selectedTask" class="standalone-evidence">
+            <h3>证据 · {{ selectedTask }}</h3>
+            <p v-if="!artifacts.length" class="secondary">此任务尚无已完成上传的证据。</p>
+            <ul v-else class="standalone-list">
+              <li v-for="item in artifacts" :key="item.id">
+                <div><strong>{{ item.filename }}</strong><small>{{ item.id }} · {{ item.size }} 字节 · {{ item.sha256 }}</small><small v-if="item.status !== 'finalized'">{{ item.status === 'purged' ? '原件已清理' : '原件不可用' }}</small></div>
+                <div v-if="item.status === 'finalized'" class="standalone-evidence-actions">
+                  <button v-if="item.mime !== 'video/mp4'" type="button" :disabled="busy" @click="preview(item)">预览</button>
+                  <a :href="`/api/v1/projects/${encodeURIComponent(selected.id)}/artifacts/${encodeURIComponent(item.id)}/content`" download>下载</a>
+                </div>
+              </li>
+            </ul>
+            <p v-if="previewError" class="standalone-error" role="alert">{{ previewError }}</p>
+            <div v-if="previewID" class="standalone-preview" aria-label="证据预览">
+              <img v-if="previewURL" :src="previewURL" alt="证据图片" />
+              <pre v-else>{{ previewText }}</pre>
+            </div>
+          </div>
+        </section>
         <template v-if="session.admin">
           <div class="standalone-grid">
             <section class="standalone-card"><h2>注册项目</h2><form class="standalone-form" @submit.prevent="createProject"><label>项目 ID<input v-model="projectID" required pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,63}" /></label><label>项目名称<input v-model="projectName" required maxlength="200" /></label><button class="primary" :disabled="busy">注册项目</button></form></section>
@@ -202,5 +323,11 @@ onUnmounted(() => sessionChannel?.close());
 .standalone-selection, .standalone-notice { color: #326e56; }
 .standalone-error { color: var(--danger); margin-top: 12px; }
 .standalone-secret { margin-top: 18px; padding: 14px; background: var(--tint); border-radius: 5px; overflow-wrap: anywhere; }
+.standalone-evidence { margin-top: 24px; }
+.standalone-evidence-lookup { display: flex; align-items: end; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+.standalone-evidence-actions { display: flex; align-items: center; gap: 14px; }
+.standalone-preview { margin-top: 18px; padding: 16px; border: 1px solid var(--line); overflow: auto; }
+.standalone-preview img { display: block; max-width: 100%; height: auto; }
+.standalone-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 700px) { .standalone-grid { grid-template-columns: 1fr; } .standalone-header { padding: 14px 18px; } .standalone-main { padding: 28px 18px 48px; } }
 </style>

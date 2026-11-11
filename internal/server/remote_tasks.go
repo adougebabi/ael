@@ -89,6 +89,10 @@ func standaloneTaskError(w http.ResponseWriter, err error) {
 }
 
 func (h *standaloneHandler) remoteTasks(w http.ResponseWriter, r *http.Request, principal standalonePrincipal, project string, parts []string) {
+	if len(parts) == 2 && parts[1] == "artifacts" && r.Method == http.MethodGet {
+		h.remoteTaskArtifacts(w, principal, project, parts[0])
+		return
+	}
 	role, err := h.server.role(principal, project)
 	if err != nil {
 		standaloneFail(w, http.StatusNotFound, "PROJECT_NOT_FOUND")

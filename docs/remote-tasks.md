@@ -37,4 +37,24 @@ ael operation show --idempotency-key edit-parent-1 --json
 
 在线读取标记 `mode: remote`、`online: true` 和读取时间。网络中断时只有先前成功读取的缓存可显示，输出同时标记 `online: false`、`authoritative: false` 和 `cached_at`；写入返回 `REMOTE_UNAVAILABLE`，不会创建本地任务或声称完成。在线认证失败、令牌撤销或项目授权失败不会用缓存掩盖。若操作已提交但服务端文件投影有冲突，查询回执显示 `projection_blocked`，写入返回 `PROJECTION_BLOCKED`；需由服务端管理员保留冲突现场并核对自己的 pending outbox，恢复后再查询原操作。
 
+## 中心附件
+
+已连接项目可上传本机文件；Server 只收到文件名、内容及任务元数据，不读取或向其他客户端公开本机路径。以下示例的 `STATE_REVISION` 是 `task show --json` 返回的完整状态修订；任务已有候选时还须提供 `--candidate`，有对应 attempt 时可加 `--attempt`。
+
+```sh
+ael artifact upload --task TASK_ID --file /path/to/screen.png \
+  --expected-revision STATE_REVISION --operation-id upload-1 --idempotency-key upload-1 --json
+ael artifact list --task TASK_ID --json
+ael artifact show --artifact ARTIFACT_ID --json
+ael artifact download --artifact ARTIFACT_ID --out /path/to/new-file.png --json
+ael artifact reference --artifact ARTIFACT_ID --task TASK_ID --purpose reference \
+  --expected-revision STATE_REVISION --operation-id ref-1 --idempotency-key ref-1 --json
+```
+
+支持 PNG、JPEG、UTF-8 纯文本（`.txt/.md/.log/.json/.csv`）和 MP4，单文件上限 10 MiB；Server 校验后才 finalize。图片和文本可在 Server 页面按项目、任务预览，也可按任务 ID 查找；MP4 按附件下载。页面每两秒核对已打开预览的原件状态，清理、权限失效或无法确认时关闭预览，刷新列表可查看当前状态。`artifact download` 校验长度和 SHA-256，只创建新文件，不覆盖原文件。附件读取必须实时授权，断网不会返回旧缓存。引用 `--purpose evidence` 必须绑定与任务及附件相同的非空 `--candidate`；关联本身不等于某项检查通过，也不会自动改变现有验收门禁。
+
+上传中断时以完全相同文件、参数和 operation/幂等键重试原上传命令；无需更换键。若创建响应丢失或源文件已经不可用，用 `ael artifact upload-status --idempotency-key upload-1 --json` 按当前身份实时查询 upload ID 和状态。确需放弃时，可用 `ael artifact cancel --upload UPLOAD_ID --operation-id upload-1 --idempotency-key upload-1 --json` 取消未完成上传并释放预留配额；取消不能撤销已 finalize 的附件。服务端管理员可先对 `/api/v1/projects/PROJECT_ID/artifacts/prune` 提交 `{"before":"RFC3339时间"}` 预览，再使用预览返回的 `digest`、相同 `before`、`apply:true`、`operation_id` 和 `idempotency_key` 执行；需管理员浏览器会话及 CSRF。清理保留元数据和引用，活动任务及仍被活动父任务或依赖需要的原件不列为候选。执行中断后以同一请求和键重放；如果保护关系已变化则返回 `PRUNE_STALE`，应重新预览。页面将清理中、已清理或缺失的原件显示为不可预览。
+
+项目容量可通过 `GET /api/v1/projects/PROJECT_ID/artifacts/stats` 查询，返回已用、临时文件、附件及预留字节。管理员浏览器会话可向对应的 `/artifacts/quota` 提交 `limit_bytes`、从统计读取的 `expected_quota_bytes`、`operation_id` 和 `idempotency_key`；旧配额值冲突时需重新读取，相同请求可用同一键安全重放。新上限不能小于已用与预留之和。
+
 `python3 scripts/remote_tasks_acceptance.py --bundle /path/to/dist --out /tmp/ael-remote-fixture-NEW` 在全新临时目录启动一个仅监听本机的 Server 与两个独立 CLI 配置，验证父子任务、版本冲突、操作重放、计划、撤销及断网恢复。夹具不运行真实开发执行器，不代表外部机器部署。

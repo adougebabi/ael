@@ -192,13 +192,13 @@ func (h *standaloneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
-	w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'")
+	w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'")
 	if !h.validOrigin(r) {
 		standaloneFail(w, http.StatusForbidden, "ORIGIN_REJECTED")
 		return
 	}
 	if r.URL.Path == "/api/v1/meta" && r.Method == http.MethodGet {
-		standaloneReply(w, http.StatusOK, map[string]any{"mode": "server", "protocol": 1, "capabilities": []string{"login", "projects", "project_roles", "revocable_tokens", "remote_tasks", "remote_plans", "operation_receipts"}})
+		standaloneReply(w, http.StatusOK, map[string]any{"mode": "server", "protocol": 1, "capabilities": []string{"login", "projects", "project_roles", "revocable_tokens", "remote_tasks", "remote_plans", "operation_receipts", "artifacts"}})
 		return
 	}
 	if !strings.HasPrefix(r.URL.Path, "/api/") {
@@ -351,6 +351,10 @@ func (h *standaloneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.HasPrefix(r.URL.Path, "/api/v1/projects/") {
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v1/projects/"), "/")
+		if len(parts) >= 2 && parts[1] == "artifacts" {
+			h.remoteArtifacts(w, r, p, method, parts[0], parts[2:])
+			return
+		}
 		if len(parts) >= 2 && parts[1] == "tasks" {
 			h.remoteTasks(w, r, p, parts[0], parts[2:])
 			return

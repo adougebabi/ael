@@ -81,15 +81,20 @@ func remoteCommand(cmd string, a args, binding remote.Binding) (any, error) {
 	flags := map[string][]string{
 		"doctor": {}, "task list": {"parent", "limit", "offset", "days", "query", "board"},
 		"task show": {"task"}, "task plan": {"task"}, "next": {"task"}, "task tree": {"task"}, "task progress": {"task"},
-		"operation show": {"idempotency-key"},
-		"task create":    {"file", "operation-id", "idempotency-key", "expected-revision"},
-		"task edit":      {"task", "file", "reason", "operation-id", "idempotency-key", "expected-revision"},
-		"task pause":     {"task", "reason", "operation-id", "idempotency-key", "expected-revision"},
-		"task cancel":    {"task", "reason", "operation-id", "idempotency-key", "expected-revision"},
-		"resume":         {"task", "return-to", "ack-stopped", "operation-id", "idempotency-key", "expected-revision"},
-		"task link":      {"task", "parent", "required", "milestone", "operation-id", "idempotency-key", "expected-revision"},
-		"plan prepare":   {"task", "file", "operation-id", "idempotency-key", "expected-revision"},
-		"plan preview":   {"file"}, "plan apply": {"file", "digest", "operation-id", "idempotency-key", "expected-revision"},
+		"operation show":  {"idempotency-key"},
+		"artifact upload": {"task", "file", "mime", "source", "attempt", "candidate", "operation-id", "idempotency-key", "expected-revision"},
+		"artifact list":   {"task"}, "artifact show": {"artifact"}, "artifact download": {"artifact", "out"},
+		"artifact cancel":        {"upload", "operation-id", "idempotency-key"},
+		"artifact upload-status": {"idempotency-key"},
+		"artifact reference":     {"artifact", "task", "purpose", "candidate", "expected-revision", "operation-id", "idempotency-key"},
+		"task create":            {"file", "operation-id", "idempotency-key", "expected-revision"},
+		"task edit":              {"task", "file", "reason", "operation-id", "idempotency-key", "expected-revision"},
+		"task pause":             {"task", "reason", "operation-id", "idempotency-key", "expected-revision"},
+		"task cancel":            {"task", "reason", "operation-id", "idempotency-key", "expected-revision"},
+		"resume":                 {"task", "return-to", "ack-stopped", "operation-id", "idempotency-key", "expected-revision"},
+		"task link":              {"task", "parent", "required", "milestone", "operation-id", "idempotency-key", "expected-revision"},
+		"plan prepare":           {"task", "file", "operation-id", "idempotency-key", "expected-revision"},
+		"plan preview":           {"file"}, "plan apply": {"file", "digest", "operation-id", "idempotency-key", "expected-revision"},
 		"plan abandon": {"task", "plan-id", "reason", "operation-id", "idempotency-key", "expected-revision"},
 	}
 	commandFlags, supported := flags[cmd]
@@ -116,6 +121,9 @@ func remoteCommand(cmd string, a args, binding remote.Binding) (any, error) {
 		return nil, err
 	}
 	project, id := a.get("project", "."), a.get("task", "")
+	if strings.HasPrefix(cmd, "artifact ") {
+		return remoteArtifactCommand(cmd, a, config, project, binding)
+	}
 	method, path := http.MethodGet, ""
 	var payload any
 	switch cmd {

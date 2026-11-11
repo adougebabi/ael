@@ -1,0 +1,55 @@
+import { test, expect } from "@playwright/test";
+import fs from "node:fs";
+import path from "node:path";
+
+const manifestPath = process.env.AEL_ARTIFACT_FIXTURE;
+if (!manifestPath) throw new Error("AEL_ARTIFACT_FIXTURE is required");
+const fixture = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+if (!fixture.isolated || !fs.existsSync(path.join(fixture.out, "ISOLATED-ARTIFACTS"))) throw new Error("refusing non-isolated fixture");
+const output = process.env.AEL_UI_OUT || "/tmp/ael-artifact-browser";
+fs.mkdirSync(output, { recursive: true });
+
+test("授权用户预览真实证据，清理后不显示假预览", async ({ page, request }) => {
+  await page.goto(fixture.url);
+  await page.getByLabel("用户名", { exact: true }).fill("reader");
+  await page.getByLabel("密码", { exact: true }).fill("fixture-reader-password");
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await page.getByLabel("项目列表").getByRole("listitem").filter({ hasText: "Shared Evidence" }).getByRole("button", { name: "查看项目" }).click();
+  const evidence = page.getByLabel("项目证据");
+  await evidence.getByLabel("按任务 ID 查找").fill("task");
+  await evidence.getByRole("button", { name: "查找任务" }).click();
+  const imageRow = evidence.getByRole("listitem").filter({ hasText: "screen.png" });
+  await imageRow.getByRole("button", { name: "预览" }).click();
+  const image = page.getByLabel("证据预览").getByRole("img");
+  await expect(image).toBeVisible();
+  await expect.poll(() => image.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0);
+  await page.screenshot({ path: path.join(output, "image-preview.png"), fullPage: true });
+  const reportRow = evidence.getByRole("listitem").filter({ hasText: "report.txt" });
+  await reportRow.getByRole("button", { name: "预览" }).click();
+  await expect(page.getByLabel("证据预览")).toContainText("Synthetic cross-device report");
+  await page.screenshot({ path: path.join(output, "report-preview.png"), fullPage: true });
+
+  const headers = { "Content-Type": "application/json", "X-AEL-Protocol": "1", Origin: fixture.url };
+  const login = await request.post(fixture.url + "/api/v1/auth/login", { headers, data: { username: "owner", password: "fixture-admin-password" } });
+  expect(login.status()).toBe(200);
+  const csrf = (await login.json()).csrf;
+  const adminHeaders = { ...headers, "X-AEL-CSRF": csrf };
+  const current = await (await request.get(fixture.url + "/api/v1/projects/shared/tasks/task")).json();
+  const cancelled = await request.post(fixture.url + "/api/v1/projects/shared/tasks/task/cancel", { headers: adminHeaders, data: { operation_id: "browser-cancel", idempotency_key: "browser-cancel", expected_revision: current.revision, reason: "isolated cleanup fixture" } });
+  expect(cancelled.status()).toBe(200);
+  const before = new Date(Date.now() + 60_000).toISOString().replace(/\.\d{3}Z$/, "Z");
+  const preview = await request.post(fixture.url + "/api/v1/projects/shared/artifacts/prune", { headers: adminHeaders, data: { before } });
+  expect(preview.status()).toBe(200);
+  const dryRun = await preview.json();
+  expect(dryRun.count).toBe(3);
+  const apply = await request.post(fixture.url + "/api/v1/projects/shared/artifacts/prune", { headers: adminHeaders, data: { before, apply: true, digest: dryRun.digest, operation_id: "browser-prune", idempotency_key: "browser-prune" } });
+  expect(apply.status()).toBe(200);
+  await expect(page.getByLabel("证据预览")).toHaveCount(0);
+  await expect(evidence).toContainText("预览已关闭");
+  await page.getByRole("button", { name: "刷新", exact: true }).click();
+  await expect(imageRow).toContainText("原件已清理");
+  await expect(reportRow).toContainText("原件已清理");
+  await expect(evidence.getByRole("button", { name: "预览" })).toHaveCount(0);
+  await expect(page.getByLabel("证据预览")).toHaveCount(0);
+  await page.screenshot({ path: path.join(output, "after-cleanup.png"), fullPage: true });
+});
