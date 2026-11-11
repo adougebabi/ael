@@ -25,6 +25,10 @@ type textPage struct {
 	Summaries map[string]*core.TaskSummary
 }
 
+type textEpicProgress struct{ Tree core.EpicTree }
+
+func (p textEpicProgress) MarshalJSON() ([]byte, error) { return json.Marshal(p.Tree) }
+
 type planPreparationOutput struct {
 	core.PlanPreparation
 	Schema json.RawMessage `json:"schema"`
@@ -54,6 +58,11 @@ func withTextSummaries(svc *core.Service, value any, command string) any {
 			}
 		}
 		return p
+	case core.EpicTree:
+		if command == "task progress" {
+			return textEpicProgress{Tree: v}
+		}
+		return v
 	default:
 		return value
 	}
@@ -130,6 +139,7 @@ func writeOutput(w io.Writer, value any, machine, verbose bool) error {
 		return writeNext(w, v, nil, verbose, false)
 	case core.EpicTree:
 		fmt.Fprintf(w, "任务树：必需子任务 %d / %d 已完成\n", v.RequiredCompleted, v.Required)
+		writeEpicSummary(w, v.Summary)
 		if err := writeNext(w, v.Root, nil, verbose, false); err != nil {
 			return err
 		}
@@ -139,9 +149,26 @@ func writeOutput(w io.Writer, value any, machine, verbose bool) error {
 				kind = "必需"
 			}
 			fmt.Fprintf(w, "\n子任务（%s，里程碑：%s）\n", kind, child.Milestone)
-			if err := writeNext(w, child.Task, nil, verbose, false); err != nil {
+			if err := writeNext(w, child.Task, &child.Summary, verbose, false); err != nil {
 				return err
 			}
+		}
+		return nil
+	case textEpicProgress:
+		fmt.Fprintf(w, "父任务：%s (%s)\n", v.Tree.Root.Task.Definition.Title, v.Tree.Root.Task.Definition.ID)
+		writeEpicSummary(w, v.Tree.Summary)
+		for _, fact := range v.Tree.Progress {
+			fmt.Fprintf(w, "进展 %s · %s：%s", fact.Task, fact.At, fact.Summary)
+			if fact.Next != "" {
+				fmt.Fprintf(w, "；下一步：%s", fact.Next)
+			}
+			if len(fact.Artifacts) > 0 {
+				fmt.Fprintf(w, "；产物：%s", strings.Join(fact.Artifacts, ", "))
+			}
+			fmt.Fprintln(w)
+		}
+		if v.Tree.ProgressTruncated {
+			fmt.Fprintln(w, "仅显示最近 100 条进展。")
 		}
 		return nil
 	case textPage:
@@ -183,6 +210,20 @@ func writeOutput(w io.Writer, value any, machine, verbose bool) error {
 	return nil
 }
 
+func writeEpicSummary(w io.Writer, s core.EpicSummary) {
+	fmt.Fprintf(w, "叶子任务：%d（必需 %d）\n", s.Total, s.Required)
+	fmt.Fprintf(w, "已实施：%d；已验收：%d；已集成/交付：%d\n", s.Implemented, s.Accepted, s.Delivered)
+	fmt.Fprintf(w, "待开始：%d；部分检查通过：%d；失败：%d；阻塞：%d；等待接手：%d；取消：%d\n", s.NotStarted, s.PartialChecks, s.Failed, s.Blocked, s.WaitingHandoff, s.Cancelled)
+	fmt.Fprintln(w, "各项是可重叠的叶子状态；父级集成验收另行确认。")
+	for _, issue := range s.Issues {
+		fmt.Fprintf(w, "问题 %s", issue.Task)
+		if issue.Check != "" {
+			fmt.Fprintf(w, " / 检查 %s", issue.Check)
+		}
+		fmt.Fprintf(w, "：%s\n", issue.Reason)
+	}
+}
+
 func writeNext(w io.Writer, n core.Next, summary *core.TaskSummary, verbose, showPlan bool) error {
 	if n.Task == nil {
 		_, err := fmt.Fprintf(w, "当前责任：%s\n下一动作：%s\n", n.Step, n.Action)
@@ -213,6 +254,9 @@ func writeNext(w io.Writer, n core.Next, summary *core.TaskSummary, verbose, sho
 	}
 	if summary != nil {
 		fmt.Fprintf(w, "实际成果：%s\n", summary.LastResult)
+		if summary.Epic != nil {
+			writeEpicSummary(w, *summary.Epic)
+		}
 	} else if t.Result != "" {
 		fmt.Fprintf(w, "实际成果：%s\n", t.Result)
 	} else {

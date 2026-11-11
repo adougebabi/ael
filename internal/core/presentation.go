@@ -68,6 +68,7 @@ func ReviewAccess(n Next, c Check) CheckAccess {
 }
 
 type TaskSummary struct {
+	Epic                 *EpicSummary              `json:"epic,omitempty"`
 	Parent               string                    `json:"parent,omitempty"`
 	Children             int                       `json:"children"`
 	ID                   string                    `json:"id"`
@@ -104,11 +105,12 @@ func (s *Service) Summarize(n Next) (TaskSummary, error) {
 		r.Parent = t.EpicMembership.Parent
 	}
 	if t.Definition.Type == "epic" {
-		members, err := s.epicMembers(t.Definition.ID)
+		tree, err := s.epicTree(t.Definition.ID, false)
 		if err != nil {
 			return r, err
 		}
-		r.Children = len(members)
+		r.Children = len(tree.Children)
+		r.Epic = &tree.Summary
 	}
 	r.RequiresTaskDecision = t.Status == "open" && t.Confirmation != nil
 	r.HumanReviewCount = len(t.HumanReviewNotes)

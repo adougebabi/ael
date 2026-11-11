@@ -74,8 +74,8 @@ export function href(path: string, query: Record<string, string> = {}) {
   const p = new URLSearchParams(query);
   return "#" + path + (p.size ? "?" + p : "");
 }
-export function taskHref(id: string, section = "overview") {
-  return href("/tasks/" + encodeURIComponent(id), { section });
+export function taskHref(id: string, section = "overview", check = "") {
+  return href("/tasks/" + encodeURIComponent(id), { section, ...(check ? { check } : {}) });
 }
 export function knowledgeHref(id: string, version = "", fragment = "") {
   return href(

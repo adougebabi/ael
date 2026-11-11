@@ -83,6 +83,15 @@ func TestActualCLITextAndJSON(t *testing.T) {
 			t.Fatalf("%v text: out=%q stderr=%q err=%v", argv, out, stderr, err)
 		}
 	}
+	progress, stderr, err := invoke("task", "progress", "--task", "parent-id")
+	if err != nil || stderr != "" || !strings.Contains(progress, "叶子任务：1") || !strings.Contains(progress, "阻塞：1") || !strings.Contains(progress, "测试环境缺失") {
+		t.Fatalf("epic progress text: out=%q stderr=%q err=%v", progress, stderr, err)
+	}
+	progressJSON, stderr, err := invoke("task", "progress", "--task", "parent-id", "--json")
+	var progressTree core.EpicTree
+	if err != nil || stderr != "" || json.Unmarshal([]byte(progressJSON), &progressTree) != nil || progressTree.Summary.Total != 1 || progressTree.Summary.Blocked != 1 {
+		t.Fatalf("epic progress JSON: out=%q stderr=%q err=%v", progressJSON, stderr, err)
+	}
 	text, _, err := invoke("task", "show", "--task", id, "--verbose", "--no-color")
 	if err != nil {
 		t.Fatal(err)

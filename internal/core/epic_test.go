@@ -92,7 +92,7 @@ func TestEpicTreeRealLeafCompletionAndRecovery(t *testing.T) {
 		t.Fatalf("portable record lost association or historical completion: %+v %v", historical, err)
 	}
 	tree, err = recovered.Tree(parent)
-	if err != nil || len(tree.Children) != 3 || tree.RequiredCompleted != 0 {
+	if err != nil || len(tree.Children) != 3 || tree.RequiredCompleted != 0 || tree.Summary.NotStarted != 0 {
 		t.Fatalf("historical checks were reused as current completion: %+v %v", tree, err)
 	}
 }

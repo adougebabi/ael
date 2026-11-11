@@ -72,4 +72,8 @@ func TestEpicTreeAPIUsesDomainTreeAndLocalAssociation(t *testing.T) {
 	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &page) != nil || len(page.Items) != 1 || page.Items[0].ID != "leaf" || page.Items[0].Parent != "epic" {
 		t.Fatalf("parent list: %d %s", w.Code, w.Body.String())
 	}
+	w = request("GET", "/api/tasks?compact=1&type=epic", "", true)
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &page) != nil || len(page.Items) != 1 || page.Items[0].Epic == nil || !reflect.DeepEqual(*page.Items[0].Epic, actual.Summary) {
+		t.Fatalf("workbench and tree summaries differ: %d %s", w.Code, w.Body.String())
+	}
 }
