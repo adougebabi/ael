@@ -118,66 +118,79 @@ func remoteArtifactCommand(cmd string, a args, config, project string, binding r
 		if closeErr != nil {
 			return nil, closeErr
 		}
-		if len(data) == 0 || len(data) > remoteArtifactLimit {
-			return nil, core.Error("ARTIFACT_INVALID", "file must be between 1 byte and 10 MiB")
-		}
-		mimeType := a.get("mime", "")
-		if mimeType == "" {
-			switch strings.ToLower(filepath.Ext(path)) {
-			case ".png":
-				mimeType = "image/png"
-			case ".jpg", ".jpeg":
-				mimeType = "image/jpeg"
-			case ".txt", ".md", ".log", ".json", ".csv":
-				mimeType = "text/plain"
-			case ".mp4":
-				mimeType = "video/mp4"
-			default:
-				return nil, core.Error("ARTIFACT_INVALID", "unsupported filename extension")
-			}
-		}
-		start := map[string]any{"operation_id": op, "idempotency_key": key, "expected_revision": revision, "task_id": task, "attempt_id": a.get("attempt", ""), "candidate": a.get("candidate", ""), "filename": filepath.Base(path), "mime": mimeType, "size": len(data), "sha256": store.Hash(data), "source": a.get("source", "CLI")}
-		result, err := call(http.MethodPost, "/artifacts/uploads", start)
-		if err != nil {
-			return nil, err
-		}
-		upload, ok := result["upload_id"].(string)
-		if !ok || upload == "" {
-			return nil, core.Error("REMOTE_RESPONSE_INVALID", "missing upload ID")
-		}
-		if result["status"] != "open" && result["status"] != "finalized" {
-			return nil, core.Error("UPLOAD_CONFLICT", "upload was cancelled or is being cleaned")
-		}
-		received, ok := result["received"].(json.Number)
-		if !ok {
-			return nil, core.Error("REMOTE_RESPONSE_INVALID", "missing upload offset")
-		}
-		offset, err := received.Int64()
-		if err != nil || offset < 0 || offset > int64(len(data)) {
-			return nil, core.Error("REMOTE_RESPONSE_INVALID", "invalid upload offset")
-		}
-		if result["status"] == "open" {
-			for offset < int64(len(data)) {
-				end := min(offset+remoteArtifactChunk, int64(len(data)))
-				result, err = call(http.MethodPost, "/artifacts/uploads/"+url.PathEscape(upload)+"/chunks", map[string]any{"offset": offset, "data": data[offset:end]})
-				if err != nil {
-					return nil, fmt.Errorf("%w; upload %s: retry the same command and keys, or cancel the upload", err, upload)
-				}
-				next, ok := result["received"].(json.Number)
-				if !ok {
-					return nil, core.Error("REMOTE_RESPONSE_INVALID", "missing upload offset")
-				}
-				offset, err = next.Int64()
-				if err != nil || offset != end {
-					return nil, core.Error("REMOTE_RESPONSE_INVALID", "invalid upload offset")
-				}
-			}
-		}
-		result, err = call(http.MethodPost, "/artifacts/uploads/"+url.PathEscape(upload)+"/finalize", map[string]string{"operation_id": op, "idempotency_key": key})
-		if err != nil {
-			return nil, fmt.Errorf("%w; upload %s: retry the same command and keys, or cancel the upload", err, upload)
-		}
-		return remoteOutput(result), nil
+		return remoteUploadBytes(a, config, project, binding, filepath.Base(path), data)
 	}
 	return nil, core.Error("REMOTE_COMMAND_UNSUPPORTED", cmd)
+}
+
+// Upload the exact caller-supplied bytes, so an already verified knowledge
+// snapshot cannot be swapped by changing its local file between steps.
+func remoteUploadBytes(a args, config, project string, binding remote.Binding, filename string, data []byte) (remoteOutput, error) {
+	if len(data) == 0 || len(data) > remoteArtifactLimit {
+		return nil, core.Error("ARTIFACT_INVALID", "file must be between 1 byte and 10 MiB")
+	}
+	task, op, key, revision := a.get("task", ""), a.get("operation-id", ""), a.get("idempotency-key", ""), a.get("expected-revision", "")
+	if task == "" || filename == "" || op == "" || key == "" || revision == "" {
+		return nil, core.Error("REMOTE_OPERATION_REQUIRED", "provide task, filename, expected revision and operation keys")
+	}
+	mimeType := a.get("mime", "")
+	if mimeType == "" {
+		switch strings.ToLower(filepath.Ext(filename)) {
+		case ".png":
+			mimeType = "image/png"
+		case ".jpg", ".jpeg":
+			mimeType = "image/jpeg"
+		case ".txt", ".md", ".log", ".json", ".csv":
+			mimeType = "text/plain"
+		case ".mp4":
+			mimeType = "video/mp4"
+		default:
+			return nil, core.Error("ARTIFACT_INVALID", "unsupported filename extension")
+		}
+	}
+	call := func(method, path string, body any) (map[string]any, error) {
+		return remote.Call(config, project, binding, method, path, body, nil)
+	}
+	start := map[string]any{"operation_id": op, "idempotency_key": key, "expected_revision": revision, "task_id": task, "attempt_id": a.get("attempt", ""), "candidate": a.get("candidate", ""), "filename": filename, "mime": mimeType, "size": len(data), "sha256": store.Hash(data), "source": a.get("source", "CLI")}
+	result, err := call(http.MethodPost, "/artifacts/uploads", start)
+	if err != nil {
+		return nil, err
+	}
+	upload, ok := result["upload_id"].(string)
+	if !ok || upload == "" {
+		return nil, core.Error("REMOTE_RESPONSE_INVALID", "missing upload ID")
+	}
+	if result["status"] != "open" && result["status"] != "finalized" {
+		return nil, core.Error("UPLOAD_CONFLICT", "upload was cancelled or is being cleaned")
+	}
+	received, ok := result["received"].(json.Number)
+	if !ok {
+		return nil, core.Error("REMOTE_RESPONSE_INVALID", "missing upload offset")
+	}
+	offset, err := received.Int64()
+	if err != nil || offset < 0 || offset > int64(len(data)) {
+		return nil, core.Error("REMOTE_RESPONSE_INVALID", "invalid upload offset")
+	}
+	if result["status"] == "open" {
+		for offset < int64(len(data)) {
+			end := min(offset+remoteArtifactChunk, int64(len(data)))
+			result, err = call(http.MethodPost, "/artifacts/uploads/"+url.PathEscape(upload)+"/chunks", map[string]any{"offset": offset, "data": data[offset:end]})
+			if err != nil {
+				return nil, fmt.Errorf("%w; upload %s: retry the same command and keys, or cancel the upload", err, upload)
+			}
+			next, ok := result["received"].(json.Number)
+			if !ok {
+				return nil, core.Error("REMOTE_RESPONSE_INVALID", "missing upload offset")
+			}
+			offset, err = next.Int64()
+			if err != nil || offset != end {
+				return nil, core.Error("REMOTE_RESPONSE_INVALID", "invalid upload offset")
+			}
+		}
+	}
+	result, err = call(http.MethodPost, "/artifacts/uploads/"+url.PathEscape(upload)+"/finalize", map[string]string{"operation_id": op, "idempotency_key": key})
+	if err != nil {
+		return nil, fmt.Errorf("%w; upload %s: retry the same command and keys, or cancel the upload", err, upload)
+	}
+	return remoteOutput(result), nil
 }

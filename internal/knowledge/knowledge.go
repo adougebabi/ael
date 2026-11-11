@@ -62,26 +62,9 @@ func ReadAll(root string) ([]Record, error) {
 		if e != nil {
 			return e
 		}
-		r := Record{ID: filepath.ToSlash(rel), Kind: "reference", Status: "historical", Title: d.Name()}
-		text := string(b)
-		if strings.HasPrefix(text, "---\n") {
-			parts := strings.SplitN(strings.TrimPrefix(text, "---\n"), "\n---\n", 2)
-			if len(parts) != 2 {
-				return core.Error("INVALID_KNOWLEDGE", rel)
-			}
-			if e = yaml.Unmarshal([]byte(parts[0]), &r); e != nil {
-				return e
-			}
-			text = strings.TrimSpace(parts[1])
-		}
-		r.Path = filepath.ToSlash(rel)
-		r.Hash = store.Hash(b)
-		r.Body = text
-		if r.ID == "" {
-			r.ID = r.Path
-		}
-		if !slices.Contains([]string{"spec", "decision", "research", "reference"}, r.Kind) || !slices.Contains([]string{"current", "accepted", "proposed", "rejected", "historical", "conflict", "superseded"}, r.Status) {
-			return core.Error("INVALID_KNOWLEDGE_STATE", rel)
+		r, e := ParseSnapshot(filepath.ToSlash(rel), b)
+		if e != nil {
+			return e
 		}
 		all = append(all, r)
 		return nil
@@ -132,6 +115,41 @@ func ReadAll(root string) ([]Record, error) {
 		return nil, e
 	}
 	return all, nil
+}
+
+// ParseSnapshot applies the same source rules to immutable bytes supplied by
+// a checkout. The caller still verifies the source path and content hash.
+func ParseSnapshot(path string, raw []byte) (Record, error) {
+	if !strings.HasPrefix(path, ".ael/knowledge/") {
+		r, err := parseSource(path, raw)
+		if err != nil {
+			return r, err
+		}
+		if !slices.Contains([]string{"spec", "decision", "research", "reference"}, r.Kind) || !slices.Contains([]string{"current", "accepted", "proposed", "rejected", "historical", "conflict", "superseded"}, r.Status) {
+			return r, core.Error("INVALID_KNOWLEDGE_STATE", path)
+		}
+		return r, nil
+	}
+	r := Record{ID: path, Kind: "reference", Status: "historical", Title: filepath.Base(path)}
+	text := string(raw)
+	if strings.HasPrefix(text, "---\n") {
+		parts := strings.SplitN(strings.TrimPrefix(text, "---\n"), "\n---\n", 2)
+		if len(parts) != 2 {
+			return r, core.Error("INVALID_KNOWLEDGE", path)
+		}
+		if err := yaml.Unmarshal([]byte(parts[0]), &r); err != nil {
+			return r, err
+		}
+		text = strings.TrimSpace(parts[1])
+	}
+	r.Path, r.Hash, r.Body = path, store.Hash(raw), text
+	if r.ID == "" {
+		r.ID = path
+	}
+	if !slices.Contains([]string{"spec", "decision", "research", "reference"}, r.Kind) || !slices.Contains([]string{"current", "accepted", "proposed", "rejected", "historical", "conflict", "superseded"}, r.Status) {
+		return r, core.Error("INVALID_KNOWLEDGE_STATE", path)
+	}
+	return r, nil
 }
 func Validate(all []Record) error {
 	m := map[string]Record{}
@@ -191,6 +209,9 @@ func inScope(r Record, d core.Definition) bool {
 	}
 	return false
 }
+
+// Applies exposes the existing scope rule for validating remote inventories.
+func Applies(r Record, d core.Definition) bool { return inScope(r, d) }
 
 // Snapshot holds one consistent read of the knowledge sources for a bounded
 // batch of read-only task projections. Mutating actions still read afresh.

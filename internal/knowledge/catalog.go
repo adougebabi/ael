@@ -3,6 +3,7 @@ package knowledge
 import (
 	"ael/internal/core"
 	"ael/internal/store"
+	"bytes"
 	"encoding/json"
 	"io/fs"
 	"os"
@@ -166,7 +167,7 @@ func Discover(root string) (Catalog, error) {
 	return c, nil
 }
 
-func Index(root string) (Catalog, error) {
+func buildCatalog(root string) (Catalog, error) {
 	c, e := Discover(root)
 	if e != nil {
 		return c, e
@@ -185,6 +186,14 @@ func Index(root string) (Catalog, error) {
 			c.Counts["retired"]++
 		}
 	}
+	return c, nil
+}
+
+func Index(root string) (Catalog, error) {
+	c, e := buildCatalog(root)
+	if e != nil {
+		return c, e
+	}
 	p, e := store.SafePath(root, ".ael/knowledge-sources.json")
 	if e != nil {
 		return c, e
@@ -195,6 +204,56 @@ func Index(root string) (Catalog, error) {
 	}
 	return c, store.Atomic(p, append(b, '\n'), 0644)
 }
+
+// CheckFresh prevents a newly added or changed source from being omitted by
+// an older inventory when a portable context is prepared.
+func CheckFresh(root string) error {
+	old, err := readCatalog(root)
+	if err != nil {
+		return core.Error("KNOWLEDGE_INDEX_STALE", "run knowledge index before preparing context")
+	}
+	current, err := buildCatalog(root)
+	if err != nil {
+		return err
+	}
+	previous, err := json.Marshal(old)
+	if err != nil {
+		return err
+	}
+	fresh, err := json.Marshal(current)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(previous, fresh) {
+		return core.Error("KNOWLEDGE_INDEX_STALE", "source inventory or classification changed; run knowledge index")
+	}
+	return nil
+}
+
+// PortableSourcePath mirrors the source roots inspected by Discover and
+// ReadAll, allowing a server to reject omitted inventory entries without
+// uploading unrelated source bodies.
+func PortableSourcePath(path string) bool {
+	for _, root := range []string{"AGENTS.md", "CLAUDE.md", "README.md", "spec", "specs", "docs", "notes", ".agents/notes", ".trellis/spec", ".trellis/notes"} {
+		if path == root {
+			return true
+		}
+	}
+	if strings.HasPrefix(path, ".ael/knowledge/") {
+		return strings.HasSuffix(path, ".md")
+	}
+	if !strings.HasSuffix(strings.ToLower(path), ".md") {
+		return false
+	}
+	for _, prefix := range []string{"spec/", "specs/", "docs/", "notes/", ".agents/notes/", ".trellis/spec/", ".trellis/notes/"} {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func PortableCatalog(root string) (Catalog, error) { return readCatalog(root) }
 func readCatalog(root string) (Catalog, error) {
 	var c Catalog
 	p, e := store.SafePath(root, ".ael/knowledge-sources.json")

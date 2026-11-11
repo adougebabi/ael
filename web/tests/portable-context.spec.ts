@@ -1,0 +1,45 @@
+import { test, expect } from "@playwright/test";
+import fs from "node:fs";
+import path from "node:path";
+import crypto from "node:crypto";
+
+const manifest = process.env.AEL_CONTEXT_FIXTURE;
+if (!manifest) throw new Error("AEL_CONTEXT_FIXTURE is required");
+const fixture = JSON.parse(fs.readFileSync(manifest, "utf8"));
+if (!fixture.isolated || !fs.existsSync(path.join(fixture.out, "ISOLATED-CONTEXT"))) throw new Error("refusing non-isolated fixture");
+const output = process.env.AEL_UI_OUT || "/tmp/ael-context-browser";
+fs.mkdirSync(output, { recursive: true });
+
+test("Dashboard 与客户端读取同一候选的不可变规范", async ({ page, request }) => {
+  await page.goto(fixture.url);
+  await page.getByLabel("用户名", { exact: true }).fill("reader");
+  await page.getByLabel("密码", { exact: true }).fill("fixture-reader-password");
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await page.getByLabel("项目列表").getByRole("listitem").filter({ hasText: "Shared Context" }).getByRole("button", { name: "查看项目" }).click();
+  const panel = page.getByLabel("项目证据");
+  await panel.getByLabel("按任务 ID 查找").fill("task");
+  await panel.getByRole("button", { name: "查找任务" }).click();
+  const context = page.getByLabel("执行依据快照");
+  await expect(context).toContainText(fixture.commit);
+  await expect(context).toContainText(fixture.candidate);
+  const source = context.locator("details").filter({ hasText: "source:spec/project.md" });
+  await source.locator("summary").click();
+  await expect(source.locator("pre")).toHaveText(fixture.content);
+  const actual = await source.locator("pre").textContent();
+  expect(crypto.createHash("sha256").update(actual || "").digest("hex")).toBe(fixture.sha256);
+  await expect(context).toContainText("客户端报告的检查");
+  await expect(context).toContainText("unit");
+  await expect(context).toContainText("不会自动通过门禁");
+  await expect(context).not.toContainText("HISTORICAL_SENTINEL");
+  await expect(context).not.toContainText("SENSITIVE_SENTINEL");
+  await page.screenshot({ path: path.join(output, "shared-context.png"), fullPage: true });
+  const headers = { "Content-Type": "application/json", "X-AEL-Protocol": "1", Origin: fixture.url };
+  const login = await request.post(fixture.url + "/api/v1/auth/login", { headers, data: { username: "owner", password: "fixture-admin-password" } });
+  expect(login.status()).toBe(200);
+  const csrf = (await login.json()).csrf;
+  const current = await (await request.get(fixture.url + "/api/v1/projects/shared/tasks/task")).json();
+  const paused = await request.post(fixture.url + "/api/v1/projects/shared/tasks/task/pause", { headers: { ...headers, "X-AEL-CSRF": csrf }, data: { operation_id: "ui-pause", idempotency_key: "ui-pause", expected_revision: current.revision, reason: "isolated revision change" } });
+  expect(paused.status()).toBe(200);
+  await expect(context).toContainText("此快照已过期");
+  await page.screenshot({ path: path.join(output, "stale-context.png"), fullPage: true });
+});

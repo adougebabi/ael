@@ -57,4 +57,40 @@ ael artifact reference --artifact ARTIFACT_ID --task TASK_ID --purpose reference
 
 项目容量可通过 `GET /api/v1/projects/PROJECT_ID/artifacts/stats` 查询，返回已用、临时文件、附件及预留字节。管理员浏览器会话可向对应的 `/artifacts/quota` 提交 `limit_bytes`、从统计读取的 `expected_quota_bytes`、`operation_id` 和 `idempotency_key`；旧配额值冲突时需重新读取，相同请求可用同一键安全重放。新上限不能小于已用与预留之和。
 
+## 跨设备候选与规范依据
+
+先明确在项目内注册仓库 ID；不要用目录名或 remote URL 推断仓库身份。每个客户端提供自己的 checkout、workspace 和 runner 标识，它们是观察来源，不参与候选内容 ID，也不替代 Server 从令牌识别的操作者。以下命令均在已连接的 **Git checkout 根目录**执行：
+
+```sh
+ael repository register --repository REPO_ID --operation-id repo-1 --idempotency-key repo-1 --json
+ael knowledge index --json
+ael task show --task TASK_ID --json
+ael candidate capture --task TASK_ID --repository REPO_ID --checkout CHECKOUT_ID \
+  --workspace WORKSPACE_ID --runner RUNNER_ID --expected-revision STATE_REVISION \
+  --operation-id observation-1 --idempotency-key observation-1 --json
+ael context publish --task TASK_ID --observation OBSERVATION_ID --expected-revision STATE_REVISION \
+  --operation-id context-1 --idempotency-key context-1 --json
+ael context show --context CONTEXT_ID --json
+ael context show --task TASK_ID --json
+ael candidate compare --before CANDIDATE_ID_A --after CANDIDATE_ID_B --json
+```
+
+候选包含显式仓库 ID、完整 commit、暂存区对象及相对路径/内容哈希清单，不包含绝对路径、分支名、进程 ID 或 mtime。Git 跟踪、暂存、删除及未忽略的新文件均会核对；AEL 运行记录和客户端绑定不改变候选。未跟踪的常见凭据文件名会阻断采集，不上传原文；Git 忽略的其他输入不会上传，但会使 `inputs_known` 为 false。普通文件读取不能证明外部写者在最后一次读取后仍然停止，因此采集记录明确标记 `capture_stability_proven: false`；候选对齐是一次观测，不是持续稳定或检查复用的证明。不同 commit 不视为可复用；`candidate compare` 给出变化路径，单凭远程清单不证明检查环境或忽略输入相同，`exactly_equal` 保守为 false。
+
+`knowledge index` 只更新本机索引。发布前重新发现来源并核对任务修订、候选和索引；未知显式引用、缺失必需文件、范围内冲突或源码变化会阻断发布。客户端只上传范围内实际选中的规范正文；其他发现的来源只发送路径、哈希和状态等清单元数据，不发送其正文。未选中的旧文档若使用未识别状态，或已被删除，不会被强制升级为当前契约；快照会标记 `inventory_unverified`，不能声称依据完整。Server 复核已上传正文与候选哈希，保存只读快照；清单由客户端身份报告，Server 不隐式 checkout 或独立证明未上传正文的分类。当前、候选和历史状态分别显示。
+
+`context show --context ID` 可读取历史快照，并返回 `validity`、`workspace_matches`、`usable_for_context` 和 `input_equivalence_proven`。`--task ID` 要求当前任务与本机候选仍匹配，否则返回 `CONTEXT_STALE` 和已知变化路径；未知的其他影响也会明确提示。检查复用前必须证明实际输入、配置和环境等价，忽略输入不明或仅有相同分支名时不能复用。Dashboard 读取同一快照原件，任务修订或后续候选改变后提示旧记录过期。
+
+如 Agent 已实际运行某个任务中声明的检查，可先用 `artifact upload` 上传经审阅的报告，再记录它所使用的上下文：
+
+```sh
+ael artifact upload --task TASK_ID --file /path/to/report.txt \
+  --source "context-check:CONTEXT_ID:CHECK_ID" --expected-revision STATE_REVISION \
+  --operation-id report-1 --idempotency-key report-1 --json
+ael context record-check --context CONTEXT_ID --task TASK_ID --check CHECK_ID --artifact REPORT_ID \
+  --expected-revision STATE_REVISION --operation-id check-1 --idempotency-key check-1 --json
+```
+
+报告须在对应上下文创建后由同一操作者按上述来源上传；不能把其他上下文的旧附件直接挂到新候选。该记录由已认证客户端报告，绑定候选、检查配置哈希和报告哈希，但不能单凭上传时间证明检查何时执行。Server 不执行命令，也不把报告自动转成门禁通过或可复用证据。网络中断时用相同操作键重试以查询原回执，不重复运行检查。上下文规范原件受清理保护并计入项目容量；检查报告按普通附件的保留规则处理。
+
 `python3 scripts/remote_tasks_acceptance.py --bundle /path/to/dist --out /tmp/ael-remote-fixture-NEW` 在全新临时目录启动一个仅监听本机的 Server 与两个独立 CLI 配置，验证父子任务、版本冲突、操作重放、计划、撤销及断网恢复。夹具不运行真实开发执行器，不代表外部机器部署。

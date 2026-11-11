@@ -335,6 +335,24 @@ func (a *artifactStore) pruneCandidates(tx *store.Tx, cutoff time.Time) ([]artif
 		return nil, err
 	}
 	rows.Close()
+	retained := map[string]bool{}
+	rows, err = tx.Conn.QueryContext(context.Background(), "SELECT DISTINCT artifact_id FROM portable_context_sources")
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var id string
+		if err = rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		retained[id] = true
+	}
+	if err = rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
 	items := []artifactPruneItem{}
 	rows, err = tx.Conn.QueryContext(context.Background(), "SELECT "+artifactColumns+" FROM artifact_objects WHERE status='finalized'")
 	if err != nil {
@@ -345,6 +363,9 @@ func (a *artifactStore) pruneCandidates(tx *store.Tx, cutoff time.Time) ([]artif
 		if err != nil {
 			rows.Close()
 			return nil, err
+		}
+		if retained[item.ID] {
+			continue
 		}
 		created, err := time.Parse(time.RFC3339Nano, item.Created)
 		if err != nil || !created.Before(cutoff) {

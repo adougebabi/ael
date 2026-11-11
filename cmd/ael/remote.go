@@ -87,14 +87,20 @@ func remoteCommand(cmd string, a args, binding remote.Binding) (any, error) {
 		"artifact cancel":        {"upload", "operation-id", "idempotency-key"},
 		"artifact upload-status": {"idempotency-key"},
 		"artifact reference":     {"artifact", "task", "purpose", "candidate", "expected-revision", "operation-id", "idempotency-key"},
-		"task create":            {"file", "operation-id", "idempotency-key", "expected-revision"},
-		"task edit":              {"task", "file", "reason", "operation-id", "idempotency-key", "expected-revision"},
-		"task pause":             {"task", "reason", "operation-id", "idempotency-key", "expected-revision"},
-		"task cancel":            {"task", "reason", "operation-id", "idempotency-key", "expected-revision"},
-		"resume":                 {"task", "return-to", "ack-stopped", "operation-id", "idempotency-key", "expected-revision"},
-		"task link":              {"task", "parent", "required", "milestone", "operation-id", "idempotency-key", "expected-revision"},
-		"plan prepare":           {"task", "file", "operation-id", "idempotency-key", "expected-revision"},
-		"plan preview":           {"file"}, "plan apply": {"file", "digest", "operation-id", "idempotency-key", "expected-revision"},
+		"repository register":    {"repository", "operation-id", "idempotency-key"}, "repository list": {},
+		"candidate capture": {"task", "repository", "checkout", "workspace", "runner", "expected-revision", "operation-id", "idempotency-key"},
+		"candidate show":    {"candidate"}, "candidate compare": {"before", "after"},
+		"knowledge index": {}, "context publish": {"task", "observation", "expected-revision", "operation-id", "idempotency-key"},
+		"context show":         {"context", "task"},
+		"context record-check": {"context", "task", "check", "artifact", "expected-revision", "operation-id", "idempotency-key"},
+		"task create":          {"file", "operation-id", "idempotency-key", "expected-revision"},
+		"task edit":            {"task", "file", "reason", "operation-id", "idempotency-key", "expected-revision"},
+		"task pause":           {"task", "reason", "operation-id", "idempotency-key", "expected-revision"},
+		"task cancel":          {"task", "reason", "operation-id", "idempotency-key", "expected-revision"},
+		"resume":               {"task", "return-to", "ack-stopped", "operation-id", "idempotency-key", "expected-revision"},
+		"task link":            {"task", "parent", "required", "milestone", "operation-id", "idempotency-key", "expected-revision"},
+		"plan prepare":         {"task", "file", "operation-id", "idempotency-key", "expected-revision"},
+		"plan preview":         {"file"}, "plan apply": {"file", "digest", "operation-id", "idempotency-key", "expected-revision"},
 		"plan abandon": {"task", "plan-id", "reason", "operation-id", "idempotency-key", "expected-revision"},
 	}
 	commandFlags, supported := flags[cmd]
@@ -123,6 +129,12 @@ func remoteCommand(cmd string, a args, binding remote.Binding) (any, error) {
 	project, id := a.get("project", "."), a.get("task", "")
 	if strings.HasPrefix(cmd, "artifact ") {
 		return remoteArtifactCommand(cmd, a, config, project, binding)
+	}
+	if strings.HasPrefix(cmd, "repository ") || strings.HasPrefix(cmd, "candidate ") {
+		return remoteCandidateCommand(cmd, a, config, project, binding)
+	}
+	if cmd == "knowledge index" || strings.HasPrefix(cmd, "context ") {
+		return remoteContextCommand(cmd, a, config, project, binding)
 	}
 	method, path := http.MethodGet, ""
 	var payload any

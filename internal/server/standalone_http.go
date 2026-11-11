@@ -198,7 +198,7 @@ func (h *standaloneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.URL.Path == "/api/v1/meta" && r.Method == http.MethodGet {
-		standaloneReply(w, http.StatusOK, map[string]any{"mode": "server", "protocol": 1, "capabilities": []string{"login", "projects", "project_roles", "revocable_tokens", "remote_tasks", "remote_plans", "operation_receipts", "artifacts"}})
+		standaloneReply(w, http.StatusOK, map[string]any{"mode": "server", "protocol": 1, "capabilities": []string{"login", "projects", "project_roles", "revocable_tokens", "remote_tasks", "remote_plans", "operation_receipts", "artifacts", "portable_candidates", "portable_contexts"}})
 		return
 	}
 	if !strings.HasPrefix(r.URL.Path, "/api/") {
@@ -353,6 +353,10 @@ func (h *standaloneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v1/projects/"), "/")
 		if len(parts) >= 2 && parts[1] == "artifacts" {
 			h.remoteArtifacts(w, r, p, method, parts[0], parts[2:])
+			return
+		}
+		if len(parts) >= 2 && (parts[1] == "repositories" || parts[1] == "candidates" || parts[1] == "observations" || parts[1] == "contexts" || parts[1] == "portable-operations") {
+			h.remotePortable(w, r, p, parts[0], parts[1], parts[2:])
 			return
 		}
 		if len(parts) >= 2 && parts[1] == "tasks" {
