@@ -867,7 +867,7 @@ function checkReason(c: any) {
             }}
           </p>
           <div class="related-links">
-            <a v-if="t.definition.parent" :href="taskHref(t.definition.parent)"
+            <a v-if="t.epic_membership?.parent || t.definition.parent" :href="taskHref(t.epic_membership?.parent || t.definition.parent)"
               >父任务</a
             ><a
               v-if="t.definition.feedback_of"

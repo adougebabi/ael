@@ -389,6 +389,13 @@ func (s *Service) ImportTask(t Task) error {
 	b := definitionBytes(t.Definition)
 	t.DefinitionHash = store.Hash(b)
 	e = s.Store.Write(func(tx *store.Tx) error {
+		current, err := load(tx, t.Definition.ID)
+		if err != nil && err != sql.ErrNoRows {
+			return err
+		}
+		if err == nil && current.EpicMembership != nil && !equivalent(current.EpicMembership, t.EpicMembership) {
+			return Error("TASK_MEMBERSHIP_CONFLICT", "import would replace an existing epic association: "+t.Definition.ID)
+		}
 		if e := s.save(tx, &t); e != nil {
 			return e
 		}
@@ -414,18 +421,37 @@ func (s *Service) ImportTask(t Task) error {
 }
 func (s *Service) DeleteImported(id string) error {
 	e := s.Store.Write(func(tx *store.Tx) error {
-		p, e := s.recordPath(id)
-		if e != nil {
-			return e
+		t, err := load(tx, id)
+		if err != nil {
+			return err
 		}
-		if e = tx.DeleteFile(p); e != nil {
-			return e
+		if t.EpicMembership != nil {
+			return Error("TASK_REFERENCED", "epic membership retained by "+t.EpicMembership.Parent)
 		}
-		if _, e = tx.Exec("DELETE FROM metadata WHERE key=?", "record:"+id); e != nil {
-			return e
+		if hasWriter(t) {
+			return Error("RUNNING_ATTEMPT", id)
 		}
-		_, e = tx.Exec("DELETE FROM tasks WHERE id=?", id)
-		return e
+		var members int
+		if err = tx.Row("SELECT count(*) FROM tasks WHERE json_extract(body,'$.epic_membership.parent')=?", id).Scan(&members); err != nil {
+			return err
+		}
+		if members > 0 {
+			return Error("TASK_REFERENCED", "epic has associated leaves")
+		}
+		for _, rel := range []string{".ael/records/" + id + ".json", ".ael/work-items/" + id + ".md", ".ael/outcomes/" + id + ".json"} {
+			path, err := store.SafePath(s.Root, rel)
+			if err != nil {
+				return err
+			}
+			if err = tx.DeleteFile(path); err != nil {
+				return err
+			}
+		}
+		if _, err = tx.Exec("DELETE FROM metadata WHERE key=?", "record:"+id); err != nil {
+			return err
+		}
+		_, err = tx.Exec("DELETE FROM tasks WHERE id=?", id)
+		return err
 	})
 	if e == nil {
 		e = s.Store.Flush()
@@ -468,6 +494,13 @@ func (s *Service) RestoreImportedSnapshot(t Task, definition, outcome []byte) er
 		return e
 	}
 	e = s.Store.Write(func(tx *store.Tx) error {
+		current, err := load(tx, t.Definition.ID)
+		if err != nil && err != sql.ErrNoRows {
+			return err
+		}
+		if err == nil && current.EpicMembership != nil && !equivalent(current.EpicMembership, t.EpicMembership) {
+			return Error("TASK_MEMBERSHIP_CONFLICT", "migration snapshot would replace an existing epic association: "+t.Definition.ID)
+		}
 		b, e := json.Marshal(t)
 		if e != nil {
 			return e
@@ -485,14 +518,16 @@ func (s *Service) RestoreImportedSnapshot(t Task, definition, outcome []byte) er
 		if e = tx.File(p, definition); e != nil {
 			return e
 		}
+		out, e := store.SafePath(s.Root, ".ael/outcomes/"+t.Definition.ID+".json")
+		if e != nil {
+			return e
+		}
 		if len(outcome) > 0 {
-			out, e := store.SafePath(s.Root, ".ael/outcomes/"+t.Definition.ID+".json")
-			if e != nil {
-				return e
-			}
 			if e = tx.File(out, outcome); e != nil {
 				return e
 			}
+		} else if e = tx.DeleteFile(out); e != nil {
+			return e
 		}
 		return tx.Event(t.Definition.ID, "migration_revision_restored", map[string]string{"result": t.Result})
 	})

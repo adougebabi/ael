@@ -68,6 +68,8 @@ func ReviewAccess(n Next, c Check) CheckAccess {
 }
 
 type TaskSummary struct {
+	Parent               string                    `json:"parent,omitempty"`
+	Children             int                       `json:"children"`
 	ID                   string                    `json:"id"`
 	Title                string                    `json:"title"`
 	Type                 string                    `json:"type"`
@@ -97,6 +99,17 @@ type TaskSummary struct {
 func (s *Service) Summarize(n Next) (TaskSummary, error) {
 	t := n.Task
 	r := TaskSummary{ID: t.Definition.ID, Title: t.Definition.Title, Type: t.Definition.Type, Board: n.Board, Step: n.Step, Action: n.Action, Reasons: n.Reasons, Executors: []string{}, ManualReviews: []PendingHumanReview{}, Completed: t.Completed, Historical: t.Historical}
+	r.Parent = t.Definition.Parent
+	if t.EpicMembership != nil {
+		r.Parent = t.EpicMembership.Parent
+	}
+	if t.Definition.Type == "epic" {
+		members, err := s.epicMembers(t.Definition.ID)
+		if err != nil {
+			return r, err
+		}
+		r.Children = len(members)
+	}
 	r.RequiresTaskDecision = t.Status == "open" && t.Confirmation != nil
 	r.HumanReviewCount = len(t.HumanReviewNotes)
 	currentNotes := 0

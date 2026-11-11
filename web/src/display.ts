@@ -6,6 +6,7 @@ export const boards = [
   ["cancelled", "已取消"],
 ] as const;
 const labels: Record<string, string> = {
+  epic: "大任务",
   bug: "缺陷",
   feature: "功能",
   improvement: "改进",
@@ -28,6 +29,8 @@ const labels: Record<string, string> = {
   wait_environment: "等待环境",
   wait_dependency: "等待前置交付",
   wait_confirmation: "等待决定",
+  wait_children: "等待子任务",
+  wait_integration: "等待整体验收",
   current: "现行有效",
   accepted: "已采纳",
   proposed: "待决定",

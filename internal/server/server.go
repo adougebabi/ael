@@ -213,7 +213,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 						offsets[board] = max(0, value)
 					}
 				}
-				v, e := h.Service.QueryPage(core.Query{Limit: limit, Offset: offset, Offsets: offsets, Days: days, Text: r.URL.Query().Get("q"), Type: r.URL.Query().Get("type"), Board: r.URL.Query().Get("board")})
+				v, e := h.Service.QueryPage(core.Query{Limit: limit, Offset: offset, Offsets: offsets, Days: days, Text: r.URL.Query().Get("q"), Type: r.URL.Query().Get("type"), Board: r.URL.Query().Get("board"), Parent: r.URL.Query().Get("parent")})
 				if r.URL.Query().Get("compact") == "1" && e == nil {
 					items := []core.TaskSummary{}
 					for _, n := range v.Items {
@@ -240,6 +240,31 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			} else {
 				http.Error(w, "METHOD", 405)
 			}
+		case "/api/task-tree":
+			if r.Method != "GET" {
+				http.Error(w, "METHOD", 405)
+				return
+			}
+			v, e := h.Service.Tree(r.URL.Query().Get("id"))
+			reply(w, v, e)
+		case "/api/task-link":
+			if r.Method != "POST" {
+				http.Error(w, "METHOD", 405)
+				return
+			}
+			var input struct {
+				Parent    string `json:"parent"`
+				Task      string `json:"task"`
+				Required  *bool  `json:"required"`
+				Milestone string `json:"milestone"`
+			}
+			if e := decode(r, &input); e != nil {
+				reply(w, nil, e)
+				return
+			}
+			required := input.Required == nil || *input.Required
+			v, e := h.Service.LinkEpic(input.Parent, input.Task, required, input.Milestone)
+			reply(w, v, e)
 		case "/api/attention":
 			if r.Method != "GET" {
 				http.Error(w, "METHOD", 405)

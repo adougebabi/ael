@@ -63,6 +63,22 @@ func writeOutput(w io.Writer, value any, machine, verbose bool) error {
 		return writeNext(w, v.Next, v.Summary, verbose, v.Command == "task plan")
 	case core.Next:
 		return writeNext(w, v, nil, verbose, false)
+	case core.EpicTree:
+		fmt.Fprintf(w, "任务树：必需子任务 %d / %d 已完成\n", v.RequiredCompleted, v.Required)
+		if err := writeNext(w, v.Root, nil, verbose, false); err != nil {
+			return err
+		}
+		for _, child := range v.Children {
+			kind := "可选"
+			if child.Required {
+				kind = "必需"
+			}
+			fmt.Fprintf(w, "\n子任务（%s，里程碑：%s）\n", kind, child.Milestone)
+			if err := writeNext(w, child.Task, nil, verbose, false); err != nil {
+				return err
+			}
+		}
+		return nil
 	case textPage:
 		fmt.Fprintf(w, "任务总数：%d（本页 %d）\n", v.Page.Total, len(v.Page.Items))
 		for _, n := range v.Page.Items {
@@ -109,6 +125,9 @@ func writeNext(w io.Writer, n core.Next, summary *core.TaskSummary, verbose, sho
 	}
 	t := n.Task
 	parent := t.Definition.Parent
+	if t.EpicMembership != nil {
+		parent = t.EpicMembership.Parent
+	}
 	if parent == "" {
 		parent = "无"
 	}

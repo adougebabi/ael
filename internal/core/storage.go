@@ -2,6 +2,7 @@ package core
 
 import (
 	"ael/internal/store"
+	"database/sql"
 	"encoding/json"
 	"io/fs"
 	"os"
@@ -174,6 +175,9 @@ func (s *Service) Restore(from string) (any, error) {
 		if e == nil && len(cur.Attempts) > 0 {
 			return nil, Error("RESTORE_NONEMPTY_RUNTIME", "restore only into fresh runtime; existing attempts preserved")
 		}
+		if e == nil && cur.EpicMembership != nil && !equivalent(cur.EpicMembership, t.EpicMembership) {
+			return nil, Error("TASK_MEMBERSHIP_CONFLICT", "backup would replace an existing epic association: "+t.Definition.ID)
+		}
 		for j := range t.Attempts {
 			a := &t.Attempts[j]
 			a.Token = ""
@@ -260,6 +264,17 @@ func (s *Service) Restore(from string) (any, error) {
 	}
 	mrows.Close()
 	e = s.Store.Write(func(tx *store.Tx) error {
+		// Recheck inside the write transaction so a concurrent link cannot be
+		// overwritten after the preflight check and before restoration commits.
+		for _, incoming := range tasks {
+			current, err := load(tx, incoming.Definition.ID)
+			if err != nil && err != sql.ErrNoRows {
+				return err
+			}
+			if err == nil && current.EpicMembership != nil && !equivalent(current.EpicMembership, incoming.EpicMembership) {
+				return Error("TASK_MEMBERSHIP_CONFLICT", "backup would replace an existing epic association: "+incoming.Definition.ID)
+			}
+		}
 		for key, body := range metadata {
 			if _, e := tx.Exec("INSERT INTO metadata(key,body) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET body=excluded.body", key, body); e != nil {
 				return e

@@ -66,7 +66,7 @@ func parse(raw []string) args {
 }
 func booleanFlag(key string) bool {
 	switch key {
-	case "dry-run", "ack-stopped", "ack-drained", "apply", "codex", "json", "verbose", "no-color":
+	case "dry-run", "ack-stopped", "ack-drained", "apply", "codex", "json", "verbose", "no-color", "required":
 		return true
 	}
 	return false
@@ -101,7 +101,7 @@ func run(raw []string) (value any, runErr error) {
 	executor := a.get("executor", "attached")
 	switch cmd {
 	case "", "help":
-		return map[string]any{"commands": []string{"version", "doctor", "init [--dry-run] [--bundle-dir DIR]", "upgrade [--from DIR] [--prefix DIR] [--dry-run]", "update [--project PATH] [--from DIR] [--prefix DIR] [--dry-run] [--ack-stopped]", "task create --file definition.json", "task show|plan --task ID", "task list", "task edit --task ID --file definition.json --reason TEXT", "task cancel --task ID --reason TEXT", "task delete --task ID --reason TEXT", "task budget --task ID --max-seconds 0 --reason TEXT", "claim --task ID --executor NAME [--unit CHECK] [--owner-pid PERSISTENT_AGENT_PID]", "heartbeat --task ID --attempt ID --token TOKEN", "context --task ID", "progress --task ID --attempt ID --token TOKEN --file progress.json", "assess --file assessment.json", "knowledge status", "knowledge index", "submit --file submission.json", "next --task ID", "resume --task ID [--ack-stopped] [--return-to execute]", "verify --task ID --check ID", "confirm --task ID --kind plan|revision|delivery --decision approve|adjust|reject --revision N --plan-revision N --candidate HASH --reason TEXT --executor PERSON", "confirm --kind review --task ID --check ID --artifacts report.md --reason TEXT --executor PERSON", "dashboard [--addr 0.0.0.0:7331]", "loop run --task ID --config executor.json | --codex [--session EXACT_ID]", "executor probe", "workspace bind --path WORKTREE", "knowledge search --query TEXT", "knowledge read --id ID", "migrate scan --out REPORT", "migrate plan --inventory REPORT/inventory.json --out REPORT", "migrate validate --plan REPORT/plan.json [--proposal proposal.json]", "migrate apply --plan REPORT/plan.json --approved-digest HASH [--proposal proposal.json]", "migrate verify|repair|rollback --migration ID", "activate --migration ID --approved-digest HASH --ack-drained", "storage stats", "storage backup --out NEW_DIR", "storage restore --from EXPORT_DIR", "storage prune [--before RFC3339] [--apply]", "repair"}, "global": "--project PATH; default text; --json for output protocol 1; --verbose; --no-color; errors stderr exit 1", "definition": core.Definition{}, "submission": core.Submission{}, "step_result": core.StepResult{}}, nil
+		return map[string]any{"commands": []string{"version", "doctor", "init [--dry-run] [--bundle-dir DIR]", "upgrade [--from DIR] [--prefix DIR] [--dry-run]", "update [--project PATH] [--from DIR] [--prefix DIR] [--dry-run] [--ack-stopped]", "task create --file definition.json", "task show|plan --task ID", "task list [--parent EPIC]", "task tree --task EPIC", "task link --parent EPIC --task LEAF [--required=false] [--milestone NAME]", "task edit --task ID --file definition.json --reason TEXT", "task cancel --task ID --reason TEXT", "task delete --task ID --reason TEXT", "task budget --task ID --max-seconds 0 --reason TEXT", "claim --task ID --executor NAME [--unit CHECK] [--owner-pid PERSISTENT_AGENT_PID]", "heartbeat --task ID --attempt ID --token TOKEN", "context --task ID", "progress --task ID --attempt ID --token TOKEN --file progress.json", "assess --file assessment.json", "knowledge status", "knowledge index", "submit --file submission.json", "next --task ID", "resume --task ID [--ack-stopped] [--return-to execute]", "verify --task ID --check ID", "confirm --task ID --kind plan|revision|delivery --decision approve|adjust|reject --revision N --plan-revision N --candidate HASH --reason TEXT --executor PERSON", "confirm --kind review --task ID --check ID --artifacts report.md --reason TEXT --executor PERSON", "dashboard [--addr 0.0.0.0:7331]", "loop run --task ID --config executor.json | --codex [--session EXACT_ID]", "executor probe", "workspace bind --path WORKTREE", "knowledge search --query TEXT", "knowledge read --id ID", "migrate scan --out REPORT", "migrate plan --inventory REPORT/inventory.json --out REPORT", "migrate validate --plan REPORT/plan.json [--proposal proposal.json]", "migrate apply --plan REPORT/plan.json --approved-digest HASH [--proposal proposal.json]", "migrate verify|repair|rollback --migration ID", "activate --migration ID --approved-digest HASH --ack-drained", "storage stats", "storage backup --out NEW_DIR", "storage restore --from EXPORT_DIR", "storage prune [--before RFC3339] [--apply]", "repair"}, "global": "--project PATH; default text; --json for output protocol 1; --verbose; --no-color; errors stderr exit 1", "definition": core.Definition{}, "submission": core.Submission{}, "step_result": core.StepResult{}}, nil
 	case "version":
 		return map[string]any{"version": bootstrap.Version, "build": build, "cli_output_protocol": 1}, nil
 	case "doctor":
@@ -248,7 +248,15 @@ func run(raw []string) (value any, runErr error) {
 		fmt.Sscan(a.get("limit", "20"), &limit)
 		fmt.Sscan(a.get("offset", "0"), &offset)
 		fmt.Sscan(a.get("days", "0"), &days)
-		return svc.QueryPage(core.Query{Limit: limit, Offset: offset, Days: days, Text: a.get("query", ""), Board: a.get("board", "")})
+		return svc.QueryPage(core.Query{Limit: limit, Offset: offset, Days: days, Text: a.get("query", ""), Board: a.get("board", ""), Parent: a.get("parent", "")})
+	case "task tree":
+		return svc.Tree(id)
+	case "task link":
+		required := a.get("required", "true")
+		if required != "true" && required != "false" {
+			return nil, core.Error("INVALID_FLAG_VALUE", "required")
+		}
+		return svc.LinkEpic(a.get("parent", ""), id, required == "true", a.get("milestone", ""))
 	case "task show", "task plan", "next":
 		return svc.Next(id)
 	case "claim":

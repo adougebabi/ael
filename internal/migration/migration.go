@@ -1101,6 +1101,10 @@ func Rollback(s *core.Service, id string) (Run, error) {
 		}
 		if c.TaskID != "" {
 			t, e := s.Get(c.TaskID)
+			if e == nil && t.EpicMembership != nil {
+				conflicts = append(conflicts, "epic association: "+c.TaskID)
+				continue
+			}
 			if e == nil && len(t.Attempts) > 0 {
 				conflicts = append(conflicts, "runtime changed: "+c.TaskID)
 				continue
@@ -1118,9 +1122,6 @@ func Rollback(s *core.Service, id string) (Run, error) {
 					conflicts = append(conflicts, "outcome changed: "+c.TaskID)
 					continue
 				}
-				if err = os.Remove(out); err != nil {
-					return r, err
-				}
 			}
 		}
 		if c.TaskID != "" && c.Before != "" {
@@ -1136,6 +1137,16 @@ func Rollback(s *core.Service, id string) (Run, error) {
 			}
 			continue
 		}
+		if c.TaskID != "" {
+			if e = s.DeleteImported(c.TaskID); e != nil {
+				if strings.HasPrefix(e.Error(), "TASK_REFERENCED:") {
+					conflicts = append(conflicts, "task reference: "+c.TaskID)
+					continue
+				}
+				return r, e
+			}
+			continue
+		}
 		if c.Before == "" {
 			e = os.Remove(p)
 		} else {
@@ -1147,11 +1158,6 @@ func Rollback(s *core.Service, id string) (Run, error) {
 		}
 		if e != nil {
 			return r, e
-		}
-		if c.TaskID != "" {
-			if e = s.DeleteImported(c.TaskID); e != nil {
-				return r, e
-			}
 		}
 	}
 	r.Warnings = append(r.Warnings, conflicts...)

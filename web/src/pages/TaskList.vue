@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { api, info, params, refreshRevision } from "../api";
-import { route, setQuery, taskHref, knowledgeHref } from "../router";
+import { route, setQuery, taskHref, knowledgeHref, href } from "../router";
 import { useResource } from "../resource";
 import { boards, label, schedule, reviewNoteStatus, stamp, relativeStamp, blockerText } from "../display";
 import LoadState from "../components/LoadState.vue";
@@ -18,6 +18,7 @@ const basis = useResource<any>({ items: [] });
 const search = ref(route.value.query.get("q") || "");
 const board = computed(() => route.value.query.get("board") || "");
 const taskType = computed(() => route.value.query.get("type") || "");
+const parent = computed(() => route.value.query.get("parent") || "");
 const days = computed(() => route.value.query.get("days") || "30");
 const manualTarget = ref<{ id: string; check: string } | null>(null);
 const pendingTargets = ref(pendingReviews(info.value.project || ""));
@@ -44,7 +45,7 @@ async function load(quiet = false) {
       api("/api/tasks?" + params({ compact: 1, limit: 20,
         ...Object.fromEntries(boards.map(([id]) => ["offset_" + id, offset(id)])),
         days: days.value === "all" ? 0 : days.value, q: route.value.query.get("q") || "",
-        type: taskType.value, board: board.value === "all" ? "" : board.value })),
+        type: taskType.value, parent: parent.value, board: board.value === "all" ? "" : board.value })),
       api("/api/attention").then((value) => ({ value, error: "" })).catch((error) => ({ value: null, error: String(error) })),
     ]);
     if (query !== route.value.query.toString()) throw new Error("请求已由新筛选替代");
@@ -85,10 +86,11 @@ onUnmounted(() => { clearInterval(timer); clearTimeout(debounce); });
     </nav>
     <div class="toolbar workbench-filters">
       <label class="search"><span class="visually-hidden">搜索任务</span><AppIcon name="search"/><input v-model="search" type="search" placeholder="搜索任务…" @input="input" /></label>
-      <select aria-label="任务类型" :value="taskType" @change="filter({ type: ($event.target as HTMLSelectElement).value })"><option value="">所有类型</option><option v-for="kind in ['feature', 'bug', 'improvement', 'refactor', 'research', 'docs', 'chore', 'test', 'qa', 'verify']" :key="kind" :value="kind">{{ label(kind) }}</option></select>
+      <select aria-label="任务类型" :value="taskType" @change="filter({ type: ($event.target as HTMLSelectElement).value })"><option value="">所有类型</option><option v-for="kind in ['epic', 'feature', 'bug', 'improvement', 'refactor', 'research', 'docs', 'chore', 'test', 'qa', 'verify']" :key="kind" :value="kind">{{ label(kind) }}</option></select>
       <select v-if="['completed', 'all'].includes(board)" aria-label="完成历史" :value="days" @change="filter({ days: ($event.target as HTMLSelectElement).value })"><option value="7">最近 7 天</option><option value="30">最近 30 天</option><option value="all">全部历史</option></select>
     </div>
   </div>
+  <p v-if="parent" class="secondary">子任务 · 父任务 <a :href="taskHref(parent)">{{ parent }}</a> <button class="inline-link" @click="filter({ parent: '' })">显示全部任务</button></p>
   <LoadState :loading="loading" :error="error" :last="last" @retry="load()" />
   <p class="table-scroll-hint">左右滑动可查看执行者、验收和进展。</p><div class="board-scroll" tabindex="0" aria-label="任务分组列表，可横向滚动">
     <div class="task-table-head" aria-hidden="true"><span>工作内容</span><span>当前状态</span><span>执行 / 负责</span><span>必要验收</span><span>最近进展</span><span></span></div>
@@ -96,12 +98,12 @@ onUnmounted(() => { clearInterval(timer); clearTimeout(debounce); });
       <section v-for="[id, title] in visibleBoards" :key="id" :data-board="id" class="task-group">
         <div class="group-heading"><span class="group-dot" :class="id"></span><h2>{{ title }}</h2><span class="count">{{ data.counts[id] || 0 }}</span></div>
           <div v-for="s in data.groups[id] || []" :key="s.id" class="task task-row">
-            <div class="task-title"><div class="task-title-line"><span class="task-icon"><AppIcon :name="s.type === 'research' ? 'file' : s.type === 'refactor' ? 'evolution' : 'layers'" /></span><a :id="'task-link-' + s.id" class="task-title-link" :href="taskHref(s.id)"><h3>{{ s.title }}</h3></a></div><p class="task-subline"><span :title="s.id">{{ s.id }}</span><span>{{ label(s.step) }}</span></p></div>
+            <div class="task-title"><div class="task-title-line"><span class="task-icon"><AppIcon :name="s.type === 'research' ? 'file' : s.type === 'refactor' ? 'evolution' : 'layers'" /></span><a :id="'task-link-' + s.id" class="task-title-link" :href="taskHref(s.id)"><h3>{{ s.title }}</h3></a></div><p class="task-subline"><span :title="s.id">{{ s.id }}</span><span>{{ label(s.step) }}</span><a v-if="s.parent" :href="taskHref(s.parent)">父任务 {{ s.parent }}</a><a v-if="s.type === 'epic'" :href="href('/tasks', { parent: s.id, board: 'all', days: 'all' })">子任务 {{ s.children }}</a></p></div>
             <div class="task-state"><span class="status" :class="[s.board, { confirmation: s.manual_reviews?.length || s.next_action === 'wait_environment' }]">{{ schedule(s) }}</span><small v-if="reviewNoteStatus(s)" class="review-note-status">{{ reviewNoteStatus(s) }}</small><small v-if="!reviewNoteStatus(s) || s.blocker_reason || s.blocking_reasons?.length" :class="{ 'blocked-reason': s.blocker_reason || s.blocking_reasons?.length }">{{ s.blocker_reason ? blockerText(s.blocker_reason) : s.blocking_reasons?.length ? s.blocking_reasons.map(blockerText).join('；') : s.manual_reviews?.length ? '等待你操作' : s.running ? '有执行者在处理' : label(s.last_result) }}</small></div>
             <div class="task-owner"><span class="owner-avatar" aria-hidden="true">{{ s.executors.length ? initials(s.executors[0]) : '—' }}</span><span>{{ s.executors.length ? s.executors.join('、') : '当前无人执行' }}</span><small v-if="s.historical">历史记录 · 未在本机复验</small></div>
             <div class="task-checks"><template v-if="s.checks.required"><span>{{ s.checks.required_passed }} / {{ s.checks.required }} 通过</span><div v-if="s.checks.required <= 12" class="check-segments" role="progressbar" :aria-valuenow="s.checks.required_passed" :aria-valuemax="s.checks.required" aria-valuemin="0" aria-label="必需检查通过数"><i v-for="index in s.checks.required" :key="index" :class="{ done: index <= s.checks.required_passed }"></i></div><div v-else class="check-meter" role="progressbar" :aria-valuenow="s.checks.required_passed" :aria-valuemax="s.checks.required" aria-valuemin="0" aria-label="必需检查通过数"><span :style="{ width: (100 * s.checks.required_passed / s.checks.required) + '%' }"></span></div><small v-if="s.checks.running || s.checks.failed || s.checks.blocked">执行中 {{ s.checks.running }} · 失败 {{ s.checks.failed }} · 受阻 {{ s.checks.blocked }}</small></template><span v-else>未配置必需检查</span></div>
             <div class="task-activity"><span :title="stamp(s.activity_at)">{{ s.activity_at ? relativeStamp(s.activity_at) : '尚无有效活动' }}</span></div>
-            <button v-if="!['completed', 'cancelled'].includes(s.board)" class="task-row-action" @click="manualTarget = { id: s.id, check: s.manual_reviews?.length === 1 ? s.manual_reviews[0].check : '' }">{{ reviewNoteStatus(s) ? '查看验收记录' : '验收' }}</button><a v-else class="task-row-action button" :href="taskHref(s.id)">查看 →</a>
+            <button v-if="s.type !== 'epic' && !['completed', 'cancelled'].includes(s.board)" class="task-row-action" @click="manualTarget = { id: s.id, check: s.manual_reviews?.length === 1 ? s.manual_reviews[0].check : '' }">{{ reviewNoteStatus(s) ? '查看验收记录' : '验收' }}</button><a v-else class="task-row-action button" :href="taskHref(s.id)">查看 →</a>
           </div>
           <p v-if="!loading && !(data.groups[id] || []).length" class="empty">{{ search ? '当前筛选无匹配任务。' : data.counts[id] || 0 ? '本页无任务，请返回上一页。' : '暂无' + title + '的任务。' }}</p>
           <Pagination v-if="(data.counts[id] || 0) > 20 || offset(id) > 0" :offset="offset(id)" :limit="20" :total="data.counts[id] || 0" :name="title" @change="setQuery({ ['p_' + id]: $event })" />

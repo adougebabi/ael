@@ -130,6 +130,10 @@ ael confirm --kind review --task ID --check review --executor person --reason '�
 
 视觉人工验收还需真实 PNG/JPEG；交互需产物与明确人类判断。人工结论始终标记 human，不冒充确定性检查。检查结果显示 pass/fail/blocked；未执行显示 not_run。只有非必需项可用 `confirm --kind check-status --status not_applicable|waived|not_run` 记录理由，不能满足必需门禁。
 
+## 本地任务树
+
+使用 `type: "epic"` 创建父任务；叶子可在定义中指定 `parent`，或用 `./ael task link --parent EPIC --task LEAF --milestone 阶段 --json` 关联已有叶子。可选成员加 `--required=false`，用 `./ael task tree --task EPIC --json` 查看各叶子真实状态；父级不会因子任务完成自动通过集成。完整命令、HTTP 入口和隔离演示见 [本地任务树](docs/epic-tree.md)。
+
 ## 连续执行与交接
 
 Attached 使用 claim/context/submit/next 持续执行；Handoff 提交后释放执行权，下一个执行者自己 claim，不需要前一 Bot 安排下游。默认租约三十分钟，可通过 `policy.lease_seconds` 配置（至少60秒）；过期 token 拒绝。Attached 可在 claim 时用 `--owner-pid PERSISTENT_AGENT_PID` 启动独立续约器（每20秒），不受模型排队和工具等待影响。PID 必须是当前 Agent 的常驻进程，不能绑定短命 shell 或无关进程；owner 身份仅保存在本机运行库，owner 退出时暂停该任务，核实后才能恢复；owner 仍存活时，即使 --ack-stopped 也不能接管该任务。keeper 启动需握手成功，PID 在 claim 的 keeper_pid 返回，错误日志在运行目录 artifacts/<attempt>/keeper.log。Attached 无权杀掉宿主 Agent，续约失败时记录中断；受管子进程则会被停止。无法确定 owner 时省略该参数，在租约有效期内手动 heartbeat。相同幂等键及相同结果返回原响应，内容不同拒绝。

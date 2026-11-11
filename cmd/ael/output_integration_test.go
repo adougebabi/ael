@@ -57,6 +57,9 @@ func TestActualCLITextAndJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err = svc.Create(core.Definition{ID: "parent-id", Title: "父任务", Type: "epic", Goal: "verified", Acceptance: []string{"整体结果"}}); err != nil {
+		t.Fatal(err)
+	}
 	n, err := svc.Create(core.Definition{ID: "中文-task-full-id-1234567890", Title: "中文验收任务", Parent: "parent-id", Type: "bug", Goal: "verified", Acceptance: []string{"实际结果"}})
 	if err != nil {
 		t.Fatal(err)

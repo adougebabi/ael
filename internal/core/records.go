@@ -15,6 +15,7 @@ import (
 // TaskRecord is a reviewable checkpoint, not a second live scheduler. It carries
 // no leases, process identities, session IDs, workspace paths or approvals.
 type TaskRecord struct {
+	EpicMembership   *EpicMembership   `json:"epic_membership,omitempty"`
 	Schema           int               `json:"schema"`
 	ID               string            `json:"id"`
 	DefinitionHash   string            `json:"definition_hash"`
@@ -65,6 +66,7 @@ func recordOf(t Task) TaskRecord {
 	r := TaskRecord{Schema: 1, ID: t.Definition.ID, DefinitionHash: t.DefinitionHash, PolicyHash: t.PolicyHash, Revision: t.Definition.Revision, Plan: t.Plan, Step: t.Step, Status: t.Status, Candidate: t.Candidate, Failure: t.Failure, Result: t.Result, Created: t.Created, Updated: t.Updated, Completed: t.Completed, Feedback: t.Feedback}
 	r.Plan.Approved = false
 	r.TimeLimitSeconds = t.TimeLimitSeconds
+	r.EpicMembership = t.EpicMembership
 	r.HumanReviewNotes = slices.Clone(t.HumanReviewNotes)
 	if t.History != nil {
 		r.History = *t.History
@@ -230,6 +232,9 @@ func (s *Service) recoverRecords() error {
 			if e == nil && hasWriter(old) {
 				return Error("TASK_RECORD_CONFLICT", "local writer exists: "+r.ID)
 			}
+			if e == nil && old.EpicMembership != nil && !equivalent(old.EpicMembership, r.EpicMembership) {
+				return Error("TASK_MEMBERSHIP_CONFLICT", "checkpoint would replace an existing epic association: "+r.ID)
+			}
 			p, e := s.taskPath(r.ID)
 			if e != nil {
 				return e
@@ -256,6 +261,7 @@ func (s *Service) recoverRecords() error {
 				return Error("INVALID_RECORD_STEP", r.Step)
 			}
 			t := Task{PolicyHash: r.PolicyHash, Definition: d, DefinitionHash: r.DefinitionHash, Plan: plan, Step: r.Step, Status: r.Status, Candidate: r.Candidate, Failure: r.Failure, Result: r.Result, Created: r.Created, Updated: r.Updated, Completed: r.Completed, Feedback: r.Feedback, History: &r.History, Historical: r.Status != "open", HumanReviewNotes: slices.Clone(r.HumanReviewNotes)}
+			t.EpicMembership = r.EpicMembership
 			// Imported notes are historical observations, never authorization to
 			// confirm or pass a new workspace's candidate automatically.
 			for i := range t.HumanReviewNotes {
@@ -353,6 +359,9 @@ func (s *Service) Delete(id, reason string) (map[string]any, error) {
 }
 func (s *Service) deleteTask(tx *store.Tx, t Task, reason string, tombstone bool) error {
 	id := t.Definition.ID
+	if t.EpicMembership != nil {
+		return Error("TASK_REFERENCED", "epic membership retained by "+t.EpicMembership.Parent)
+	}
 	if hasWriter(t) {
 		return Error("RUNNING_ATTEMPT", "stop and resume --ack-stopped before deleting")
 	}
@@ -380,7 +389,7 @@ func (s *Service) deleteTask(tx *store.Tx, t Task, reason string, tombstone bool
 		return e
 	}
 	for _, other := range others {
-		if slices.Contains(other.Definition.Dependencies, id) || other.Definition.FeedbackOf == id || other.Definition.Parent == id {
+		if slices.Contains(other.Definition.Dependencies, id) || other.Definition.FeedbackOf == id || other.Definition.Parent == id || (other.EpicMembership != nil && other.EpicMembership.Parent == id) {
 			return Error("TASK_REFERENCED", other.Definition.ID)
 		}
 		if slices.Contains(other.Feedback, id) {

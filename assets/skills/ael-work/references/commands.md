@@ -7,6 +7,7 @@
 - 工具维护：`ael upgrade` 更新本机安装；`ael update` 或 `./ael update` 检查并更新当前已接入工程，`--project PATH` 指定其他工程。`--from DIR` 指定完整本地分发，`--dry-run` 预览。安装维护不领取业务写单元；有运行/中断单元先安全结束或交接，不在 Managed 子执行器中替换工具。旧刷新命令已移除。
 - 项目与知识：`./ael doctor`、`./ael knowledge status`、`./ael knowledge search --query TEXT`、`./ael knowledge read --id ID`。原文变更后先审阅差异，再 `./ael knowledge index` 重建来源账本。索引只读取当前工程，绝不执行旧脚本。
 - 任务：进入工程流程后，先 `./ael task list`、`./ael task show --task ID` 复用相关工作；新增已授权工程工作用 `./ael task create --file /tmp/definition.json`。原始请求填 original_request，scope/non_goals/acceptance/goal/checks 明确。明确要求使用 AEL 的只验收任务：intent=inspect，goal=report 或 analysis，报告写运行目录；不得改业务源码。
+- 任务树：大任务定义使用 `type: "epic"`；创建叶子时 `parent` 可指向本项目已存在的 Epic（默认必需）。已有叶子使用 `./ael task link --parent EPIC --task LEAF --milestone 阶段 --json` 关联，可选叶子加 `--required=false`；用 `./ael task tree --task EPIC --json` 查看真实子任务状态。子任务完成不代表父级集成验收完成。
 - 执行：`./ael claim --task ID --executor SESSION`，保存 attempt.id/token。`./ael context --task ID` 在领取后加载当前执行的依据。必须在修改前加载；新增范围先补读。执行后提交 `./ael submit --file /tmp/submission.json`，其中 task/attempt/token/key/result 为 help 的 Submission 结构。result 包含 status、事实 summary、真实 artifacts，及 knowledge:{status:unchanged|updated,reason,artifacts:[]}。更新规范后重新 index/context 并重验最终候选。
 - 单次代码任务：完成实现和提交前检查后，直接 `git commit` 本任务改动，再提交实施结果并验证提交后的候选。不要将其他任务或用户的未授权改动加入提交；commit 不等于 push、merge 或 release。
 - 中途进展：`./ael progress --task ID --attempt AT --token TOKEN --file /tmp/progress.json`；文件是 {summary,artifacts,next}，只写已发生事实，不修改定义版本。

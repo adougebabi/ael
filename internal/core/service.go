@@ -81,6 +81,9 @@ func (s *Service) Create(d Definition) (Next, error) {
 	if d.Type == "" {
 		d.Type = "feature"
 	}
+	if d.Type == "epic" && d.Parent != "" {
+		return Next{}, Error("EPIC_PARENT_INVALID", "epics cannot be child tasks")
+	}
 	if d.Intent == "" && (d.Type == "qa" || d.Type == "verify") && (d.Goal == "" || d.Goal == "report" || d.Goal == "analysis") {
 		d.Intent = "inspect"
 		if d.Goal == "" {
@@ -133,6 +136,12 @@ func (s *Service) Create(d Definition) (Next, error) {
 		_ = tx.Row("SELECT count(*) FROM tasks WHERE id=?", d.ID).Scan(&n)
 		if n > 0 {
 			return Error("TASK_EXISTS", d.ID)
+		}
+		if d.Parent != "" {
+			if e := validateEpicParent(tx, d.Parent, d.ID); e != nil {
+				return e
+			}
+			t.EpicMembership = &EpicMembership{Parent: d.Parent, Required: true}
 		}
 		for _, dep := range d.Dependencies {
 			if dep == d.ID {
@@ -207,6 +216,12 @@ func (s *Service) Get(id string) (Task, error) {
 func (s *Service) syncDefinition(old Task, d Definition, raw []byte) (Task, error) {
 	if d.ID != old.Definition.ID {
 		return old, Error("ID_IMMUTABLE", d.ID)
+	}
+	if d.Parent != old.Definition.Parent {
+		return old, Error("PARENT_LINK_REQUIRED", "associate an existing leaf using task link")
+	}
+	if (d.Type == "epic") != (old.Definition.Type == "epic") {
+		return old, Error("EPIC_TYPE_IMMUTABLE", "create an epic separately instead of changing task kind")
 	}
 	if e := Validate(d); e != nil {
 		return old, e
@@ -472,6 +487,11 @@ func (s *Service) nextWithConstraints(id string, includeArtifacts bool, resolveB
 				n.Action = "wait_dependency"
 				n.Reasons = append(n.Reasons, "unsatisfied dependency: "+dep)
 			}
+		}
+	}
+	if t.Definition.Type == "epic" && t.Status == "open" {
+		if e = s.summarizeEpicNext(&n, t.Definition.ID); e != nil {
+			return Next{}, e
 		}
 	}
 	if n.Action == "continue" || n.Action == "repair" {

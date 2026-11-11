@@ -40,6 +40,14 @@ type Blocker struct {
 	Recovery string   `json:"recovery"`
 	ResumeAt string   `json:"resume_at"`
 }
+
+// EpicMembership is an explicit, project-local association. Legacy Parent
+// references remain readable without being promoted to managed membership.
+type EpicMembership struct {
+	Parent    string `json:"parent"`
+	Required  bool   `json:"required"`
+	Milestone string `json:"milestone,omitempty"`
+}
 type Definition struct {
 	Intent          string         `json:"intent,omitempty" yaml:"intent,omitempty"`
 	OriginalRequest string         `json:"original_request,omitempty" yaml:"original_request,omitempty"`
@@ -165,6 +173,7 @@ type Delivery struct {
 	Status      string `json:"status" yaml:"status"`
 }
 type Task struct {
+	EpicMembership      *EpicMembership   `json:"epic_membership,omitempty"`
 	InspectionCandidate string            `json:"inspection_candidate,omitempty"`
 	Basis               []BasisReference  `json:"applicable_knowledge"`
 	ContextAttempt      string            `json:"context_attempt,omitempty"`
@@ -237,7 +246,7 @@ func Validate(d Definition) error {
 	if d.MaxSeconds < -1 {
 		return Error("INVALID_BUDGET", "max_seconds must be -1 (unlimited), 0 (project default), or positive")
 	}
-	if !slices.Contains([]string{"feature", "bug", "improvement", "refactor", "research", "docs", "chore", "test", "qa", "verify"}, d.Type) {
+	if !slices.Contains([]string{"epic", "feature", "bug", "improvement", "refactor", "research", "docs", "chore", "test", "qa", "verify"}, d.Type) {
 		return Error("INVALID_TYPE", d.Type)
 	}
 	if !slices.Contains([]string{"analysis", "report", "verified", "merged", "released"}, d.Goal) {
@@ -279,6 +288,9 @@ func Validate(d Definition) error {
 	return nil
 }
 func MakePlan(d *Definition) Plan {
+	if d.Type == "epic" {
+		return Plan{1, "epic", []string{"define", "integrate"}, "aggregate scope and verify integration", false}
+	}
 	preset := d.Preset
 	reason := "explicit preset"
 	if preset == "" {

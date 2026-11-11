@@ -12,6 +12,7 @@ type Query struct {
 	Board   string
 	Text    string
 	Type    string
+	Parent  string
 	Days    int
 }
 type Page struct {
@@ -39,6 +40,10 @@ func (s *Service) QueryPage(q Query) (Page, error) {
 	expr := `CASE WHEN status='completed' THEN 'completed' WHEN status='cancelled' THEN 'cancelled' WHEN json_type(body,'$.confirmation')='object' THEN 'confirmation' WHEN EXISTS(SELECT 1 FROM json_each(tasks.body,'$.attempts') a WHERE json_extract(a.value,'$.status')='running' AND json_extract(a.value,'$.lease_until')>?) THEN 'active' ELSE 'pending' END`
 	filter := ` WHERE (?='' OR instr(lower(json_extract(body,'$.definition.title')||' '||id||' '||json_extract(body,'$.definition.type')),?)>0) AND (?='' OR json_extract(body,'$.definition.type')=?)`
 	args := []any{now.Format(time.RFC3339Nano), strings.ToLower(q.Text), strings.ToLower(q.Text), q.Type, q.Type}
+	if q.Parent != "" {
+		filter += ` AND json_extract(body,'$.epic_membership.parent')=?`
+		args = append(args, q.Parent)
+	}
 	if q.Days > 0 {
 		filter += ` AND (status!='completed' OR (completed!='' AND completed>=?))`
 		args = append(args, now.Add(-time.Duration(q.Days)*24*time.Hour).Format(time.RFC3339Nano))
