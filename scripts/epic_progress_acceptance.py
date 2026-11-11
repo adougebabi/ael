@@ -73,7 +73,7 @@ def implement(id):
         attempt = claim['attempt']
         if id == 'e8-implemented' and stage == 'execute':
             fact = {'summary': json.dumps({'fact': '长事实前缀', 'detail': 'x' * 5000, 'tail': '实际结尾'}, ensure_ascii=False),
-                    'artifacts': ['app/common.txt'], 'next': '验收这份隔离结果'}
+                    'artifacts': ['app/common.txt'], 'evidence_kind': 'deliverable', 'next': '验收这份隔离结果'}
             cli('progress', '--task', id, '--attempt', attempt['id'], '--token', attempt['token'],
                 '--file', put(id + '-progress', fact))
         result = {'status': 'pass', 'summary': stage + ' 真实隔离产物',

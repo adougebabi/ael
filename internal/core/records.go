@@ -15,27 +15,31 @@ import (
 // TaskRecord is a reviewable checkpoint, not a second live scheduler. It carries
 // no leases, process identities, session IDs, workspace paths or approvals.
 type TaskRecord struct {
-	EpicPlan         *EpicPlanSnapshot  `json:"epic_plan,omitempty"`
-	EpicPlanHistory  []EpicPlanSnapshot `json:"epic_plan_history,omitempty"`
-	EpicMembership   *EpicMembership    `json:"epic_membership,omitempty"`
-	Schema           int                `json:"schema"`
-	ID               string             `json:"id"`
-	DefinitionHash   string             `json:"definition_hash"`
-	PolicyHash       string             `json:"policy_hash"`
-	Revision         int                `json:"definition_revision"`
-	Plan             Plan               `json:"plan"`
-	Step             string             `json:"current_step"`
-	Status           string             `json:"status"`
-	Candidate        string             `json:"candidate"`
-	Failure          string             `json:"failure"`
-	Result           string             `json:"result"`
-	Created          time.Time          `json:"created"`
-	Updated          time.Time          `json:"updated"`
-	Completed        *time.Time         `json:"completed"`
-	Feedback         []string           `json:"feedback"`
-	TimeLimitSeconds *int               `json:"time_limit_seconds,omitempty"`
-	History          RecordHistory      `json:"history"`
-	HumanReviewNotes []HumanReviewNote  `json:"human_review_notes,omitempty"`
+	EvidenceProgress *EvidenceProgress       `json:"evidence_progress,omitempty"`
+	FailureCycles    map[string]FailureCycle `json:"failure_cycles,omitempty"`
+	ActiveFailure    string                  `json:"active_failure,omitempty"`
+	FailureBlocker   *Blocker                `json:"failure_blocker,omitempty"`
+	EpicPlan         *EpicPlanSnapshot       `json:"epic_plan,omitempty"`
+	EpicPlanHistory  []EpicPlanSnapshot      `json:"epic_plan_history,omitempty"`
+	EpicMembership   *EpicMembership         `json:"epic_membership,omitempty"`
+	Schema           int                     `json:"schema"`
+	ID               string                  `json:"id"`
+	DefinitionHash   string                  `json:"definition_hash"`
+	PolicyHash       string                  `json:"policy_hash"`
+	Revision         int                     `json:"definition_revision"`
+	Plan             Plan                    `json:"plan"`
+	Step             string                  `json:"current_step"`
+	Status           string                  `json:"status"`
+	Candidate        string                  `json:"candidate"`
+	Failure          string                  `json:"failure"`
+	Result           string                  `json:"result"`
+	Created          time.Time               `json:"created"`
+	Updated          time.Time               `json:"updated"`
+	Completed        *time.Time              `json:"completed"`
+	Feedback         []string                `json:"feedback"`
+	TimeLimitSeconds *int                    `json:"time_limit_seconds,omitempty"`
+	History          RecordHistory           `json:"history"`
+	HumanReviewNotes []HumanReviewNote       `json:"human_review_notes,omitempty"`
 }
 type RecordHistory struct {
 	Attempts []RecordAttempt  `json:"attempts"`
@@ -71,6 +75,12 @@ func recordOf(t Task) TaskRecord {
 	r.EpicMembership = t.EpicMembership
 	r.EpicPlan = t.EpicPlan
 	r.EpicPlanHistory = slices.Clone(t.EpicPlanHistory)
+	r.FailureCycles = t.FailureCycles
+	r.ActiveFailure = t.ActiveFailure
+	r.EvidenceProgress = t.EvidenceProgress
+	if t.ActiveFailure != "" {
+		r.FailureBlocker = t.Blocker
+	}
 	r.HumanReviewNotes = slices.Clone(t.HumanReviewNotes)
 	if t.History != nil {
 		r.History = *t.History
@@ -261,6 +271,9 @@ func (s *Service) recoverRecords() error {
 			if e == nil && len(old.EpicPlanHistory) > 0 && !equivalent(old.EpicPlanHistory, r.EpicPlanHistory) {
 				return Error("TASK_PLAN_CONFLICT", "checkpoint would replace decomposition history: "+r.ID)
 			}
+			if e == nil && hasUnresolvedFailures(&old) && (r.ActiveFailure != old.ActiveFailure || !equivalent(old.FailureCycles, r.FailureCycles) || !equivalent(old.EvidenceProgress, r.EvidenceProgress)) {
+				return Error("TASK_FAILURE_CYCLE_CONFLICT", "checkpoint would replace the retained failure budget: "+r.ID)
+			}
 			p, e := s.taskPath(r.ID)
 			if e != nil {
 				return e
@@ -287,6 +300,17 @@ func (s *Service) recoverRecords() error {
 				return Error("INVALID_RECORD_STEP", r.Step)
 			}
 			t := Task{PolicyHash: r.PolicyHash, Definition: d, DefinitionHash: r.DefinitionHash, Plan: plan, Step: r.Step, Status: r.Status, Candidate: r.Candidate, Failure: r.Failure, Result: r.Result, Created: r.Created, Updated: r.Updated, Completed: r.Completed, Feedback: r.Feedback, History: &r.History, Historical: r.Status != "open", HumanReviewNotes: slices.Clone(r.HumanReviewNotes)}
+			t.FailureCycles, t.ActiveFailure = r.FailureCycles, r.ActiveFailure
+			t.EvidenceProgress = r.EvidenceProgress
+			if t.EvidenceProgress != nil {
+				// Preserve de-duplication history, but do not present another
+				// workspace's progress timestamp as fresh local work.
+				t.EvidenceProgress.At = nil
+				t.EvidenceProgress.Kind, t.EvidenceProgress.Unit, t.EvidenceProgress.Candidate, t.EvidenceProgress.Summary = "", "", "", ""
+			}
+			if t.ActiveFailure != "" {
+				t.Blocker = r.FailureBlocker
+			}
 			t.EpicMembership = r.EpicMembership
 			t.EpicPlan = r.EpicPlan
 			t.EpicPlanHistory = slices.Clone(r.EpicPlanHistory)

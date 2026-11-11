@@ -49,6 +49,10 @@ func TestProcessZeroExitWithoutResultAndRecursion(t *testing.T) {
 	if e != nil || n.Action == "completed" || !n.Task.Paused {
 		t.Fatal(n, e)
 	}
+	checkpoint, e := s.WorkCheckpoint("", "single:"+id)
+	if e != nil || checkpoint.Blocker == nil || checkpoint.Checkpoint.Unit == "" || checkpoint.Blocker.Input == "" || checkpoint.Blocker.Next == "" {
+		t.Fatalf("single-task checkpoint lost recovery details: %+v %v", checkpoint, e)
+	}
 	if _, e = Run(s, id, Config{Command: []string{"ael", "loop", "run"}}); e == nil {
 		t.Fatal("recursive loop allowed")
 	}

@@ -3,7 +3,7 @@
 > 本账本初始状态不代表任何实施已开始。只有实际执行者才能根据代码和验收结果更新状态。
 > 状态仅允许 PENDING、ACTIVE、VERIFYING、DONE、BLOCKED。
 
-当前任务: V2-06
+当前任务: V2-07
 
 | ID | 任务 | 状态 | 回执 |
 |---|---|---|---|
@@ -13,7 +13,7 @@
 | V2-03 | 拆分计划：复用用户分项与 Agent 辅助补全 | DONE | receipts/V2-03.md |
 | V2-04 | 顺序推进与后继领取 | DONE | receipts/V2-04.md |
 | V2-05 | 大任务进度与工作台接通 | DONE | receipts/V2-05.md |
-| V2-06 | 停滞检测、重复失败与可恢复停止 | PENDING | — |
+| V2-06 | 停滞检测、重复失败与可恢复停止 | DONE | receipts/V2-06.md |
 | V2-07 | 父级集成验收与整体验收门禁 | PENDING | — |
 | V2-08 | 独立 Server 与远程身份边界 | PENDING | — |
 | V2-09 | 远程任务与 CLI：唯一权威的第一条路径 | PENDING | — |
@@ -36,10 +36,10 @@
 
 - 本地工作目录：/Users/vinson/Documents/project/个人/ael
 - 当前分支 / 基线提交：main / c3f3da2e264c3a0cb99d28c3fa6c04e9cd7d8bf4；开工工作区干净。
-- 当前任务未完成的验收项：V2-06 尚未开始，读取其任务文件后逐条实施和验收。
-- 最近实际进展：V2-05 已完成共享摘要、工作台、范围及事实展示，完整 Go 回归与最终打包浏览器验收通过；回执为 `receipts/V2-05.md`，本地验证检查点为 `/private/tmp/ael-v2-v200.xLJaSd/v2-05-before-done.tar`。
+- 当前任务未完成的验收项：V2-07 尚未开始，读取其任务文件后逐条实施和验收。
+- 最近实际进展：V2-06 已完成重复失败复核、证据进展和安全恢复；最终完整 Go、打包浏览器及旧任务回归通过，回执为 `receipts/V2-06.md`，验证检查点为 `/private/tmp/ael-v2-v200.xLJaSd/v2-06-before-done.tar`。
 - 阻塞：无已知阻塞。
-- 下一具体动作：保存 V2-05 Git 检查点后，读取并开始 V2-06。任务外非阻断问题只记入 `NON-BLOCKING-ISSUES.md`。
+- 下一具体动作：保存 V2-06 Git 检查点后，读取并开始 V2-07。任务外非阻断问题只记入 `NON-BLOCKING-ISSUES.md`。
 
 ## 修订记录
 
@@ -51,3 +51,4 @@
 - V2-03 完成：计划预览/应用、恢复验证及宿主限制见 receipts/V2-03.md。
 - V2-04 完成：顺序领取、失败修复和 checkpoint 验证见 receipts/V2-04.md。
 - V2-05 完成：大任务汇总、工作台、范围变化及打包浏览器验收见 receipts/V2-05.md。
+- V2-06 完成：停滞判断、限定复核、安全恢复及打包验收见 receipts/V2-06.md。

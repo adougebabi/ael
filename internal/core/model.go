@@ -39,6 +39,9 @@ type Blocker struct {
 	Tried    string   `json:"tried"`
 	Recovery string   `json:"recovery"`
 	ResumeAt string   `json:"resume_at"`
+	Unit     string   `json:"unit,omitempty"`
+	Input    string   `json:"failure_input,omitempty"`
+	Next     string   `json:"next,omitempty"`
 }
 
 // EpicMembership is an explicit, project-local association. Legacy Parent
@@ -84,6 +87,9 @@ type Plan struct {
 	Approved bool     `json:"approved" yaml:"approved"`
 }
 type Attempt struct {
+	LastContact        *time.Time `json:"last_contact,omitempty"`
+	Stage              string     `json:"stage,omitempty"`
+	ExpectedUntil      *time.Time `json:"expected_until,omitempty"`
 	DefinitionRevision int        `json:"definition_revision,omitempty"`
 	PlanRevision       int        `json:"plan_revision,omitempty"`
 	ID                 string     `json:"id" yaml:"id"`
@@ -173,43 +179,47 @@ type Delivery struct {
 	Status      string `json:"status" yaml:"status"`
 }
 type Task struct {
-	EpicPlan            *EpicPlanSnapshot  `json:"epic_plan,omitempty"`
-	EpicPlanHistory     []EpicPlanSnapshot `json:"epic_plan_history,omitempty"`
-	EpicMembership      *EpicMembership    `json:"epic_membership,omitempty"`
-	InspectionCandidate string             `json:"inspection_candidate,omitempty"`
-	Basis               []BasisReference   `json:"applicable_knowledge"`
-	ContextAttempt      string             `json:"context_attempt,omitempty"`
-	KnowledgeOutcome    *KnowledgeOutcome  `json:"knowledge_outcome,omitempty"`
-	Blocker             *Blocker           `json:"blocker,omitempty"`
-	Route               string             `json:"route,omitempty"`
-	PolicyHash          string             `json:"policy_hash" yaml:"policy_hash"`
-	CandidateWorkspace  string             `json:"candidate_workspace" yaml:"candidate_workspace"`
-	Definition          Definition         `json:"definition" yaml:"definition"`
-	DefinitionHash      string             `json:"definition_hash" yaml:"definition_hash"`
-	Plan                Plan               `json:"plan" yaml:"plan"`
-	Step                string             `json:"current_step" yaml:"current_step"`
-	Status              string             `json:"status" yaml:"status"`
-	Attempts            []Attempt          `json:"attempts" yaml:"attempts"`
-	EvidenceHistory     []Evidence         `json:"evidence_history,omitempty"`
-	Evidence            []Evidence         `json:"evidence" yaml:"evidence"`
-	HumanReviewNotes    []HumanReviewNote  `json:"human_review_notes,omitempty"`
-	Confirmation        *Confirmation      `json:"confirmation" yaml:"confirmation"`
-	Approvals           []Approval         `json:"approvals" yaml:"approvals"`
-	Candidate           string             `json:"candidate" yaml:"candidate"`
-	Failure             string             `json:"failure" yaml:"failure"`
-	Paused              bool               `json:"paused" yaml:"paused"`
-	Created             time.Time          `json:"created" yaml:"created"`
-	Updated             time.Time          `json:"updated" yaml:"updated"`
-	Completed           *time.Time         `json:"completed" yaml:"completed"`
-	Historical          bool               `json:"historical" yaml:"historical"`
-	Result              string             `json:"result" yaml:"result"`
-	Delivery            *Delivery          `json:"delivery" yaml:"delivery"`
-	Legacy              map[string]any     `json:"legacy,omitempty" yaml:"legacy"`
-	Feedback            []string           `json:"feedback" yaml:"feedback"`
-	History             *RecordHistory     `json:"history,omitempty" yaml:"history,omitempty"`
-	TimeLimitSeconds    *int               `json:"time_limit_seconds,omitempty" yaml:"time_limit_seconds,omitempty"`
+	EvidenceProgress    *EvidenceProgress       `json:"evidence_progress,omitempty"`
+	FailureCycles       map[string]FailureCycle `json:"failure_cycles,omitempty"`
+	ActiveFailure       string                  `json:"active_failure,omitempty"`
+	EpicPlan            *EpicPlanSnapshot       `json:"epic_plan,omitempty"`
+	EpicPlanHistory     []EpicPlanSnapshot      `json:"epic_plan_history,omitempty"`
+	EpicMembership      *EpicMembership         `json:"epic_membership,omitempty"`
+	InspectionCandidate string                  `json:"inspection_candidate,omitempty"`
+	Basis               []BasisReference        `json:"applicable_knowledge"`
+	ContextAttempt      string                  `json:"context_attempt,omitempty"`
+	KnowledgeOutcome    *KnowledgeOutcome       `json:"knowledge_outcome,omitempty"`
+	Blocker             *Blocker                `json:"blocker,omitempty"`
+	Route               string                  `json:"route,omitempty"`
+	PolicyHash          string                  `json:"policy_hash" yaml:"policy_hash"`
+	CandidateWorkspace  string                  `json:"candidate_workspace" yaml:"candidate_workspace"`
+	Definition          Definition              `json:"definition" yaml:"definition"`
+	DefinitionHash      string                  `json:"definition_hash" yaml:"definition_hash"`
+	Plan                Plan                    `json:"plan" yaml:"plan"`
+	Step                string                  `json:"current_step" yaml:"current_step"`
+	Status              string                  `json:"status" yaml:"status"`
+	Attempts            []Attempt               `json:"attempts" yaml:"attempts"`
+	EvidenceHistory     []Evidence              `json:"evidence_history,omitempty"`
+	Evidence            []Evidence              `json:"evidence" yaml:"evidence"`
+	HumanReviewNotes    []HumanReviewNote       `json:"human_review_notes,omitempty"`
+	Confirmation        *Confirmation           `json:"confirmation" yaml:"confirmation"`
+	Approvals           []Approval              `json:"approvals" yaml:"approvals"`
+	Candidate           string                  `json:"candidate" yaml:"candidate"`
+	Failure             string                  `json:"failure" yaml:"failure"`
+	Paused              bool                    `json:"paused" yaml:"paused"`
+	Created             time.Time               `json:"created" yaml:"created"`
+	Updated             time.Time               `json:"updated" yaml:"updated"`
+	Completed           *time.Time              `json:"completed" yaml:"completed"`
+	Historical          bool                    `json:"historical" yaml:"historical"`
+	Result              string                  `json:"result" yaml:"result"`
+	Delivery            *Delivery               `json:"delivery" yaml:"delivery"`
+	Legacy              map[string]any          `json:"legacy,omitempty" yaml:"legacy"`
+	Feedback            []string                `json:"feedback" yaml:"feedback"`
+	History             *RecordHistory          `json:"history,omitempty" yaml:"history,omitempty"`
+	TimeLimitSeconds    *int                    `json:"time_limit_seconds,omitempty" yaml:"time_limit_seconds,omitempty"`
 }
 type Next struct {
+	Health       *WorkHealth     `json:"health,omitempty"`
 	StopReason   string          `json:"stop_reason,omitempty"`
 	Checkpoint   *WorkCheckpoint `json:"checkpoint,omitempty"`
 	Action       string          `json:"next_action" yaml:"next_action"`
@@ -223,13 +233,14 @@ type Next struct {
 	KeeperPID    int             `json:"keeper_pid,omitempty" yaml:"keeper_pid,omitempty"`
 }
 type StepResult struct {
-	Knowledge *KnowledgeOutcome `json:"knowledge,omitempty"`
-	Blocker   *Blocker          `json:"blocker,omitempty"`
-	Status    string            `json:"status" yaml:"status"`
-	Summary   string            `json:"summary" yaml:"summary"`
-	Artifacts []string          `json:"artifacts" yaml:"artifacts"`
-	ReturnTo  string            `json:"return_to" yaml:"return_to"`
-	Delivery  *Delivery         `json:"delivery" yaml:"delivery"`
+	FailureClass string            `json:"failure_class,omitempty" yaml:"failure_class,omitempty"`
+	Knowledge    *KnowledgeOutcome `json:"knowledge,omitempty"`
+	Blocker      *Blocker          `json:"blocker,omitempty"`
+	Status       string            `json:"status" yaml:"status"`
+	Summary      string            `json:"summary" yaml:"summary"`
+	Artifacts    []string          `json:"artifacts" yaml:"artifacts"`
+	ReturnTo     string            `json:"return_to" yaml:"return_to"`
+	Delivery     *Delivery         `json:"delivery" yaml:"delivery"`
 }
 type Submission struct {
 	Task    string     `json:"task" yaml:"task"`

@@ -381,27 +381,28 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			var a struct {
-				Action       string          `json:"action"`
-				ID           string          `json:"id"`
-				Unit         string          `json:"unit"`
-				Executor     string          `json:"executor"`
-				Attempt      string          `json:"attempt"`
-				Token        string          `json:"token"`
-				Reason       string          `json:"reason"`
-				Decision     string          `json:"decision"`
-				Result       string          `json:"result"`
-				Recovery     string          `json:"recovery"`
-				RequestKey   string          `json:"request_key"`
-				ReviewNoteID string          `json:"review_note_id"`
-				Kind         string          `json:"kind"`
-				Candidate    string          `json:"candidate"`
-				Revision     int             `json:"revision"`
-				PlanRevision int             `json:"plan_revision"`
-				Ack          bool            `json:"ack_stopped"`
-				Submission   core.Submission `json:"submission"`
-				Definition   core.Definition `json:"definition"`
-				Artifacts    []string        `json:"artifacts"`
-				Assessment   core.Assessment `json:"assessment"`
+				Action        string             `json:"action"`
+				ID            string             `json:"id"`
+				Unit          string             `json:"unit"`
+				Executor      string             `json:"executor"`
+				Attempt       string             `json:"attempt"`
+				Token         string             `json:"token"`
+				Reason        string             `json:"reason"`
+				Decision      string             `json:"decision"`
+				Result        string             `json:"result"`
+				Recovery      string             `json:"recovery"`
+				RequestKey    string             `json:"request_key"`
+				ReviewNoteID  string             `json:"review_note_id"`
+				Kind          string             `json:"kind"`
+				Candidate     string             `json:"candidate"`
+				Revision      int                `json:"revision"`
+				PlanRevision  int                `json:"plan_revision"`
+				Ack           bool               `json:"ack_stopped"`
+				Submission    core.Submission    `json:"submission"`
+				Definition    core.Definition    `json:"definition"`
+				Artifacts     []string           `json:"artifacts"`
+				Assessment    core.Assessment    `json:"assessment"`
+				FailureReview core.FailureReview `json:"failure_review"`
 			}
 			e := decode(r, &a)
 			if e != nil {
@@ -450,6 +451,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				v, e = h.Service.Pause(a.ID, a.Reason)
 			case "resume":
 				v, e = h.Service.Resume(a.ID, a.Unit, a.Ack)
+			case "review_failure":
+				v, e = h.Service.ReviewFailure(a.ID, a.FailureReview)
 			case "cancel":
 				v, e = h.Service.Cancel(a.ID, a.Reason)
 			case "delete":

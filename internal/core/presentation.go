@@ -68,6 +68,7 @@ func ReviewAccess(n Next, c Check) CheckAccess {
 }
 
 type TaskSummary struct {
+	Health               *WorkHealth               `json:"health,omitempty"`
 	Epic                 *EpicSummary              `json:"epic,omitempty"`
 	Parent               string                    `json:"parent,omitempty"`
 	Children             int                       `json:"children"`
@@ -99,7 +100,14 @@ type TaskSummary struct {
 
 func (s *Service) Summarize(n Next) (TaskSummary, error) {
 	t := n.Task
-	r := TaskSummary{ID: t.Definition.ID, Title: t.Definition.Title, Type: t.Definition.Type, Board: n.Board, Step: n.Step, Action: n.Action, Reasons: n.Reasons, Executors: []string{}, ManualReviews: []PendingHumanReview{}, Completed: t.Completed, Historical: t.Historical}
+	r := TaskSummary{Health: n.Health, ID: t.Definition.ID, Title: t.Definition.Title, Type: t.Definition.Type, Board: n.Board, Step: n.Step, Action: n.Action, Reasons: n.Reasons, Executors: []string{}, ManualReviews: []PendingHumanReview{}, Completed: t.Completed, Historical: t.Historical}
+	if r.Health == nil {
+		health, err := s.workHealth(*t, time.Now().UTC())
+		if err != nil {
+			return r, err
+		}
+		r.Health = &health
+	}
 	r.Parent = t.Definition.Parent
 	if t.EpicMembership != nil {
 		r.Parent = t.EpicMembership.Parent
@@ -219,7 +227,7 @@ func (s *Service) Summarize(n Next) (TaskSummary, error) {
 	// Only actual work/results count. Heartbeats, claims, process starts and
 	// source observations never advance the displayed progress timestamp.
 	var raw, stamp, kind string
-	err := s.Store.DB.QueryRow(`SELECT body,created,kind FROM events WHERE task_id=? AND kind IN ('work_progress','submitted','verified','assessed','reviewed','human_review_recorded','human_review_confirmed','confirmation','cancelled','paused','resumed','definition_revised') ORDER BY id DESC LIMIT 1`, r.ID).Scan(&raw, &stamp, &kind)
+	err := s.Store.DB.QueryRow(`SELECT body,created,kind FROM events WHERE task_id=? AND kind IN ('work_progress','submitted','verified','assessed','reviewed','human_review_recorded','human_review_confirmed','confirmation','cancelled','paused','resumed','definition_revised') AND (kind NOT IN ('work_progress','submitted') OR COALESCE(json_extract(body,'$.evidence_changed'),1)=1) ORDER BY id DESC LIMIT 1`, r.ID).Scan(&raw, &stamp, &kind)
 	if err != nil && err != sql.ErrNoRows {
 		return r, err
 	}

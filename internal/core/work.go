@@ -42,6 +42,7 @@ type WorkResult struct {
 	Detail      string         `json:"detail,omitempty"`
 	Checkpoint  WorkCheckpoint `json:"checkpoint"`
 	Next        *Next          `json:"next,omitempty"`
+	Blocker     *Blocker       `json:"blocker,omitempty"`
 	stateHash   string
 	handoffFrom string
 }
@@ -73,8 +74,18 @@ func workStopped(req WorkRequest, action, reason string, t *Task, unit string) W
 	if t != nil {
 		cp.Task, cp.Step = t.Definition.ID, t.Step
 		cp.Revision, cp.PlanRevision = t.Definition.Revision, t.Plan.Revision
+		if cp.Unit == "" {
+			cp.Unit = t.Step
+			if t.Blocker != nil && t.Blocker.Unit != "" {
+				cp.Unit = t.Blocker.Unit
+			}
+		}
 	}
-	return WorkResult{Action: action, StopReason: action, Detail: reason, Checkpoint: cp}
+	result := WorkResult{Action: action, StopReason: action, Detail: reason, Checkpoint: cp}
+	if t != nil && t.Status == "open" && t.Blocker != nil {
+		result.Blocker = t.Blocker
+	}
+	return result
 }
 
 func workResourcesConflict(a, b []string) bool {

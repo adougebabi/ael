@@ -10,6 +10,7 @@ import (
 )
 
 type Policy struct {
+	NoProgressSeconds            int      `json:"no_progress_seconds,omitempty" yaml:"no_progress_seconds"`
 	CandidateExclude             []string `json:"candidate_exclude,omitempty" yaml:"candidate_exclude"`
 	Schema                       int      `json:"schema" yaml:"schema"`
 	MaxRetries                   int      `json:"max_retries" yaml:"max_retries"`
@@ -93,6 +94,8 @@ func (s *Service) policyHash() (string, error) {
 	if e != nil {
 		return "", e
 	}
+	// A display/observation threshold does not change acceptance or revoke a candidate.
+	p.NoProgressSeconds = 0
 	b, e := json.Marshal(p)
 	if e != nil {
 		return "", e

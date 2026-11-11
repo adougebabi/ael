@@ -38,9 +38,13 @@ type epicRawEvent struct {
 
 func (s *Service) epicEvents(id, kinds string, limit int) ([]epicRawEvent, error) {
 	query := `SELECT e.id,e.task_id,e.kind,e.body,e.created FROM events e JOIN tasks t ON t.id=e.task_id
-		WHERE json_extract(t.body,'$.epic_membership.parent')=? AND e.kind IN (` + kinds + `) ORDER BY e.id`
+		WHERE json_extract(t.body,'$.epic_membership.parent')=? AND e.kind IN (` + kinds + `)`
 	if limit > 0 {
-		query += ` DESC LIMIT ?`
+		// Filter duplicate diagnostics before the limit, otherwise repeated
+		// logs could push all real progress off the parent timeline.
+		query += ` AND (json_extract(e.body,'$.evidence_changed')=1 OR (json_extract(e.body,'$.evidence_changed') IS NULL AND e.kind='submitted' AND json_type(e.body,'$.evidence')='object')) ORDER BY e.id DESC LIMIT ?`
+	} else {
+		query += ` ORDER BY e.id`
 	}
 	var args []any
 	args = append(args, id)
@@ -117,6 +121,15 @@ func (s *Service) epicTimeline(id string, children []EpicTreeMember) ([]EpicScop
 		member := members[event.task]
 		task := member.Task.Task
 		item := EpicProgress{Task: event.task, Title: task.Definition.Title, Kind: event.kind, At: event.at, Historical: task.Historical || restoredAt > event.id}
+		var marker struct {
+			EvidenceChanged *bool `json:"evidence_changed"`
+		}
+		if err = json.Unmarshal([]byte(event.body), &marker); err != nil {
+			return nil, nil, false, Error("INVALID_EVENT", "cannot read epic progress marker")
+		}
+		if marker.EvidenceChanged != nil && !*marker.EvidenceChanged {
+			continue
+		}
 		if event.kind == "work_progress" {
 			var fact Progress
 			if err = json.Unmarshal([]byte(event.body), &fact); err != nil {
@@ -142,4 +155,49 @@ func (s *Service) epicTimeline(id string, children []EpicTreeMember) ([]EpicScop
 		progress = append(progress, item)
 	}
 	return scope, progress, truncated, nil
+}
+
+// Older callers can keep recording unclassified facts. They remain available
+// as reported observations but are not presented as new evidence or allowed
+// to displace the evidence timeline.
+func (s *Service) epicReports(id string, children []EpicTreeMember) ([]EpicProgress, bool, error) {
+	members := make(map[string]EpicTreeMember, len(children))
+	for _, member := range children {
+		members[member.Task.Task.Definition.ID] = member
+	}
+	var restoredAt int
+	err := s.Store.DB.QueryRow(`SELECT id FROM events WHERE task_id='' AND kind='runtime_restored' ORDER BY id DESC LIMIT 1`).Scan(&restoredAt)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, false, err
+	}
+	rows, err := s.Store.DB.Query(`SELECT e.id,e.task_id,e.body,e.created FROM events e JOIN tasks t ON t.id=e.task_id
+		WHERE json_extract(t.body,'$.epic_membership.parent')=? AND e.kind='work_progress'
+		AND COALESCE(json_extract(e.body,'$.evidence_changed'),0)=0 AND COALESCE(json_extract(e.body,'$.evidence_kind'),'')=''
+		ORDER BY e.id DESC LIMIT 6`, id)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+	items := []EpicProgress{}
+	for rows.Next() {
+		var event epicRawEvent
+		if err = rows.Scan(&event.id, &event.task, &event.body, &event.at); err != nil {
+			return nil, false, err
+		}
+		var fact Progress
+		if err = json.Unmarshal([]byte(event.body), &fact); err != nil {
+			return nil, false, Error("INVALID_EVENT", "cannot read reported epic progress")
+		}
+		task := members[event.task].Task.Task
+		items = append(items, EpicProgress{Task: event.task, Title: task.Definition.Title, Kind: "reported", At: event.at,
+			Summary: fact.Summary, Next: fact.Next, Artifacts: fact.Artifacts, Actor: fact.Actor, Historical: task.Historical || restoredAt > event.id})
+	}
+	if err = rows.Err(); err != nil {
+		return nil, false, err
+	}
+	truncated := len(items) > 5
+	if truncated {
+		items = items[:5]
+	}
+	return items, truncated, nil
 }

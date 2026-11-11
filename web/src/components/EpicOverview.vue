@@ -79,6 +79,8 @@ function mappedLeaf(key: string) {
             <div><a :href="taskHref(member.summary.id)">{{ member.summary.title }}</a> <span class="status">{{ leafState(member) }}</span></div>
             <p>{{ member.required ? '必需' : '可选' }}<template v-if="member.milestone"> · {{ member.milestone }}</template> · {{ member.summary.executors.length ? member.summary.executors.join('、') : '当前无人执行' }}<template v-if="member.summary.checks.required"> · 必需检查 {{ member.summary.checks.required_passed }} / {{ member.summary.checks.required }} 通过</template></p>
             <p v-if="member.task.task.definition.dependencies?.length">前置：<template v-for="dep in member.task.task.definition.dependencies" :key="dep"><a :href="taskHref(dep)">{{ dep }}</a> </template></p>
+            <p v-if="member.task.health?.stage">当前阶段：{{ label(member.task.health.stage) }}<template v-if="member.task.health.expected_until"> · 期限 {{ stamp(member.task.health.expected_until) }}</template></p>
+            <p v-if="member.task.health?.no_progress">{{ member.task.health.healthy_long ? '暂无新证据；声明中的长阶段仍在期限内' : '超过设定时间未记录新的证据进展' }}</p>
             <p v-if="issueFor(member.summary.id)"><a :href="taskHref(member.summary.id, issueFor(member.summary.id).check ? 'checks' : 'overview', issueFor(member.summary.id).check || '')">查看{{ issueLabel(issueFor(member.summary.id)) }} →</a> {{ blockerText(issueFor(member.summary.id).reason) }}</p>
           </li>
         </ul>
@@ -101,6 +103,13 @@ function mappedLeaf(key: string) {
         <button v-if="tree.progress.length > 5" class="inline-link" @click="setQuery({ progress: showAllProgress ? undefined : 'all' })">{{ showAllProgress ? '收起进展' : '查看最近 ' + tree.progress.length + ' 条进展' }}</button>
         <p v-if="tree.progress_truncated" class="secondary">这里只显示最近 100 条已记录进展。</p>
       </section>
+
+      <details v-if="tree.reported_progress?.length" class="source-detail">
+        <summary>查看未标记为成果的记录（{{ tree.reported_progress.length }} 条）</summary>
+        <p class="secondary">这些描述已保留，未计为有证据的进展。</p>
+        <ul class="epic-events"><li v-for="(event, index) in tree.reported_progress" :key="event.task + ':' + event.at + ':' + index"><a :href="taskHref(event.task, 'execution')">{{ event.title }}</a> · {{ stamp(event.at) }}<p>{{ preview(event.summary) }}</p><p v-if="event.next">下一步：{{ preview(event.next) }}</p></li></ul>
+        <p v-if="tree.reports_truncated" class="secondary">这里只显示最近 5 条；完整事件可在子任务中查看。</p>
+      </details>
 
       <details v-if="tree.scope_changes.length" class="source-detail">
         <summary>查看范围变化（{{ tree.scope_changes.length }} 条）</summary>

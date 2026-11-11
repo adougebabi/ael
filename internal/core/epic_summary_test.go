@@ -170,7 +170,7 @@ func TestEpicTreePreservesScopeChangesAndRealProgress(t *testing.T) {
 	if err = os.WriteFile(filepath.Join(s.Root, "fact.txt"), []byte("fact"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.Progress("first", claim.Attempt.ID, claim.Attempt.Token, core.Progress{Summary: "核实了事实", Next: "完成定义", Artifacts: []string{"fact.txt"}}); err != nil {
+	if _, err = s.Progress("first", claim.Attempt.ID, claim.Attempt.Token, core.Progress{Summary: "核实了事实", Next: "完成定义", Artifacts: []string{"fact.txt"}, EvidenceKind: "deliverable"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.Submit(core.Submission{Task: "first", Attempt: claim.Attempt.ID, Token: claim.Attempt.Token, Key: core.ID("scope-test-"), Result: core.StepResult{Status: "pass", Summary: "定义完成"}}); err != nil {

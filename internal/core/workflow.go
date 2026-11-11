@@ -175,16 +175,26 @@ func ChecksComplete(t *Task) bool {
 }
 
 type Progress struct {
-	Summary   string    `json:"summary"`
-	Artifacts []string  `json:"artifacts"`
-	Next      string    `json:"next"`
-	Actor     string    `json:"actor"`
-	At        time.Time `json:"at"`
+	Summary         string     `json:"summary"`
+	Artifacts       []string   `json:"artifacts"`
+	EvidenceKind    string     `json:"evidence_kind,omitempty"`
+	Next            string     `json:"next"`
+	Actor           string     `json:"actor"`
+	At              time.Time  `json:"at"`
+	Stage           string     `json:"stage,omitempty"`
+	ExpectedUntil   *time.Time `json:"expected_until,omitempty"`
+	EvidenceChanged *bool      `json:"evidence_changed,omitempty"`
 }
 
 func (s *Service) Progress(id, attempt, token string, p Progress) (Next, error) {
 	if p.Summary == "" || p.Next == "" {
 		return Next{}, Error("PROGRESS_REQUIRED", "fact summary and next action required")
+	}
+	if p.EvidenceKind != "" && p.EvidenceKind != "deliverable" && p.EvidenceKind != "diagnostic" {
+		return Next{}, Error("INVALID_EVIDENCE_KIND", "use deliverable or diagnostic")
+	}
+	if p.EvidenceKind == "deliverable" && len(p.Artifacts) == 0 {
+		return Next{}, Error("ARTIFACT_REQUIRED", "a deliverable needs an actual artifact")
 	}
 	return s.mutate(id, "progress_recorded", func(tx *store.Tx, t *Task) error {
 		a, e := findAttempt(t, attempt, token)
@@ -193,11 +203,26 @@ func (s *Service) Progress(id, attempt, token string, p Progress) (Next, error) 
 		}
 		p.Actor = a.Executor
 		p.At = time.Now().UTC()
+		if p.ExpectedUntil != nil && (strings.TrimSpace(p.Stage) == "" || !p.ExpectedUntil.After(p.At)) {
+			return Error("INVALID_WORK_STAGE", "a future expected_until requires a named stage")
+		}
+		a.LastContact = &p.At
+		if p.Stage != "" || p.ExpectedUntil != nil {
+			a.Stage, a.ExpectedUntil = p.Stage, p.ExpectedUntil
+		}
+		hashes := map[string]string{}
 		for _, ref := range p.Artifacts {
-			if _, e = s.artifactAt(a.Workspace, ref); e != nil {
+			var data []byte
+			if data, e = s.artifactAt(a.Workspace, ref); e != nil {
 				return e
 			}
+			hashes[ref] = store.Hash(data)
 		}
+		changed := false
+		if p.EvidenceKind == "deliverable" {
+			changed = recordArtifactProgress(t, a.Unit, a.Input, p.Summary, hashes, p.At)
+		}
+		p.EvidenceChanged = &changed
 		return tx.Event(id, "work_progress", p)
 	})
 }

@@ -358,6 +358,11 @@ func (s *Service) syncDefinitionExpected(old Task, d Definition, raw []byte, exp
 		}
 		t.Paused = hasWriter(old)
 		t.Failure = "definition revised; relevant inputs and acceptance require revalidation"
+		if cycle, ok := cur.FailureCycles[cur.ActiveFailure]; ok && cycle.State != "resolved" && cur.ActiveFailure != "" {
+			// A presentation or unrelated definition edit cannot release a
+			// repeated-failure stop or erase the retained review record.
+			t.Paused, t.Failure = true, cur.Failure
+		}
 		t.KnowledgeOutcome = nil
 		t.ContextAttempt = ""
 		t.Route = ""
@@ -398,6 +403,10 @@ func (s *Service) syncDefinitionExpected(old Task, d Definition, raw []byte, exp
 				}
 				t.KnowledgeOutcome = old.KnowledgeOutcome
 			}
+		}
+		if hasUnresolvedFailures(&cur) && !boundary && cur.Step != "verify" && cur.Step != "delivery" && slices.Contains(t.Plan.Steps, cur.Step) {
+			// An unrelated revision must not move a paused failure to a later unit.
+			t.Step = cur.Step
 		}
 		b := definitionBytes(d)
 		t.DefinitionHash = store.Hash(b)
@@ -583,6 +592,11 @@ func (s *Service) nextWithConstraints(id string, includeArtifacts bool, resolveB
 		}
 	}
 	n.Task = &t
+	health, e := s.workHealth(t, time.Now().UTC())
+	if e != nil {
+		return Next{}, e
+	}
+	n.Health = &health
 	return n, nil
 }
 func (s *Service) mutate(id, kind string, fn func(*store.Tx, *Task) error) (Next, error) {
@@ -747,6 +761,11 @@ func (s *Service) claimGuarded(id, unit, executor, workspace, session string, ex
 		if t.Step == "verify" {
 			claimUnit = "check:" + unit
 		}
+		for _, cycle := range t.FailureCycles {
+			if cycle.Unit == claimUnit && (cycle.State == "review_required" || cycle.State == "blocked") {
+				return Error("ROOT_CAUSE_REVIEW_REQUIRED", "the requested unit still has an unreviewed failure")
+			}
+		}
 		attempts := 0
 		for _, old := range t.Attempts {
 			if old.Unit == claimUnit {
@@ -762,7 +781,8 @@ func (s *Service) claimGuarded(id, unit, executor, workspace, session string, ex
 		// Distinct tasks may use the same workspace concurrently. The attempt
 		// guard above is task-scoped; candidate checks still invalidate evidence
 		// when any process changes the workspace under verification.
-		a = Attempt{DefinitionRevision: t.Definition.Revision, PlanRevision: t.Plan.Revision, ID: ID("AT-"), Unit: claimUnit, Executor: executor, Session: session, Workspace: workspace, Input: candidate, Started: time.Now().UTC(), Lease: time.Now().UTC().Add(leaseDuration), Token: ID("lease-"), Fence: len(t.Attempts) + 1, Status: "running"}
+		now := time.Now().UTC()
+		a = Attempt{DefinitionRevision: t.Definition.Revision, PlanRevision: t.Plan.Revision, ID: ID("AT-"), Unit: claimUnit, Executor: executor, Session: session, Workspace: workspace, Input: candidate, Started: now, LastContact: &now, Lease: now.Add(leaseDuration), Token: ID("lease-"), Fence: len(t.Attempts) + 1, Status: "running"}
 		t.Attempts = append(t.Attempts, a)
 		return nil
 	})
@@ -797,7 +817,9 @@ func (s *Service) Heartbeat(id, attempt, token string) (Next, error) {
 		if e != nil {
 			return e
 		}
-		a.Lease = time.Now().UTC().Add(duration)
+		now := time.Now().UTC()
+		a.LastContact = &now
+		a.Lease = now.Add(duration)
 		return save(tx, &t)
 	})
 	if e != nil {
@@ -860,6 +882,9 @@ func (s *Service) submitWithHash(sub Submission, evidence *Evidence, requestHash
 		}
 		if !slices.Contains([]string{"pass", "fail", "blocked"}, sub.Result.Status) {
 			return Error("INVALID_RESULT", sub.Result.Status)
+		}
+		if len(sub.Result.FailureClass) > 128 || strings.ContainsAny(sub.Result.FailureClass, "\r\n") {
+			return Error("INVALID_FAILURE_CLASS", "failure_class must be a short single-line identifier")
 		}
 		if t.Step == "verify" && evidence == nil {
 			return Error("TRUSTED_CHECK_REQUIRED", "use verify for commands; confirm --kind review for manual checks")
@@ -926,6 +951,12 @@ func (s *Service) submitWithHash(sub Submission, evidence *Evidence, requestHash
 			}
 		}
 		a.Candidate = candidate
+		priorEvidence := append(append([]Evidence{}, t.EvidenceHistory...), t.Evidence...)
+		progressEvidence := evidence
+		var failureHashes map[string]bool
+		if sub.Result.Status == "fail" {
+			failureHashes = s.failureEvidence(a, sub.Result, evidence)
+		}
 		if sub.Result.Status == "blocked" && a.PID > 0 {
 			a.Status = "interrupted"
 		} else {
@@ -948,6 +979,23 @@ func (s *Service) submitWithHash(sub Submission, evidence *Evidence, requestHash
 			if t.Blocker == nil {
 				t.Blocker = &Blocker{Category: "environment", Reason: sub.Result.Summary, Scope: t.Definition.Scope, Tried: sub.Result.Summary, Recovery: "restore the missing capability or dependency; verify any old writer stopped then resume", ResumeAt: t.Step}
 			}
+			if t.Blocker.Reason == "" {
+				t.Blocker.Reason = sub.Result.Summary
+			}
+			if t.Blocker.Tried == "" {
+				t.Blocker.Tried = "未记录，请补充已尝试事项"
+			}
+			if t.Blocker.Recovery == "" {
+				t.Blocker.Recovery = "核实阻塞原因和旧进程状态后恢复"
+			}
+			if t.Blocker.ResumeAt == "" {
+				t.Blocker.ResumeAt = t.Step
+			}
+			t.Blocker.Unit = a.Unit
+			t.Blocker.Input = a.Input
+			if t.Blocker.Next == "" {
+				t.Blocker.Next = "resolve the retained blocker and resume the required unit"
+			}
 			t.Paused = true
 			t.Failure = sub.Result.Summary
 		} else if sub.Result.Status == "fail" {
@@ -958,7 +1006,7 @@ func (s *Service) submitWithHash(sub Submission, evidence *Evidence, requestHash
 				}
 				t.Evidence = append(t.Evidence, *evidence)
 				evidence = nil
-				if ChecksComplete(&t) {
+				if ChecksComplete(&t) && !failureWouldStop(&t, a, sub.Result, failureHashes) {
 					if e = s.advance(tx, &t); e != nil {
 						return e
 					}
@@ -979,7 +1027,7 @@ func (s *Service) submitWithHash(sub Submission, evidence *Evidence, requestHash
 						t.Attempts[i].Status = "interrupted"
 						t.Attempts[i].Reason = "peer changed responsibility or plan version"
 						t.Paused = true
-						t.Blocker = &Blocker{Category: "recovery", Reason: t.Attempts[i].Reason, Scope: t.Definition.Scope, Tried: sub.Result.Summary, Recovery: "verify all prior check processes stopped, then resume the new analysis/definition responsibility", ResumeAt: t.Step}
+						t.Blocker = &Blocker{Category: "recovery", Reason: t.Attempts[i].Reason, Scope: t.Definition.Scope, Tried: sub.Result.Summary, Recovery: "verify all prior check processes stopped, then resume the new analysis/definition responsibility", ResumeAt: t.Step, Unit: t.Attempts[i].Unit, Input: t.Attempts[i].Input, Next: "核实旧检查停止后继续新的责任节点"}
 					}
 				}
 			} else if t.Step == "verify" || sub.Result.ReturnTo == "execute" {
@@ -1066,30 +1114,19 @@ func (s *Service) submitWithHash(sub Submission, evidence *Evidence, requestHash
 			}
 		}
 		if sub.Result.Status == "fail" {
-			repeated := 0
-			for i := len(t.Attempts) - 1; i >= 0; i-- {
-				old := t.Attempts[i]
-				if old.Unit != a.Unit {
-					continue
-				}
-				if old.Status == "fail" && old.Reason == sub.Result.Summary {
-					repeated++
-				} else {
-					break
-				}
-			}
-			if repeated >= t.Definition.MaxRetries {
-				t.Paused = true
-				t.Failure = "repeated failure detected; checkpoint retained: " + sub.Result.Summary
-			}
+			noteFailure(&t, a, sub.Result, failureHashes)
 		}
 		if evidence != nil && sub.Result.Status != "pass" {
 			t.Evidence = append(t.Evidence, *evidence)
 		}
+		progressChanged := s.recordSubmittedProgress(&t, a, sub.Result, progressEvidence, priorEvidence, now)
+		if sub.Result.Status == "pass" {
+			noteSuccess(&t, a)
+		}
 		if e = s.save(tx, &t); e != nil {
 			return e
 		}
-		if e = tx.Event(sub.Task, "submitted", map[string]any{"attempt": a.ID, "result": sub.Result, "evidence": evidence}); e != nil {
+		if e = tx.Event(sub.Task, "submitted", map[string]any{"attempt": a.ID, "result": sub.Result, "evidence": evidence, "evidence_changed": progressChanged}); e != nil {
 			return e
 		}
 		response = t.BaseNext()
@@ -1133,6 +1170,9 @@ func gates(t *Task) bool {
 	return true
 }
 func (s *Service) advance(tx *store.Tx, t *Task) error {
+	if pendingFailureKey(t) != "" {
+		return nil
+	}
 	for i, step := range t.Plan.Steps {
 		if step == t.Step {
 			if i+1 < len(t.Plan.Steps) {
@@ -1230,9 +1270,35 @@ func (s *Service) Confirm(id, kind, decision, actor, reason, candidate string, r
 	})
 }
 func (s *Service) Resume(id, returnTo string, ack bool) (Next, error) {
+	// A previously completed set of checks may have been held solely for
+	// failure review. Snapshot the same basis/constraint rules used by Next;
+	// after old writers are verified stopped, the transaction rechecks the
+	// candidate before advancing without unnecessary repeated checks.
+	snapshot, err := s.Get(id)
+	if err != nil {
+		return Next{}, err
+	}
+	canAdvance := returnTo == "" && snapshot.Step == "verify" && snapshot.Candidate != "" && s.Active
+	if canAdvance {
+		if policy, e := s.policyHash(); e != nil || policy != snapshot.PolicyHash {
+			canAdvance = false
+		}
+		if s.ResolveBasis != nil {
+			refs, e := s.ResolveBasis(snapshot.Definition)
+			if e != nil || !sameBasis(snapshot.Basis, refs) {
+				canAdvance = false
+			}
+		}
+		if s.ConstraintCheck != nil && len(s.ConstraintCheck(snapshot.Definition)) > 0 {
+			canAdvance = false
+		}
+	}
 	return s.mutate(id, "resumed", func(tx *store.Tx, t *Task) error {
 		if t.Status != "open" {
 			return Error("TERMINAL_TASK", id)
+		}
+		if pendingFailureKey(t) != "" {
+			return Error("ROOT_CAUSE_REVIEW_REQUIRED", "record a bounded review before resuming the retained failed unit")
 		}
 		for i := range t.Attempts {
 			a := &t.Attempts[i]
@@ -1271,12 +1337,51 @@ func (s *Service) Resume(id, returnTo string, ack bool) (Next, error) {
 			t.EvidenceHistory = append(t.EvidenceHistory, t.Evidence...)
 			t.Evidence = nil
 			t.Candidate = ""
+		} else if t.Step == "verify" && t.Candidate != "" {
+			workspace := t.CandidateWorkspace
+			if workspace == "" {
+				workspace = s.Root
+			}
+			current, e := Fingerprint(workspace)
+			if e != nil {
+				return Error("CANDIDATE_UNAVAILABLE", "cannot verify the retained input before recovery")
+			}
+			if current != t.Candidate {
+				t.EvidenceHistory = append(t.EvidenceHistory, t.Evidence...)
+				t.Evidence = nil
+				t.Candidate = ""
+				t.Route = "repair"
+				t.Failure = "candidate changed during recovery; re-execute and revalidate"
+				if slices.Contains(t.Plan.Steps, "execute") {
+					t.Step = "execute"
+				} else {
+					t.Step = "define"
+				}
+			}
 		}
 		if t.Step == "delivery" && t.Delivery == nil {
 			t.Confirmation = &Confirmation{"delivery", "unknown delivery outcome: reconcile existing run before retry", t.Definition.Revision, t.Plan.Revision, t.Candidate}
 		}
 		t.Paused = false
 		t.Blocker = nil
+		t.ActiveFailure = ""
+		if canAdvance && t.DefinitionHash == snapshot.DefinitionHash && t.Plan.Revision == snapshot.Plan.Revision && t.Candidate == snapshot.Candidate && t.Step == "verify" && t.Confirmation == nil {
+			if policy, e := s.policyHash(); e != nil || policy != t.PolicyHash {
+				canAdvance = false
+			}
+			for _, dep := range t.Definition.Dependencies {
+				dependency, e := load(tx, dep)
+				if e != nil || dependency.Status != "completed" {
+					canAdvance = false
+					break
+				}
+			}
+			if canAdvance && (gates(t) || ((t.Definition.Goal == "report" || (t.Definition.Goal == "analysis" && t.Definition.Intent == "inspect")) && ChecksComplete(t))) {
+				if e := s.advance(tx, t); e != nil {
+					return e
+				}
+			}
+		}
 		return nil
 	})
 }
@@ -1287,6 +1392,23 @@ func (s *Service) Pause(id, reason string) (Next, error) {
 		}
 		t.Paused = true
 		t.Failure = reason
+		input := t.Candidate
+		unit := t.Step
+		if len(t.Attempts) > 0 {
+			last := t.Attempts[len(t.Attempts)-1]
+			if input == "" {
+				input = last.Input
+			}
+			if last.Unit != "" {
+				unit = last.Unit
+			}
+		}
+		if input == "" {
+			input = "未记录"
+		}
+		t.Blocker = &Blocker{Category: "manual", Reason: reason, Scope: t.Definition.Scope, Unit: unit, Input: input,
+			Tried: "未记录，请补充已尝试事项", Recovery: "核实暂停原因并确认旧执行已停止", ResumeAt: t.Step,
+			Next: "处理暂停原因后从保留的责任节点恢复"}
 		return nil
 	})
 }

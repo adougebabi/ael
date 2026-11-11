@@ -17,6 +17,8 @@ type EpicTree struct {
 	ScopeChanges      []EpicScopeEvent `json:"scope_changes"`
 	Progress          []EpicProgress   `json:"progress"`
 	ProgressTruncated bool             `json:"progress_truncated"`
+	ReportedProgress  []EpicProgress   `json:"reported_progress"`
+	ReportsTruncated  bool             `json:"reports_truncated"`
 }
 
 type EpicTreeMember struct {
@@ -136,6 +138,8 @@ func (summary *EpicSummary) add(n Next, view TaskSummary, required bool) {
 		issue.Kind, issue.Check, issue.Reason = "human_review", view.ManualReviews[0].Check, "等待人工验收"
 	case t.Status == "open" && len(n.Reasons) > 0:
 		issue.Kind, issue.Reason = "waiting", n.Reasons[0]
+	case t.Status == "open" && n.Health != nil && n.Health.NoProgress && !n.Health.HealthyLong:
+		issue.Kind, issue.Reason = "no_progress", "超过设定时间未记录新的证据进展"
 	}
 	if issue.Reason == "" {
 		return
@@ -293,7 +297,7 @@ func (s *Service) Tree(id string) (EpicTree, error) {
 }
 
 func (s *Service) epicTree(id string, timeline bool) (EpicTree, error) {
-	result := EpicTree{Children: []EpicTreeMember{}, Summary: EpicSummary{Issues: []EpicIssue{}}, ScopeChanges: []EpicScopeEvent{}, Progress: []EpicProgress{}}
+	result := EpicTree{Children: []EpicTreeMember{}, Summary: EpicSummary{Issues: []EpicIssue{}}, ScopeChanges: []EpicScopeEvent{}, Progress: []EpicProgress{}, ReportedProgress: []EpicProgress{}}
 	root, err := s.Next(id)
 	if err != nil {
 		return result, err
@@ -327,6 +331,10 @@ func (s *Service) epicTree(id string, timeline bool) (EpicTree, error) {
 	}
 	if timeline {
 		result.ScopeChanges, result.Progress, result.ProgressTruncated, err = s.epicTimeline(id, result.Children)
+		if err != nil {
+			return result, err
+		}
+		result.ReportedProgress, result.ReportsTruncated, err = s.epicReports(id, result.Children)
 		if err != nil {
 			return result, err
 		}

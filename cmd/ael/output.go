@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 )
 
 // textNext adds read-only event summaries without changing the JSON protocol.
@@ -80,6 +81,9 @@ func writeOutput(w io.Writer, value any, machine, verbose bool) error {
 		}
 		if v.Detail != "" {
 			fmt.Fprintf(w, "原因：%s\n", v.Detail)
+		}
+		if v.Blocker != nil {
+			fmt.Fprintf(w, "当前单元：%s\n失败输入：%s\n已尝试：%s\n恢复条件：%s\n下一步：%s\n", v.Blocker.Unit, v.Blocker.Input, v.Blocker.Tried, v.Blocker.Recovery, v.Blocker.Next)
 		}
 		if v.Next != nil {
 			return writeNext(w, *v.Next, nil, verbose, false)
@@ -169,6 +173,9 @@ func writeOutput(w io.Writer, value any, machine, verbose bool) error {
 		}
 		if v.Tree.ProgressTruncated {
 			fmt.Fprintln(w, "仅显示最近 100 条进展。")
+		}
+		for _, fact := range v.Tree.ReportedProgress {
+			fmt.Fprintf(w, "未标记成果的记录 %s · %s：%s\n", fact.Task, fact.At, fact.Summary)
 		}
 		return nil
 	case textPage:
@@ -262,6 +269,43 @@ func writeNext(w io.Writer, n core.Next, summary *core.TaskSummary, verbose, sho
 	} else {
 		fmt.Fprintln(w, "实际成果：暂无可用摘要")
 	}
+	health := n.Health
+	if summary != nil && summary.Health != nil {
+		health = summary.Health
+	}
+	if health != nil {
+		contact := map[string]string{"no_executor": "当前无人执行", "running": "执行中", "expired": "联系已过期", "mixed": "部分联系已过期"}[health.ContactState]
+		if contact == "" {
+			contact = health.ContactState
+		}
+		fmt.Fprintf(w, "联系状态：%s", contact)
+		if health.LastContact != nil {
+			fmt.Fprintf(w, "；最近联系：%s", health.LastContact.Format(time.RFC3339))
+		}
+		fmt.Fprintln(w)
+		if health.LastProgress != nil {
+			fmt.Fprintf(w, "最近有证据的进展：%s；%s\n", health.LastProgress.Format(time.RFC3339), health.LastSummary)
+		} else {
+			fmt.Fprintln(w, "最近有证据的进展：尚未记录")
+		}
+		if health.Stage != "" {
+			fmt.Fprintf(w, "执行阶段：%s", health.Stage)
+			if health.ExpectedUntil != nil {
+				fmt.Fprintf(w, "；预计期限：%s", health.ExpectedUntil.Format(time.RFC3339))
+			}
+			fmt.Fprintln(w)
+		}
+		if health.NoProgress {
+			if health.HealthyLong {
+				fmt.Fprintln(w, "提示：超过设定时间没有新证据；已声明的长阶段仍在期限内，未自动停止。")
+			} else {
+				fmt.Fprintln(w, "提示：超过设定时间没有新证据，请核对执行者、阶段和下一动作。")
+			}
+		}
+		if health.FailureSignature != "" {
+			fmt.Fprintf(w, "失败签名：%s\n", health.FailureSignature)
+		}
+	}
 	fmt.Fprintln(w, "必要检查：")
 	count := 0
 	for _, check := range t.Definition.Checks {
@@ -289,6 +333,20 @@ func writeNext(w io.Writer, n core.Next, summary *core.TaskSummary, verbose, sho
 	}
 	if t.Status == "open" && t.Blocker != nil {
 		fmt.Fprintf(w, "阻塞原因：%s\n恢复条件：%s\n", t.Blocker.Reason, t.Blocker.Recovery)
+		fmt.Fprintf(w, "当前单元：%s\n失败输入：%s\n已尝试：%s\n下一步：%s\n", t.Blocker.Unit, t.Blocker.Input, t.Blocker.Tried, t.Blocker.Next)
+	}
+	if cycle, ok := t.FailureCycles[t.ActiveFailure]; ok && t.ActiveFailure != "" {
+		state := map[string]string{"review_required": "需要限定复核", "blocked": "复核后仍失败，已停止", "reviewed": "复核已记录"}[cycle.State]
+		if state == "" {
+			state = cycle.State
+		}
+		fmt.Fprintf(w, "同单元失败：%d 次；复核状态：%s\n", cycle.Count, state)
+		if cycle.FailureClass != "" {
+			fmt.Fprintf(w, "失败类别：%s\n", cycle.FailureClass)
+		}
+		if cycle.State == "review_required" || cycle.State == "blocked" {
+			fmt.Fprintln(w, "记录限定复核：ael task review-failure --task ID --file review.json")
+		}
 	}
 	if showPlan || verbose {
 		fmt.Fprintf(w, "计划预设：%s\n计划步骤：%s\n计划原因：%s\n计划已批准：%t\n", t.Plan.Preset, strings.Join(t.Plan.Steps, " → "), t.Plan.Reason, t.Plan.Approved)

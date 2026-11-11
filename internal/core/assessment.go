@@ -12,16 +12,17 @@ import (
 )
 
 type Assessment struct {
-	Task      string   `json:"task"`
-	Check     string   `json:"check"`
-	Candidate string   `json:"candidate"`
-	Method    string   `json:"method"`
-	Executor  string   `json:"executor"`
-	Result    string   `json:"result"`
-	Reason    string   `json:"reason"`
-	Inputs    []string `json:"inputs"`
-	Artifacts []string `json:"artifacts"`
-	ReturnTo  string   `json:"return_to"`
+	FailureClass string   `json:"failure_class,omitempty"`
+	Task         string   `json:"task"`
+	Check        string   `json:"check"`
+	Candidate    string   `json:"candidate"`
+	Method       string   `json:"method"`
+	Executor     string   `json:"executor"`
+	Result       string   `json:"result"`
+	Reason       string   `json:"reason"`
+	Inputs       []string `json:"inputs"`
+	Artifacts    []string `json:"artifacts"`
+	ReturnTo     string   `json:"return_to"`
 }
 
 func (s *Service) Assess(r Assessment) (Next, error)                  { return s.assess(r, nil) }
@@ -102,5 +103,5 @@ func (s *Service) assess(r Assessment, a *Attempt) (Next, error) {
 	config, _ := json.Marshal(c)
 	source := r.Method + ":" + r.Executor
 	ev := Evidence{Check: c.ID, Candidate: t.Candidate, Revision: t.Definition.Revision, PlanRevision: t.Plan.Revision, Config: store.Hash(config), Result: r.Result, Source: source, Executor: r.Executor, Inputs: r.Inputs, Environment: runtime.GOOS + "/" + runtime.GOARCH, Artifacts: r.Artifacts, ArtifactHashes: hashes, Reason: r.Reason, At: time.Now().UTC()}
-	return s.submit(Submission{Task: r.Task, Attempt: a.ID, Token: a.Token, Key: a.ID + "-assessment", Result: StepResult{Status: r.Result, Summary: r.Reason, Artifacts: r.Artifacts, ReturnTo: r.ReturnTo}}, &ev)
+	return s.submit(Submission{Task: r.Task, Attempt: a.ID, Token: a.Token, Key: a.ID + "-assessment", Result: StepResult{Status: r.Result, Summary: r.Reason, Artifacts: r.Artifacts, ReturnTo: r.ReturnTo, FailureClass: r.FailureClass}}, &ev)
 }

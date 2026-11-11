@@ -151,7 +151,7 @@ ael resume --task ID --ack-stopped --project PATH
 
 并发实测、其他已复现的阻塞点与恢复边界见 [并发检查报告](docs/concurrency-report.md)；隔离回归可运行 `python3 -B scripts/concurrency_acceptance.py --bundle dist`。
 
-默认不设任务时间上限（`policy.max_seconds: 0`），重试和重复失败保护保留。正数 `max_seconds` 仍限制有效执行区间，过期后的空等不再累计，并行检查的重叠时间只计算一次；定义中 `-1` 可显式覆盖项目预算为不限时。旧任务可直接执行 `./ael task budget --task ID --max-seconds 0 --reason 调整时间预算`，不改变验收版本或门禁。update 只升级完全未修改的旧默认政策，用户自定义政策和显式任务预算不会被擅自改写。
+默认不设任务时间上限（`policy.max_seconds: 0`），重试和重复失败保护保留。正数 `max_seconds` 仍限制有效执行区间，过期后的空等不再累计，并行检查的重叠时间只计算一次；定义中 `-1` 可显式覆盖项目预算为不限时。旧任务可直接执行 `./ael task budget --task ID --max-seconds 0 --reason 调整时间预算`，不改变验收版本或门禁。update 只升级完全未修改的旧默认政策，用户自定义政策和显式任务预算不会被擅自改写。无进展提醒、长阶段及重复失败后的限定复核见 [无进展提示与重复失败恢复](docs/stagnation.md)。
 
 Managed 通用命令配置：`{"command":["/absolute/executor"],"max_steps":20,"timeout_seconds":0}`。子进程得到 AEL_CONTEXT、AEL_RESULT、AEL_STEP，只执行当前 Attempt，最终结果写 AEL_RESULT，Schema 在 schemas/step-result.json。stdout/stderr 是原始进程日志，不是节点完成证明。`timeout_seconds: 0` 不设置子进程时间上限，正数才设置；独立续约覆盖准备到提交，续约或进程登记失败会停止执行器，不吞掉错误。
 
@@ -222,7 +222,7 @@ AEL_TEST_URL=http://127.0.0.1:7332 AEL_TEST_PROJECT=/tmp/ael-p7-workspace AEL_MI
 
 任务的 `knowledge` 显式引用、路径范围及项目级关键约束共同决定适用依据。`claim` 后执行 `context` 获取原文/hash/适用理由；程序记录“已提供”，不把它包装成模型已理解或代码已合规的证明。`execute` 提交需当前执行上下文与 `knowledge:{status:updated|unchanged,reason,artifacts:[]}`。来源版本变化需补读、评估影响并验证最终候选。已提供版本在仓库外保留不可变快照；任务可打开原正文，版本缺失准确报错。
 
-`progress --task ID --attempt AT --token TOKEN --file progress.json` 记录实际事实、产物与 next，不修改定义。每次 submit 后消费 next_action；repair 可以从 Next 重建，Attached 持续执行或准确交接，Managed 父运行器独占推进责任。没有执行者时显示待接手。
+`progress --task ID --attempt AT --token TOKEN --file progress.json` 记录实际事实、产物与 next，不修改定义；真实交付物可用 `evidence_kind: "deliverable"` 标明，未分类记录保留但不计为新证据。每次 submit 后消费 next_action；repair 可以从 Next 重建，Attached 持续执行或准确交接，Managed 父运行器独占推进责任。没有执行者时显示待接手。
 
 只验收用 `intent:inspect`，交付 `goal:report` 或 analysis。报告放 `runtime:` 目录，所有结果及恢复重领均绑定最初受检候选，失败不能接纳新源码基线；这是一道检测门禁，并非恶意程序沙箱。失败检查仍可交付 `report_delivered_with_findings`，不等于受检候选通过。类型 qa/verify 在未给交付目标时默认只验收；编写测试代码的 test 任务仍可交付 verified。
 

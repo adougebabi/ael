@@ -81,7 +81,11 @@ func (s *Service) verifyClaimed(id, check, executor string, n Next) (Next, error
 		if seconds <= 0 {
 			seconds = 60
 		}
-		ctx, cancel := context.WithTimeout(leaseCtx, time.Duration(seconds)*time.Second)
+		deadline := time.Now().UTC().Add(time.Duration(seconds) * time.Second)
+		if _, e = s.Progress(id, a.ID, a.Token, Progress{Summary: "检查已启动", Next: "等待检查结束并保留日志", Stage: "check:" + check, ExpectedUntil: &deadline, EvidenceKind: "diagnostic"}); e != nil {
+			return n, e
+		}
+		ctx, cancel := context.WithDeadline(leaseCtx, deadline)
 		defer cancel()
 		cmd := process.Command(ctx, c.Command[0], c.Command[1:]...)
 		cmd.Dir = a.Workspace

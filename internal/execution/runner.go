@@ -63,9 +63,16 @@ func Run(s *core.Service, id string, c Config) (result core.Next, runErr error) 
 		if maxSteps {
 			reason = "max_steps"
 		}
-		cp := core.WorkCheckpoint{Runner: "single:" + id, Task: id, Step: result.Step, Revision: result.Revision, PlanRevision: result.PlanRevision, At: time.Now().UTC()}
+		cp := core.WorkCheckpoint{Runner: "single:" + id, Task: id, Step: result.Step, Unit: result.Step, Revision: result.Revision, PlanRevision: result.PlanRevision, At: time.Now().UTC()}
+		var blocker *core.Blocker
+		if result.Task != nil && result.Task.Blocker != nil {
+			blocker = result.Task.Blocker
+			if blocker.Unit != "" {
+				cp.Unit = blocker.Unit
+			}
+		}
 		result.StopReason, result.Checkpoint = reason, &cp
-		if err := s.SaveWorkCheckpoint(core.WorkResult{Action: result.Action, StopReason: reason, Checkpoint: cp}); err != nil && runErr == nil {
+		if err := s.SaveWorkCheckpoint(core.WorkResult{Action: result.Action, StopReason: reason, Checkpoint: cp, Blocker: blocker}); err != nil && runErr == nil {
 			runErr = err
 		}
 	}()
