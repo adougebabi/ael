@@ -173,39 +173,41 @@ type Delivery struct {
 	Status      string `json:"status" yaml:"status"`
 }
 type Task struct {
-	EpicMembership      *EpicMembership   `json:"epic_membership,omitempty"`
-	InspectionCandidate string            `json:"inspection_candidate,omitempty"`
-	Basis               []BasisReference  `json:"applicable_knowledge"`
-	ContextAttempt      string            `json:"context_attempt,omitempty"`
-	KnowledgeOutcome    *KnowledgeOutcome `json:"knowledge_outcome,omitempty"`
-	Blocker             *Blocker          `json:"blocker,omitempty"`
-	Route               string            `json:"route,omitempty"`
-	PolicyHash          string            `json:"policy_hash" yaml:"policy_hash"`
-	CandidateWorkspace  string            `json:"candidate_workspace" yaml:"candidate_workspace"`
-	Definition          Definition        `json:"definition" yaml:"definition"`
-	DefinitionHash      string            `json:"definition_hash" yaml:"definition_hash"`
-	Plan                Plan              `json:"plan" yaml:"plan"`
-	Step                string            `json:"current_step" yaml:"current_step"`
-	Status              string            `json:"status" yaml:"status"`
-	Attempts            []Attempt         `json:"attempts" yaml:"attempts"`
-	EvidenceHistory     []Evidence        `json:"evidence_history,omitempty"`
-	Evidence            []Evidence        `json:"evidence" yaml:"evidence"`
-	HumanReviewNotes    []HumanReviewNote `json:"human_review_notes,omitempty"`
-	Confirmation        *Confirmation     `json:"confirmation" yaml:"confirmation"`
-	Approvals           []Approval        `json:"approvals" yaml:"approvals"`
-	Candidate           string            `json:"candidate" yaml:"candidate"`
-	Failure             string            `json:"failure" yaml:"failure"`
-	Paused              bool              `json:"paused" yaml:"paused"`
-	Created             time.Time         `json:"created" yaml:"created"`
-	Updated             time.Time         `json:"updated" yaml:"updated"`
-	Completed           *time.Time        `json:"completed" yaml:"completed"`
-	Historical          bool              `json:"historical" yaml:"historical"`
-	Result              string            `json:"result" yaml:"result"`
-	Delivery            *Delivery         `json:"delivery" yaml:"delivery"`
-	Legacy              map[string]any    `json:"legacy,omitempty" yaml:"legacy"`
-	Feedback            []string          `json:"feedback" yaml:"feedback"`
-	History             *RecordHistory    `json:"history,omitempty" yaml:"history,omitempty"`
-	TimeLimitSeconds    *int              `json:"time_limit_seconds,omitempty" yaml:"time_limit_seconds,omitempty"`
+	EpicPlan            *EpicPlanSnapshot  `json:"epic_plan,omitempty"`
+	EpicPlanHistory     []EpicPlanSnapshot `json:"epic_plan_history,omitempty"`
+	EpicMembership      *EpicMembership    `json:"epic_membership,omitempty"`
+	InspectionCandidate string             `json:"inspection_candidate,omitempty"`
+	Basis               []BasisReference   `json:"applicable_knowledge"`
+	ContextAttempt      string             `json:"context_attempt,omitempty"`
+	KnowledgeOutcome    *KnowledgeOutcome  `json:"knowledge_outcome,omitempty"`
+	Blocker             *Blocker           `json:"blocker,omitempty"`
+	Route               string             `json:"route,omitempty"`
+	PolicyHash          string             `json:"policy_hash" yaml:"policy_hash"`
+	CandidateWorkspace  string             `json:"candidate_workspace" yaml:"candidate_workspace"`
+	Definition          Definition         `json:"definition" yaml:"definition"`
+	DefinitionHash      string             `json:"definition_hash" yaml:"definition_hash"`
+	Plan                Plan               `json:"plan" yaml:"plan"`
+	Step                string             `json:"current_step" yaml:"current_step"`
+	Status              string             `json:"status" yaml:"status"`
+	Attempts            []Attempt          `json:"attempts" yaml:"attempts"`
+	EvidenceHistory     []Evidence         `json:"evidence_history,omitempty"`
+	Evidence            []Evidence         `json:"evidence" yaml:"evidence"`
+	HumanReviewNotes    []HumanReviewNote  `json:"human_review_notes,omitempty"`
+	Confirmation        *Confirmation      `json:"confirmation" yaml:"confirmation"`
+	Approvals           []Approval         `json:"approvals" yaml:"approvals"`
+	Candidate           string             `json:"candidate" yaml:"candidate"`
+	Failure             string             `json:"failure" yaml:"failure"`
+	Paused              bool               `json:"paused" yaml:"paused"`
+	Created             time.Time          `json:"created" yaml:"created"`
+	Updated             time.Time          `json:"updated" yaml:"updated"`
+	Completed           *time.Time         `json:"completed" yaml:"completed"`
+	Historical          bool               `json:"historical" yaml:"historical"`
+	Result              string             `json:"result" yaml:"result"`
+	Delivery            *Delivery          `json:"delivery" yaml:"delivery"`
+	Legacy              map[string]any     `json:"legacy,omitempty" yaml:"legacy"`
+	Feedback            []string           `json:"feedback" yaml:"feedback"`
+	History             *RecordHistory     `json:"history,omitempty" yaml:"history,omitempty"`
+	TimeLimitSeconds    *int               `json:"time_limit_seconds,omitempty" yaml:"time_limit_seconds,omitempty"`
 }
 type Next struct {
 	Action       string   `json:"next_action" yaml:"next_action"`

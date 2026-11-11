@@ -25,6 +25,11 @@ type textPage struct {
 	Summaries map[string]*core.TaskSummary
 }
 
+type planPreparationOutput struct {
+	core.PlanPreparation
+	Schema json.RawMessage `json:"schema"`
+}
+
 func (p textPage) MarshalJSON() ([]byte, error) { return json.Marshal(p.Page) }
 
 func withTextSummaries(svc *core.Service, value any, command string) any {
@@ -59,6 +64,54 @@ func writeOutput(w io.Writer, value any, machine, verbose bool) error {
 		return json.NewEncoder(w).Encode(value)
 	}
 	switch v := value.(type) {
+	case planPreparationOutput:
+		fmt.Fprintf(w, "规划输入：%s\n父任务：%s (%s)\n已有叶子：%d\n", v.Input.Request, v.Parent.Title, v.Parent.ID, len(v.ExistingLeaves))
+		fmt.Fprintln(w, "由 Agent 或用户按需求生成提议；使用 --json 读取完整输入和提议 schema。")
+		return nil
+	case core.PlanPreview:
+		fmt.Fprintf(w, "计划预览（摘要）：%s\n", v.Digest)
+		if v.AlreadyApplied {
+			fmt.Fprintln(w, "该计划已应用；任务可能仍在进行。")
+		}
+		for _, change := range v.Changes {
+			fmt.Fprintf(w, "  %s → %s：%s", change.Key, change.TaskID, change.Action)
+			if change.ExistingStatus != "" {
+				fmt.Fprintf(w, "；现有状态：%s", change.ExistingStatus)
+			}
+			if change.ExistingHistorical {
+				fmt.Fprint(w, "；历史记录尚未在此工作区复验")
+			}
+			if len(change.Fields) > 0 {
+				fmt.Fprintf(w, "；变更字段：%s", strings.Join(change.Fields, ", "))
+			}
+			if change.RequiresConfirmation {
+				fmt.Fprint(w, "；范围变化需确认")
+			}
+			fmt.Fprintln(w)
+			fmt.Fprintf(w, "    标题：%s；目标：%s；顺序：%d\n", change.Title, change.Goal, change.Order)
+			fmt.Fprintf(w, "    范围：%s；产物：%s\n", strings.Join(change.Scope, ", "), strings.Join(change.Deliverables, ", "))
+			fmt.Fprintf(w, "    验收：%s；依赖：%s\n", strings.Join(change.Acceptance, ", "), strings.Join(change.Dependencies, ", "))
+			for _, diff := range change.Diff {
+				fmt.Fprintf(w, "    %s：%v → %v\n", diff.Field, diff.Before, diff.After)
+			}
+		}
+		for _, mapping := range v.Coverage {
+			fmt.Fprintf(w, "  验收 %s：子任务 %s；集成检查 %s\n", mapping.Acceptance, strings.Join(mapping.Leaves, ", "), mapping.Integration)
+		}
+		for _, warning := range v.Warnings {
+			fmt.Fprintf(w, "提示：%s\n", warning)
+		}
+		return nil
+	case core.PlanApplyResult:
+		fmt.Fprintf(w, "计划 %s：%s；父任务 %s\n", v.PlanID, v.Status, v.Parent)
+		for _, change := range v.Changes {
+			fmt.Fprintf(w, "  %s → %s：%s", change.Key, change.TaskID, change.Action)
+			if change.RequiresConfirmation {
+				fmt.Fprint(w, "；范围变化待确认")
+			}
+			fmt.Fprintln(w)
+		}
+		return nil
 	case textNext:
 		return writeNext(w, v.Next, v.Summary, verbose, v.Command == "task plan")
 	case core.Next:

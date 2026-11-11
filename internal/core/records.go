@@ -15,25 +15,27 @@ import (
 // TaskRecord is a reviewable checkpoint, not a second live scheduler. It carries
 // no leases, process identities, session IDs, workspace paths or approvals.
 type TaskRecord struct {
-	EpicMembership   *EpicMembership   `json:"epic_membership,omitempty"`
-	Schema           int               `json:"schema"`
-	ID               string            `json:"id"`
-	DefinitionHash   string            `json:"definition_hash"`
-	PolicyHash       string            `json:"policy_hash"`
-	Revision         int               `json:"definition_revision"`
-	Plan             Plan              `json:"plan"`
-	Step             string            `json:"current_step"`
-	Status           string            `json:"status"`
-	Candidate        string            `json:"candidate"`
-	Failure          string            `json:"failure"`
-	Result           string            `json:"result"`
-	Created          time.Time         `json:"created"`
-	Updated          time.Time         `json:"updated"`
-	Completed        *time.Time        `json:"completed"`
-	Feedback         []string          `json:"feedback"`
-	TimeLimitSeconds *int              `json:"time_limit_seconds,omitempty"`
-	History          RecordHistory     `json:"history"`
-	HumanReviewNotes []HumanReviewNote `json:"human_review_notes,omitempty"`
+	EpicPlan         *EpicPlanSnapshot  `json:"epic_plan,omitempty"`
+	EpicPlanHistory  []EpicPlanSnapshot `json:"epic_plan_history,omitempty"`
+	EpicMembership   *EpicMembership    `json:"epic_membership,omitempty"`
+	Schema           int                `json:"schema"`
+	ID               string             `json:"id"`
+	DefinitionHash   string             `json:"definition_hash"`
+	PolicyHash       string             `json:"policy_hash"`
+	Revision         int                `json:"definition_revision"`
+	Plan             Plan               `json:"plan"`
+	Step             string             `json:"current_step"`
+	Status           string             `json:"status"`
+	Candidate        string             `json:"candidate"`
+	Failure          string             `json:"failure"`
+	Result           string             `json:"result"`
+	Created          time.Time          `json:"created"`
+	Updated          time.Time          `json:"updated"`
+	Completed        *time.Time         `json:"completed"`
+	Feedback         []string           `json:"feedback"`
+	TimeLimitSeconds *int               `json:"time_limit_seconds,omitempty"`
+	History          RecordHistory      `json:"history"`
+	HumanReviewNotes []HumanReviewNote  `json:"human_review_notes,omitempty"`
 }
 type RecordHistory struct {
 	Attempts []RecordAttempt  `json:"attempts"`
@@ -67,6 +69,8 @@ func recordOf(t Task) TaskRecord {
 	r.Plan.Approved = false
 	r.TimeLimitSeconds = t.TimeLimitSeconds
 	r.EpicMembership = t.EpicMembership
+	r.EpicPlan = t.EpicPlan
+	r.EpicPlanHistory = slices.Clone(t.EpicPlanHistory)
 	r.HumanReviewNotes = slices.Clone(t.HumanReviewNotes)
 	if t.History != nil {
 		r.History = *t.History
@@ -92,6 +96,10 @@ func recordOf(t Task) TaskRecord {
 	return r
 }
 func (s *Service) writeRecord(tx *store.Tx, t Task) error {
+	return s.writeRecordWithGuard(tx, t, false)
+}
+
+func (s *Service) writeRecordWithGuard(tx *store.Tx, t Task, guarded bool) error {
 	path, e := s.recordPath(t.Definition.ID)
 	if e != nil {
 		return e
@@ -115,11 +123,23 @@ func (s *Service) writeRecord(tx *store.Tx, t Task) error {
 	if e != nil {
 		return e
 	}
-	if e = tx.File(path, append(b, '\n')); e != nil {
+	if guarded && state != "pending" {
+		e = tx.FileExpected(path, append(b, '\n'), known)
+	} else {
+		e = tx.File(path, append(b, '\n'))
+	}
+	if e != nil {
 		return e
 	}
 	_, e = tx.Exec("INSERT INTO metadata(key,body) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET body=excluded.body", "record:"+t.Definition.ID, store.Hash(append(b, '\n')))
 	return e
+}
+
+func (s *Service) savePlan(tx *store.Tx, t *Task) error {
+	if err := save(tx, t); err != nil {
+		return err
+	}
+	return s.writeRecordWithGuard(tx, *t, true)
 }
 func (s *Service) save(tx *store.Tx, t *Task) error {
 	if e := save(tx, t); e != nil {
@@ -235,6 +255,12 @@ func (s *Service) recoverRecords() error {
 			if e == nil && old.EpicMembership != nil && !equivalent(old.EpicMembership, r.EpicMembership) {
 				return Error("TASK_MEMBERSHIP_CONFLICT", "checkpoint would replace an existing epic association: "+r.ID)
 			}
+			if e == nil && old.EpicPlan != nil && !equivalent(old.EpicPlan, r.EpicPlan) {
+				return Error("TASK_PLAN_CONFLICT", "checkpoint would replace an existing decomposition: "+r.ID)
+			}
+			if e == nil && len(old.EpicPlanHistory) > 0 && !equivalent(old.EpicPlanHistory, r.EpicPlanHistory) {
+				return Error("TASK_PLAN_CONFLICT", "checkpoint would replace decomposition history: "+r.ID)
+			}
 			p, e := s.taskPath(r.ID)
 			if e != nil {
 				return e
@@ -262,6 +288,8 @@ func (s *Service) recoverRecords() error {
 			}
 			t := Task{PolicyHash: r.PolicyHash, Definition: d, DefinitionHash: r.DefinitionHash, Plan: plan, Step: r.Step, Status: r.Status, Candidate: r.Candidate, Failure: r.Failure, Result: r.Result, Created: r.Created, Updated: r.Updated, Completed: r.Completed, Feedback: r.Feedback, History: &r.History, Historical: r.Status != "open", HumanReviewNotes: slices.Clone(r.HumanReviewNotes)}
 			t.EpicMembership = r.EpicMembership
+			t.EpicPlan = r.EpicPlan
+			t.EpicPlanHistory = slices.Clone(r.EpicPlanHistory)
 			// Imported notes are historical observations, never authorization to
 			// confirm or pass a new workspace's candidate automatically.
 			for i := range t.HumanReviewNotes {

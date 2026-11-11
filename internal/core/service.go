@@ -72,6 +72,10 @@ func (s *Service) active() error {
 	return nil
 }
 func (s *Service) Create(d Definition) (Next, error) {
+	return s.create(d, nil, "", "")
+}
+
+func (s *Service) create(d Definition, membership *EpicMembership, expectedPolicy, planKey string) (Next, error) {
 	if e := s.active(); e != nil {
 		return Next{}, e
 	}
@@ -103,6 +107,9 @@ func (s *Service) Create(d Definition) (Next, error) {
 	if e != nil {
 		return Next{}, e
 	}
+	if expectedPolicy != "" && expectedPolicy != policyHash {
+		return Next{}, Error("PLAN_STALE_POLICY", "project policy changed since preview")
+	}
 	if e := s.normalize(&d); e != nil {
 		return Next{}, e
 	}
@@ -132,6 +139,15 @@ func (s *Service) Create(d Definition) (Next, error) {
 	now := time.Now().UTC()
 	t := Task{PolicyHash: policyHash, Definition: d, DefinitionHash: store.Hash(b), Plan: plan, Step: "define", Status: "open", Created: now, Updated: now, Attempts: []Attempt{}, Evidence: []Evidence{}, Approvals: []Approval{}, Feedback: []string{}}
 	e = s.Store.Write(func(tx *store.Tx) error {
+		if err := checkPlanActive(tx, d.Parent, planKey); err != nil {
+			return err
+		}
+		if expectedPolicy != "" {
+			current, err := s.policyHash()
+			if err != nil || current != expectedPolicy {
+				return Error("PLAN_STALE_POLICY", "project policy changed during application")
+			}
+		}
 		var n int
 		_ = tx.Row("SELECT count(*) FROM tasks WHERE id=?", d.ID).Scan(&n)
 		if n > 0 {
@@ -142,6 +158,13 @@ func (s *Service) Create(d Definition) (Next, error) {
 				return e
 			}
 			t.EpicMembership = &EpicMembership{Parent: d.Parent, Required: true}
+			if membership != nil {
+				if membership.Parent != d.Parent {
+					return Error("PLAN_MEMBERSHIP_CONFLICT", d.ID)
+				}
+				copy := *membership
+				t.EpicMembership = &copy
+			}
 		}
 		for _, dep := range d.Dependencies {
 			if dep == d.ID {
@@ -157,14 +180,29 @@ func (s *Service) Create(d Definition) (Next, error) {
 				return e
 			}
 			old.Feedback = append(old.Feedback, d.ID)
-			if e = s.save(tx, &old); e != nil {
+			if planKey != "" {
+				e = s.savePlan(tx, &old)
+			} else {
+				e = s.save(tx, &old)
+			}
+			if e != nil {
 				return e
 			}
 		}
-		if e := s.save(tx, &t); e != nil {
+		if planKey != "" {
+			e = s.savePlan(tx, &t)
+		} else {
+			e = s.save(tx, &t)
+		}
+		if e != nil {
 			return e
 		}
-		if e := tx.File(path, b); e != nil {
+		if planKey != "" {
+			e = tx.FileExpected(path, b, "")
+		} else {
+			e = tx.File(path, b)
+		}
+		if e != nil {
 			return e
 		}
 		return tx.Event(d.ID, "created", d)
@@ -214,6 +252,10 @@ func (s *Service) Get(id string) (Task, error) {
 	return t, nil
 }
 func (s *Service) syncDefinition(old Task, d Definition, raw []byte) (Task, error) {
+	return s.syncDefinitionExpected(old, d, raw, "", false, "", "", "")
+}
+
+func (s *Service) syncDefinitionExpected(old Task, d Definition, raw []byte, expectedPolicy string, refuseWriter bool, planParent, planKey, expectedState string) (Task, error) {
 	if d.ID != old.Definition.ID {
 		return old, Error("ID_IMMUTABLE", d.ID)
 	}
@@ -226,9 +268,15 @@ func (s *Service) syncDefinition(old Task, d Definition, raw []byte) (Task, erro
 	if e := Validate(d); e != nil {
 		return old, e
 	}
+	if expectedPolicy != "" {
+		current, err := s.policyHash()
+		if err != nil || current != expectedPolicy {
+			return old, Error("PLAN_STALE_POLICY", "project policy changed since preview")
+		}
+	}
 	d.Revision = old.Definition.Revision
 	if equivalent(semantic(d), semantic(old.Definition)) && old.PolicyHash == func() string { h, _ := s.policyHash(); return h }() {
-		return s.displayEdit(old, d, definitionBytes(d))
+		return s.displayEditExpected(old, d, definitionBytes(d), expectedPolicy, refuseWriter, planParent, planKey, expectedState)
 	}
 	d.Revision = old.Definition.Revision + 1
 	policyHash, e := s.policyHash()
@@ -244,7 +292,7 @@ func (s *Service) syncDefinition(old Task, d Definition, raw []byte) (Task, erro
 	plan := MakePlan(&d)
 	plan.Revision = old.Plan.Revision + 1
 	boundary := d.Goal != old.Definition.Goal || !equivalent(d.Acceptance, old.Definition.Acceptance) || !equivalent(d.Risk, old.Definition.Risk) || old.PolicyHash != policyHash
-	boundary = boundary || d.Intent != old.Definition.Intent || d.Target != old.Definition.Target || d.Environment != old.Definition.Environment || !equivalent(d.NonGoals, old.Definition.NonGoals)
+	boundary = boundary || d.Intent != old.Definition.Intent || d.Target != old.Definition.Target || d.Environment != old.Definition.Environment || !equivalent(d.NonGoals, old.Definition.NonGoals) || !equivalent(d.Scope, old.Definition.Scope)
 	beforeChecks, afterChecks := semantic(old.Definition), semantic(d)
 	beforeChecks.Checks = nil
 	afterChecks.Checks = nil
@@ -265,12 +313,30 @@ func (s *Service) syncDefinition(old Task, d Definition, raw []byte) (Task, erro
 	plan.Approved = !boundary && old.Plan.Approved
 	var t Task
 	e = s.Store.Write(func(tx *store.Tx) error {
+		if err := checkPlanActive(tx, planParent, planKey); err != nil {
+			return err
+		}
 		cur, e := load(tx, d.ID)
 		if e != nil {
 			return e
 		}
 		if cur.DefinitionHash != old.DefinitionHash {
 			return Error("REVISION_CONFLICT", d.ID)
+		}
+		if expectedState != "" && taskStateHash(cur) != expectedState {
+			return Error("PLAN_TASK_CHANGED", d.ID)
+		}
+		if cur.Status != "open" {
+			return Error("TERMINAL_TASK", "task completed while its definition was being revised")
+		}
+		if refuseWriter && hasWriter(cur) {
+			return Error("PLAN_TASK_BUSY", d.ID)
+		}
+		if expectedPolicy != "" {
+			current, err := s.policyHash()
+			if err != nil || current != expectedPolicy {
+				return Error("PLAN_STALE_POLICY", "project policy changed during application")
+			}
 		}
 		if e = dependencies(tx, d.ID, d.Dependencies); e != nil {
 			return e
@@ -339,10 +405,20 @@ func (s *Service) syncDefinition(old Task, d Definition, raw []byte) (Task, erro
 		if e != nil {
 			return e
 		}
-		if e = tx.File(p, b); e != nil {
+		if expectedState != "" {
+			e = tx.FileExpected(p, b, old.DefinitionHash)
+		} else {
+			e = tx.File(p, b)
+		}
+		if e != nil {
 			return e
 		}
-		if e = s.save(tx, &t); e != nil {
+		if planKey != "" {
+			e = s.savePlan(tx, &t)
+		} else {
+			e = s.save(tx, &t)
+		}
+		if e != nil {
 			return e
 		}
 		return tx.Event(d.ID, "definition_revised", map[string]any{"revision": d.Revision, "source_hash": store.Hash(raw), "previous": old.Definition, "proposed": d, "checks_only": checksOnly, "approval_required": boundary, "impact": "changed input/coverage revalidated; unchanged checks reused only for the identical candidate"})

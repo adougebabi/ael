@@ -1,6 +1,7 @@
 package main
 
 import (
+	"ael/assets"
 	"ael/internal/bootstrap"
 	"ael/internal/core"
 	"ael/internal/execution"
@@ -85,7 +86,14 @@ func input(path string, v any) error {
 	}
 	d := json.NewDecoder(strings.NewReader(string(b)))
 	d.DisallowUnknownFields()
-	return d.Decode(v)
+	if e := d.Decode(v); e != nil {
+		return e
+	}
+	var extra any
+	if e := d.Decode(&extra); e != io.EOF {
+		return core.Error("INVALID_JSON", "trailing data")
+	}
+	return nil
 }
 func run(raw []string) (value any, runErr error) {
 	bootstrap.Build = build
@@ -101,7 +109,7 @@ func run(raw []string) (value any, runErr error) {
 	executor := a.get("executor", "attached")
 	switch cmd {
 	case "", "help":
-		return map[string]any{"commands": []string{"version", "doctor", "init [--dry-run] [--bundle-dir DIR]", "upgrade [--from DIR] [--prefix DIR] [--dry-run]", "update [--project PATH] [--from DIR] [--prefix DIR] [--dry-run] [--ack-stopped]", "task create --file definition.json", "task show|plan --task ID", "task list [--parent EPIC]", "task tree --task EPIC", "task link --parent EPIC --task LEAF [--required=false] [--milestone NAME]", "task edit --task ID --file definition.json --reason TEXT", "task cancel --task ID --reason TEXT", "task delete --task ID --reason TEXT", "task budget --task ID --max-seconds 0 --reason TEXT", "claim --task ID --executor NAME [--unit CHECK] [--owner-pid PERSISTENT_AGENT_PID]", "heartbeat --task ID --attempt ID --token TOKEN", "context --task ID", "progress --task ID --attempt ID --token TOKEN --file progress.json", "assess --file assessment.json", "knowledge status", "knowledge index", "submit --file submission.json", "next --task ID", "resume --task ID [--ack-stopped] [--return-to execute]", "verify --task ID --check ID", "confirm --task ID --kind plan|revision|delivery --decision approve|adjust|reject --revision N --plan-revision N --candidate HASH --reason TEXT --executor PERSON", "confirm --kind review --task ID --check ID --artifacts report.md --reason TEXT --executor PERSON", "dashboard [--addr 0.0.0.0:7331]", "loop run --task ID --config executor.json | --codex [--session EXACT_ID]", "executor probe", "workspace bind --path WORKTREE", "knowledge search --query TEXT", "knowledge read --id ID", "migrate scan --out REPORT", "migrate plan --inventory REPORT/inventory.json --out REPORT", "migrate validate --plan REPORT/plan.json [--proposal proposal.json]", "migrate apply --plan REPORT/plan.json --approved-digest HASH [--proposal proposal.json]", "migrate verify|repair|rollback --migration ID", "activate --migration ID --approved-digest HASH --ack-drained", "storage stats", "storage backup --out NEW_DIR", "storage restore --from EXPORT_DIR", "storage prune [--before RFC3339] [--apply]", "repair"}, "global": "--project PATH; default text; --json for output protocol 1; --verbose; --no-color; errors stderr exit 1", "definition": core.Definition{}, "submission": core.Submission{}, "step_result": core.StepResult{}}, nil
+		return map[string]any{"commands": []string{"version", "doctor", "init [--dry-run] [--bundle-dir DIR]", "upgrade [--from DIR] [--prefix DIR] [--dry-run]", "update [--project PATH] [--from DIR] [--prefix DIR] [--dry-run] [--ack-stopped]", "task create --file definition.json", "task show|plan --task ID", "task list [--parent EPIC]", "task tree --task EPIC", "task link --parent EPIC --task LEAF [--required=false] [--milestone NAME]", "plan prepare --task EPIC --file input.json", "plan preview --file proposal.json", "plan apply --file proposal.json --digest HASH", "plan recover --task EPIC --plan-id ID --reason TEXT", "plan abandon --task EPIC --plan-id ID --reason TEXT", "task edit --task ID --file definition.json --reason TEXT", "task cancel --task ID --reason TEXT", "task delete --task ID --reason TEXT", "task budget --task ID --max-seconds 0 --reason TEXT", "claim --task ID --executor NAME [--unit CHECK] [--owner-pid PERSISTENT_AGENT_PID]", "heartbeat --task ID --attempt ID --token TOKEN", "context --task ID", "progress --task ID --attempt ID --token TOKEN --file progress.json", "assess --file assessment.json", "knowledge status", "knowledge index", "submit --file submission.json", "next --task ID", "resume --task ID [--ack-stopped] [--return-to execute]", "verify --task ID --check ID", "confirm --task ID --kind plan|revision|delivery --decision approve|adjust|reject --revision N --plan-revision N --candidate HASH --reason TEXT --executor PERSON", "confirm --kind review --task ID --check ID --artifacts report.md --reason TEXT --executor PERSON", "dashboard [--addr 0.0.0.0:7331]", "loop run --task ID --config executor.json | --codex [--session EXACT_ID]", "executor probe", "workspace bind --path WORKTREE", "knowledge search --query TEXT", "knowledge read --id ID", "migrate scan --out REPORT", "migrate plan --inventory REPORT/inventory.json --out REPORT", "migrate validate --plan REPORT/plan.json [--proposal proposal.json]", "migrate apply --plan REPORT/plan.json --approved-digest HASH [--proposal proposal.json]", "migrate verify|repair|rollback --migration ID", "activate --migration ID --approved-digest HASH --ack-drained", "storage stats", "storage backup --out NEW_DIR", "storage restore --from EXPORT_DIR", "storage prune [--before RFC3339] [--apply]", "repair"}, "global": "--project PATH; default text; --json for output protocol 1; --verbose; --no-color; errors stderr exit 1", "definition": core.Definition{}, "submission": core.Submission{}, "step_result": core.StepResult{}}, nil
 	case "version":
 		return map[string]any{"version": bootstrap.Version, "build": build, "cli_output_protocol": 1}, nil
 	case "doctor":
@@ -182,6 +190,36 @@ func run(raw []string) (value any, runErr error) {
 		defer func() { value = withTextSummaries(svc, value, cmd) }()
 	}
 	switch cmd {
+	case "plan prepare":
+		var request core.PlanInput
+		if e = input(a.get("file", ""), &request); e != nil {
+			return nil, e
+		}
+		prepared, err := svc.PreparePlan(id, request)
+		if err != nil {
+			return nil, err
+		}
+		schema, err := assets.Files.ReadFile("plan-proposal.json")
+		if err != nil {
+			return nil, err
+		}
+		return planPreparationOutput{PlanPreparation: prepared, Schema: json.RawMessage(schema)}, nil
+	case "plan preview":
+		var proposal core.PlanProposal
+		if e = input(a.get("file", ""), &proposal); e != nil {
+			return nil, e
+		}
+		return svc.PreviewPlan(proposal)
+	case "plan apply":
+		var proposal core.PlanProposal
+		if e = input(a.get("file", ""), &proposal); e != nil {
+			return nil, e
+		}
+		return svc.ApplyPlan(proposal, a.get("digest", ""))
+	case "plan recover":
+		return svc.RecoverRestoredPlan(id, a.get("plan-id", ""), a.get("reason", ""))
+	case "plan abandon":
+		return svc.AbandonPlan(id, a.get("plan-id", ""), a.get("reason", ""))
 	case "migrate apply":
 		var p migration.Plan
 		if e = migration.ReadJSON(a.get("plan", ""), &p); e != nil {

@@ -100,6 +100,28 @@ func (t *Tx) File(path string, body []byte) error {
 	return e
 }
 
+// FileExpected preserves an external edit that arrives after a caller's read.
+// Flush also rejects edits observed when it checks the pending intent.
+func (t *Tx) FileExpected(path string, body []byte, expected string) error {
+	old, err := os.ReadFile(path)
+	if expected == "" {
+		if err == nil || !os.IsNotExist(err) {
+			return fmt.Errorf("FILE_CONFLICT: %s; expected file to be absent", path)
+		}
+	} else if err != nil || Hash(old) != expected {
+		return fmt.Errorf("FILE_CONFLICT: %s; expected input changed", path)
+	}
+	baseline, err := t.intentBaseline(path, expected)
+	if err != nil {
+		return err
+	}
+	if baseline != expected {
+		return fmt.Errorf("FILE_CONFLICT: %s; pending intent has another baseline", path)
+	}
+	_, err = t.Exec("INSERT INTO outbox(path,old_hash,body,state) VALUES(?,?,?,'pending') ON CONFLICT(path) DO UPDATE SET old_hash=excluded.old_hash,body=excluded.body,state='pending'", path, expected, body)
+	return err
+}
+
 // intentBaseline recognizes an intent already applied before a crash or failed
 // DB commit. Other unexpected disk changes retain the old conflict guard.
 func (t *Tx) intentBaseline(path, current string) (string, error) {

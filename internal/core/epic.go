@@ -38,16 +38,33 @@ func validateEpicParent(tx *store.Tx, parent, child string) error {
 // LinkEpic adds one existing leaf without rewriting its historical definition,
 // result, candidate or completion time. The record is saved with the task.
 func (s *Service) LinkEpic(parent, child string, required bool, milestone string) (Next, error) {
+	return s.linkEpic(parent, child, required, milestone, "", "", "", "")
+}
+
+func (s *Service) linkEpic(parent, child string, required bool, milestone, expectedPolicy, expectedHash, planKey, expectedState string) (Next, error) {
 	if err := s.active(); err != nil {
 		return Next{}, err
 	}
-	if _, err := s.Get(parent); err != nil {
+	read := s.Get
+	if expectedPolicy != "" {
+		read = s.planningTask
+	}
+	if _, err := read(parent); err != nil {
 		return Next{}, Error("EPIC_MISSING", parent)
 	}
-	if _, err := s.Get(child); err != nil {
+	if _, err := read(child); err != nil {
 		return Next{}, Error("TASK_MISSING", child)
 	}
 	err := s.Store.Write(func(tx *store.Tx) error {
+		if err := checkPlanActive(tx, parent, planKey); err != nil {
+			return err
+		}
+		if expectedPolicy != "" {
+			policy, err := s.policyHash()
+			if err != nil || policy != expectedPolicy {
+				return Error("PLAN_STALE_POLICY", "project policy changed during application")
+			}
+		}
 		if err := validateEpicParent(tx, parent, child); err != nil {
 			return err
 		}
@@ -58,6 +75,17 @@ func (s *Service) LinkEpic(parent, child string, required bool, milestone string
 		if t.Definition.Type == "epic" {
 			return Error("EPIC_CHILD_INVALID", "only leaf tasks may be associated")
 		}
+		if expectedHash != "" && t.DefinitionHash != expectedHash {
+			return Error("PLAN_TASK_CHANGED", child)
+		}
+		if expectedState != "" && taskStateHash(t) != expectedState {
+			return Error("PLAN_TASK_CHANGED", child)
+		}
+		if expectedState != "" {
+			if err := s.checkTaskFile(t); err != nil {
+				return err
+			}
+		}
 		if t.EpicMembership != nil {
 			return Error("TASK_ALREADY_LINKED", t.EpicMembership.Parent)
 		}
@@ -65,7 +93,12 @@ func (s *Service) LinkEpic(parent, child string, required bool, milestone string
 			return Error("RUNNING_ATTEMPT", "stop or finish the leaf before associating it")
 		}
 		t.EpicMembership = &EpicMembership{Parent: parent, Required: required, Milestone: strings.TrimSpace(milestone)}
-		if err = s.save(tx, &t); err != nil {
+		if planKey != "" {
+			err = s.savePlan(tx, &t)
+		} else {
+			err = s.save(tx, &t)
+		}
+		if err != nil {
 			return err
 		}
 		return tx.Event(child, "epic_linked", t.EpicMembership)

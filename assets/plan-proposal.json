@@ -1,0 +1,346 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "integer"
+    },
+    "id": {
+      "type": "string"
+    },
+    "parent": {
+      "type": "string"
+    },
+    "parent_revision": {
+      "type": "integer"
+    },
+    "request": {
+      "type": "string"
+    },
+    "user_items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "existing_task_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "description",
+          "existing_task_id"
+        ]
+      }
+    },
+    "leaves": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "existing_task_id": {
+            "type": "string"
+          },
+          "expected_revision": {
+            "type": "integer"
+          },
+          "definition": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "goal": {
+                "type": "string"
+              },
+              "intent": {
+                "type": "string"
+              },
+              "scope": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "non_goals": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "acceptance": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "checks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "method": {
+                      "type": "string"
+                    },
+                    "command": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "covers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "timeout_seconds": {
+                      "type": "integer"
+                    },
+                    "artifacts": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "method",
+                    "command",
+                    "covers",
+                    "required",
+                    "timeout_seconds",
+                    "artifacts"
+                  ]
+                }
+              },
+              "dependencies": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "ui": {
+                "type": "boolean"
+              },
+              "ux": {
+                "type": "boolean"
+              },
+              "original_request": {
+                "type": "string"
+              },
+              "target": {
+                "type": "string"
+              },
+              "environment": {
+                "type": "string"
+              },
+              "parent": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string"
+              },
+              "priority": {
+                "type": "integer"
+              },
+              "preset": {
+                "type": "string"
+              },
+              "risk": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "knowledge": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "feedback_of": {
+                "type": "string"
+              },
+              "definition_revision": {
+                "type": "integer"
+              },
+              "max_retries": {
+                "type": "integer"
+              },
+              "max_seconds": {
+                "type": "integer"
+              },
+              "legacy": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "type",
+              "goal",
+              "intent",
+              "scope",
+              "non_goals",
+              "acceptance",
+              "checks",
+              "dependencies",
+              "ui",
+              "ux",
+              "original_request",
+              "target",
+              "environment",
+              "parent",
+              "source",
+              "priority",
+              "preset",
+              "risk",
+              "knowledge",
+              "feedback_of",
+              "definition_revision",
+              "max_retries",
+              "max_seconds",
+              "legacy"
+            ]
+          },
+          "deliverables": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "basis": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "inspection_only": {
+            "type": "boolean"
+          },
+          "depends_on": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "order": {
+            "type": "integer"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "milestone": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "source_ids",
+          "existing_task_id",
+          "expected_revision",
+          "definition",
+          "deliverables",
+          "basis",
+          "capabilities",
+          "inspection_only",
+          "depends_on",
+          "order",
+          "required",
+          "milestone"
+        ]
+      }
+    },
+    "coverage": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "acceptance": {
+            "type": "string"
+          },
+          "leaves": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "integration": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "acceptance",
+          "leaves",
+          "integration"
+        ]
+      }
+    },
+    "input_hash": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "version",
+    "id",
+    "parent",
+    "parent_revision",
+    "request",
+    "user_items",
+    "leaves",
+    "coverage",
+    "input_hash"
+  ]
+}

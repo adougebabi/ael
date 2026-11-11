@@ -396,6 +396,12 @@ func (s *Service) ImportTask(t Task) error {
 		if err == nil && current.EpicMembership != nil && !equivalent(current.EpicMembership, t.EpicMembership) {
 			return Error("TASK_MEMBERSHIP_CONFLICT", "import would replace an existing epic association: "+t.Definition.ID)
 		}
+		if err == nil && current.EpicPlan != nil && !equivalent(current.EpicPlan, t.EpicPlan) {
+			return Error("TASK_PLAN_CONFLICT", "import would replace an existing decomposition: "+t.Definition.ID)
+		}
+		if err == nil && len(current.EpicPlanHistory) > 0 && !equivalent(current.EpicPlanHistory, t.EpicPlanHistory) {
+			return Error("TASK_PLAN_CONFLICT", "import would replace decomposition history: "+t.Definition.ID)
+		}
 		if e := s.save(tx, &t); e != nil {
 			return e
 		}
@@ -500,6 +506,12 @@ func (s *Service) RestoreImportedSnapshot(t Task, definition, outcome []byte) er
 		}
 		if err == nil && current.EpicMembership != nil && !equivalent(current.EpicMembership, t.EpicMembership) {
 			return Error("TASK_MEMBERSHIP_CONFLICT", "migration snapshot would replace an existing epic association: "+t.Definition.ID)
+		}
+		if err == nil && current.EpicPlan != nil && !equivalent(current.EpicPlan, t.EpicPlan) {
+			return Error("TASK_PLAN_CONFLICT", "migration snapshot would replace an existing decomposition: "+t.Definition.ID)
+		}
+		if err == nil && len(current.EpicPlanHistory) > 0 && !equivalent(current.EpicPlanHistory, t.EpicPlanHistory) {
+			return Error("TASK_PLAN_CONFLICT", "migration snapshot would replace decomposition history: "+t.Definition.ID)
 		}
 		b, e := json.Marshal(t)
 		if e != nil {

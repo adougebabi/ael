@@ -22,9 +22,16 @@ func semantic(d Definition) Definition {
 }
 
 func (s *Service) displayEdit(old Task, d Definition, raw []byte) (Task, error) {
+	return s.displayEditExpected(old, d, raw, "", false, "", "", "")
+}
+
+func (s *Service) displayEditExpected(old Task, d Definition, raw []byte, expectedPolicy string, refuseWriter bool, planParent, planKey, expectedState string) (Task, error) {
 	d.Revision = old.Definition.Revision
 	var t Task
 	e := s.Store.Write(func(tx *store.Tx) error {
+		if err := checkPlanActive(tx, planParent, planKey); err != nil {
+			return err
+		}
 		var e error
 		t, e = load(tx, d.ID)
 		if e != nil {
@@ -33,16 +40,38 @@ func (s *Service) displayEdit(old Task, d Definition, raw []byte) (Task, error) 
 		if t.DefinitionHash != old.DefinitionHash {
 			return Error("REVISION_CONFLICT", d.ID)
 		}
+		if expectedState != "" && taskStateHash(t) != expectedState {
+			return Error("PLAN_TASK_CHANGED", d.ID)
+		}
+		if refuseWriter && (t.Status != "open" || hasWriter(t)) {
+			return Error("PLAN_TASK_BUSY", d.ID)
+		}
+		if expectedPolicy != "" {
+			current, err := s.policyHash()
+			if err != nil || current != expectedPolicy {
+				return Error("PLAN_STALE_POLICY", "project policy changed during application")
+			}
+		}
 		t.Definition = d
 		t.DefinitionHash = store.Hash(raw)
-		if e = s.save(tx, &t); e != nil {
+		if planKey != "" {
+			e = s.savePlan(tx, &t)
+		} else {
+			e = s.save(tx, &t)
+		}
+		if e != nil {
 			return e
 		}
 		p, e := s.taskPath(d.ID)
 		if e != nil {
 			return e
 		}
-		if e = tx.File(p, raw); e != nil {
+		if expectedState != "" {
+			e = tx.FileExpected(p, raw, old.DefinitionHash)
+		} else {
+			e = tx.File(p, raw)
+		}
+		if e != nil {
 			return e
 		}
 		return tx.Event(d.ID, "display_updated", map[string]any{"title": d.Title, "revision": d.Revision, "effect": "presentation only; evidence and approvals retained"})

@@ -178,6 +178,12 @@ func (s *Service) Restore(from string) (any, error) {
 		if e == nil && cur.EpicMembership != nil && !equivalent(cur.EpicMembership, t.EpicMembership) {
 			return nil, Error("TASK_MEMBERSHIP_CONFLICT", "backup would replace an existing epic association: "+t.Definition.ID)
 		}
+		if e == nil && cur.EpicPlan != nil && !equivalent(cur.EpicPlan, t.EpicPlan) {
+			return nil, Error("TASK_PLAN_CONFLICT", "backup would replace an existing decomposition: "+t.Definition.ID)
+		}
+		if e == nil && len(cur.EpicPlanHistory) > 0 && !equivalent(cur.EpicPlanHistory, t.EpicPlanHistory) {
+			return nil, Error("TASK_PLAN_CONFLICT", "backup would replace decomposition history: "+t.Definition.ID)
+		}
 		for j := range t.Attempts {
 			a := &t.Attempts[j]
 			a.Token = ""
@@ -236,7 +242,7 @@ func (s *Service) Restore(from string) (any, error) {
 	}
 	erows.Close()
 	metadata := map[string]string{}
-	mrows, err := backup.DB.Query("SELECT key,body FROM metadata WHERE key LIKE 'migration:%'")
+	mrows, err := backup.DB.Query("SELECT key,body FROM metadata WHERE key LIKE 'migration:%' OR key LIKE 'decomposition:%' OR key LIKE 'decomposition-active:%' OR key LIKE 'decomposition-input:%'")
 	if err != nil {
 		return nil, err
 	}
@@ -245,6 +251,27 @@ func (s *Service) Restore(from string) (any, error) {
 		if err = mrows.Scan(&key, &body); err != nil {
 			mrows.Close()
 			return nil, err
+		}
+		if strings.HasPrefix(key, "decomposition:") {
+			var journal planJournal
+			if err = json.Unmarshal([]byte(body), &journal); err != nil {
+				mrows.Close()
+				return nil, err
+			}
+			if journal.Status == "applying" {
+				journal.Status = "restore_review_required"
+			}
+			raw, err := json.Marshal(journal)
+			if err != nil {
+				mrows.Close()
+				return nil, err
+			}
+			metadata[key] = string(raw)
+			continue
+		}
+		if strings.HasPrefix(key, "decomposition-") {
+			metadata[key] = body
+			continue
 		}
 		var run map[string]any
 		if json.Unmarshal([]byte(body), &run) == nil {
@@ -273,6 +300,12 @@ func (s *Service) Restore(from string) (any, error) {
 			}
 			if err == nil && current.EpicMembership != nil && !equivalent(current.EpicMembership, incoming.EpicMembership) {
 				return Error("TASK_MEMBERSHIP_CONFLICT", "backup would replace an existing epic association: "+incoming.Definition.ID)
+			}
+			if err == nil && current.EpicPlan != nil && !equivalent(current.EpicPlan, incoming.EpicPlan) {
+				return Error("TASK_PLAN_CONFLICT", "backup would replace an existing decomposition: "+incoming.Definition.ID)
+			}
+			if err == nil && len(current.EpicPlanHistory) > 0 && !equivalent(current.EpicPlanHistory, incoming.EpicPlanHistory) {
+				return Error("TASK_PLAN_CONFLICT", "backup would replace decomposition history: "+incoming.Definition.ID)
 			}
 		}
 		for key, body := range metadata {
