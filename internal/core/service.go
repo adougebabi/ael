@@ -611,9 +611,16 @@ func (s *Service) mutate(id, kind string, fn func(*store.Tx, *Task) error) (Next
 	return s.Next(id)
 }
 func (s *Service) Claim(id, unit, executor, workspace, session string) (Next, error) {
+	if os.Getenv("AEL_MANAGED_CHILD") == "1" {
+		return Next{}, Error("MANAGED_CHILD_FORBIDDEN", "managed child must return its current result to the parent runner")
+	}
 	return s.claim(id, unit, executor, workspace, session, nil)
 }
 func (s *Service) claim(id, unit, executor, workspace, session string, expected *ReviewExpectation) (Next, error) {
+	return s.claimGuarded(id, unit, executor, workspace, session, expected, nil)
+}
+
+func (s *Service) claimGuarded(id, unit, executor, workspace, session string, expected *ReviewExpectation, guard func(*store.Tx, *Task) error) (Next, error) {
 	if e := s.active(); e != nil {
 		return Next{}, e
 	}
@@ -661,6 +668,18 @@ func (s *Service) claim(id, unit, executor, workspace, session string, expected 
 	}
 	var a Attempt
 	n, e = s.mutate(id, "claimed", func(tx *store.Tx, t *Task) error {
+		if guard != nil {
+			if e := guard(tx, t); e != nil {
+				return e
+			}
+		} else {
+			if e := protectAssignedWork(tx, t, executor); e != nil {
+				return e
+			}
+			if e := assignLegacyWork(tx, t, executor, workspace, s.Root, unit); e != nil {
+				return e
+			}
+		}
 		var current string
 		err := tx.Row("SELECT body FROM metadata WHERE key='tool-generation'").Scan(&current)
 		if err != nil && err != sql.ErrNoRows {
@@ -787,7 +806,12 @@ func (s *Service) Heartbeat(id, attempt, token string) (Next, error) {
 	return s.Next(id)
 }
 
-func (s *Service) Submit(sub Submission) (Next, error) { return s.submit(sub, nil) }
+func (s *Service) Submit(sub Submission) (Next, error) {
+	if os.Getenv("AEL_MANAGED_CHILD") == "1" {
+		return Next{}, Error("MANAGED_CHILD_FORBIDDEN", "managed child must return its current result to the parent runner")
+	}
+	return s.submit(sub, nil)
+}
 func (s *Service) submit(sub Submission, evidence *Evidence) (Next, error) {
 	return s.submitWithHash(sub, evidence, "")
 }

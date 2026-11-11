@@ -210,15 +210,17 @@ type Task struct {
 	TimeLimitSeconds    *int               `json:"time_limit_seconds,omitempty" yaml:"time_limit_seconds,omitempty"`
 }
 type Next struct {
-	Action       string   `json:"next_action" yaml:"next_action"`
-	Reasons      []string `json:"blocking_reasons" yaml:"blocking_reasons"`
-	Step         string   `json:"current_step" yaml:"current_step"`
-	Revision     int      `json:"definition_revision" yaml:"definition_revision"`
-	PlanRevision int      `json:"plan_revision" yaml:"plan_revision"`
-	Board        string   `json:"board" yaml:"board"`
-	Task         *Task    `json:"task,omitempty" yaml:"task"`
-	Attempt      *Attempt `json:"attempt,omitempty" yaml:"attempt"`
-	KeeperPID    int      `json:"keeper_pid,omitempty" yaml:"keeper_pid,omitempty"`
+	StopReason   string          `json:"stop_reason,omitempty"`
+	Checkpoint   *WorkCheckpoint `json:"checkpoint,omitempty"`
+	Action       string          `json:"next_action" yaml:"next_action"`
+	Reasons      []string        `json:"blocking_reasons" yaml:"blocking_reasons"`
+	Step         string          `json:"current_step" yaml:"current_step"`
+	Revision     int             `json:"definition_revision" yaml:"definition_revision"`
+	PlanRevision int             `json:"plan_revision" yaml:"plan_revision"`
+	Board        string          `json:"board" yaml:"board"`
+	Task         *Task           `json:"task,omitempty" yaml:"task"`
+	Attempt      *Attempt        `json:"attempt,omitempty" yaml:"attempt"`
+	KeeperPID    int             `json:"keeper_pid,omitempty" yaml:"keeper_pid,omitempty"`
 }
 type StepResult struct {
 	Knowledge *KnowledgeOutcome `json:"knowledge,omitempty"`

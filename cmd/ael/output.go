@@ -64,6 +64,18 @@ func writeOutput(w io.Writer, value any, machine, verbose bool) error {
 		return json.NewEncoder(w).Encode(value)
 	}
 	switch v := value.(type) {
+	case core.WorkResult:
+		fmt.Fprintf(w, "父任务：%s；Runner：%s\n状态：%s\n", v.Checkpoint.Parent, v.Checkpoint.Runner, v.Action)
+		if v.Checkpoint.Task != "" {
+			fmt.Fprintf(w, "当前叶子：%s；步骤：%s；单元：%s\n", v.Checkpoint.Task, v.Checkpoint.Step, v.Checkpoint.Unit)
+		}
+		if v.Detail != "" {
+			fmt.Fprintf(w, "原因：%s\n", v.Detail)
+		}
+		if v.Next != nil {
+			return writeNext(w, *v.Next, nil, verbose, false)
+		}
+		return nil
 	case planPreparationOutput:
 		fmt.Fprintf(w, "规划输入：%s\n父任务：%s (%s)\n已有叶子：%d\n", v.Input.Request, v.Parent.Title, v.Parent.ID, len(v.ExistingLeaves))
 		fmt.Fprintln(w, "由 Agent 或用户按需求生成提议；使用 --json 读取完整输入和提议 schema。")

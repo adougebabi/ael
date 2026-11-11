@@ -24,28 +24,51 @@ type Config struct {
 	Session        string   `json:"session"`
 	MaxSteps       int      `json:"max_steps"`
 	TimeoutSeconds int      `json:"timeout_seconds"`
+	Runner         string   `json:"runner,omitempty"`
+	Capabilities   []string `json:"capabilities,omitempty"`
+	Resources      []string `json:"resources,omitempty"`
+	Parallel       bool     `json:"parallel,omitempty"`
 }
 
-func Run(s *core.Service, id string, c Config) (core.Next, error) {
+func prepareConfig(c *Config) error {
 	if os.Getenv("AEL_MANAGED_CHILD") == "1" {
-		return core.Next{}, core.Error("RECURSIVE_LOOP", "managed child must return one StepResult")
+		return core.Error("RECURSIVE_LOOP", "managed child must return one StepResult")
 	}
 	if c.MaxSteps <= 0 {
 		c.MaxSteps = 20
 	}
 	if c.TimeoutSeconds < 0 {
-		return core.Next{}, core.Error("INVALID_TIMEOUT", "timeout_seconds must be nonnegative; 0 disables the process timeout")
+		return core.Error("INVALID_TIMEOUT", "timeout_seconds must be nonnegative; 0 disables the process timeout")
 	}
 	if !c.Codex && len(c.Command) == 0 {
-		return core.Next{}, core.Error("EXECUTOR_MISSING", "configure command or --codex")
+		return core.Error("EXECUTOR_MISSING", "configure command or --codex")
 	}
 	if len(c.Command) > 0 && filepath.Base(c.Command[0]) == "ael" {
 		for _, a := range c.Command[1:] {
 			if a == "loop" {
-				return core.Next{}, core.Error("RECURSIVE_LOOP", "executor cannot be ael loop")
+				return core.Error("RECURSIVE_LOOP", "executor cannot be ael loop")
 			}
 		}
 	}
+	return nil
+}
+
+func Run(s *core.Service, id string, c Config) (result core.Next, runErr error) {
+	if err := prepareConfig(&c); err != nil {
+		return core.Next{}, err
+	}
+	maxSteps := false
+	defer func() {
+		reason := nextStopReason(result, runErr)
+		if maxSteps {
+			reason = "max_steps"
+		}
+		cp := core.WorkCheckpoint{Runner: "single:" + id, Task: id, Step: result.Step, Revision: result.Revision, PlanRevision: result.PlanRevision, At: time.Now().UTC()}
+		result.StopReason, result.Checkpoint = reason, &cp
+		if err := s.SaveWorkCheckpoint(core.WorkResult{Action: result.Action, StopReason: reason, Checkpoint: cp}); err != nil && runErr == nil {
+			runErr = err
+		}
+	}()
 	for i := 0; i < c.MaxSteps; i++ {
 		n, e := s.Next(id)
 		if e != nil {
@@ -100,6 +123,14 @@ func Run(s *core.Service, id string, c Config) (core.Next, error) {
 			return n, nil
 		}
 	}
+	next, err := s.Next(id)
+	if err != nil {
+		return next, err
+	}
+	if next.Action != "continue" && next.Action != "repair" {
+		return next, nil
+	}
+	maxSteps = true
 	return s.Pause(id, "managed max_steps reached; checkpoint saved")
 }
 func runAttempt(s *core.Service, id string, c *Config, n core.Next) (core.Next, error) {

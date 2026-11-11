@@ -50,6 +50,15 @@ func decode(r *http.Request, v any) error {
 	}
 	return nil
 }
+func splitWorkList(value string) []string {
+	result := []string{}
+	for _, part := range strings.Split(value, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			result = append(result, part)
+		}
+	}
+	return result
+}
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "no-store")
@@ -265,6 +274,59 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			required := input.Required == nil || *input.Required
 			v, e := h.Service.LinkEpic(input.Parent, input.Task, required, input.Milestone)
 			reply(w, v, e)
+		case "/api/work/next":
+			if r.Method != "GET" {
+				http.Error(w, "METHOD", 405)
+				return
+			}
+			q := r.URL.Query()
+			parallel := false
+			if value := q.Get("parallel"); value != "" {
+				var err error
+				parallel, err = strconv.ParseBool(value)
+				if err != nil {
+					reply(w, nil, core.Error("INVALID_FLAG_VALUE", "parallel"))
+					return
+				}
+			}
+			request := core.WorkRequest{Parent: q.Get("parent"), Runner: q.Get("runner"), Capabilities: splitWorkList(q.Get("capabilities")), Resources: splitWorkList(q.Get("resources")), Parallel: parallel, Workspace: q.Get("workspace"), Session: q.Get("session")}
+			v, e := h.Service.NextWork(request)
+			reply(w, v, e)
+		case "/api/work/claim":
+			if r.Method != "POST" {
+				http.Error(w, "METHOD", 405)
+				return
+			}
+			var request core.WorkRequest
+			if e := decode(r, &request); e != nil {
+				reply(w, nil, e)
+				return
+			}
+			v, e := h.Service.ClaimNextWork(request)
+			reply(w, v, e)
+		case "/api/work/release":
+			if r.Method != "POST" {
+				http.Error(w, "METHOD", 405)
+				return
+			}
+			var request struct {
+				Parent string `json:"parent"`
+				Runner string `json:"runner"`
+				Reason string `json:"reason"`
+			}
+			if e := decode(r, &request); e != nil {
+				reply(w, nil, e)
+				return
+			}
+			v, e := h.Service.ReleaseWork(request.Parent, request.Runner, request.Reason)
+			reply(w, v, e)
+		case "/api/work/checkpoint":
+			if r.Method != "GET" {
+				http.Error(w, "METHOD", 405)
+				return
+			}
+			v, e := h.Service.WorkCheckpoint(r.URL.Query().Get("parent"), r.URL.Query().Get("runner"))
+			reply(w, v, e)
 		case "/api/attention":
 			if r.Method != "GET" {
 				http.Error(w, "METHOD", 405)
@@ -323,6 +385,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				ID           string          `json:"id"`
 				Unit         string          `json:"unit"`
 				Executor     string          `json:"executor"`
+				Attempt      string          `json:"attempt"`
+				Token        string          `json:"token"`
 				Reason       string          `json:"reason"`
 				Decision     string          `json:"decision"`
 				Result       string          `json:"result"`
@@ -351,9 +415,25 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			case "submit":
 				v, e = h.Service.Submit(a.Submission)
 			case "verify":
-				v, e = h.Service.Verify(a.ID, a.Unit, "dashboard")
+				if a.Attempt != "" || a.Token != "" {
+					if a.Attempt == "" || a.Token == "" {
+						e = core.Error("ATTEMPT_TOKEN_REQUIRED", "supply both attempt and token")
+					} else {
+						v, e = h.Service.VerifyClaim(a.ID, a.Unit, a.Executor, a.Attempt, a.Token)
+					}
+				} else {
+					v, e = h.Service.Verify(a.ID, a.Unit, "dashboard")
+				}
 			case "assess":
-				v, e = h.Service.Assess(a.Assessment)
+				if a.Attempt != "" || a.Token != "" {
+					if a.Attempt == "" || a.Token == "" {
+						e = core.Error("ATTEMPT_TOKEN_REQUIRED", "supply both attempt and token")
+					} else {
+						v, e = h.Service.AssessExisting(a.Assessment, a.Attempt, a.Token)
+					}
+				} else {
+					v, e = h.Service.Assess(a.Assessment)
+				}
 			case "review":
 				v, e = h.Service.ReviewExact(a.ID, a.Unit, a.Executor, a.Reason, a.Artifacts, core.ReviewExpectation{Candidate: a.Candidate, DefinitionRevision: a.Revision, PlanRevision: a.PlanRevision})
 			case "review_result":

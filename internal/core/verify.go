@@ -23,6 +23,34 @@ func (s *Service) Verify(id, check, executor string) (Next, error) {
 	if e != nil {
 		return n, e
 	}
+	return s.verifyClaimed(id, check, executor, n)
+}
+
+// VerifyClaim executes the exact check already atomically claimed by a Runner.
+func (s *Service) VerifyClaim(id, check, executor, attemptID, token string) (Next, error) {
+	if os.Getenv("AEL_MANAGED_CHILD") == "1" {
+		return Next{}, Error("MANAGED_CHILD_FORBIDDEN", "managed child must return its current result to the parent runner")
+	}
+	t, err := s.Get(id)
+	if err != nil {
+		return Next{}, err
+	}
+	a, err := findAttempt(&t, attemptID, token)
+	if err != nil {
+		return Next{}, err
+	}
+	if t.Step != "verify" || a.Unit != "check:"+check || a.Executor != executor {
+		return Next{}, Error("WRONG_UNIT", check)
+	}
+	n := t.BaseNext()
+	n.Task = &t
+	copy := *a
+	n.Attempt = &copy
+	return s.verifyClaimed(id, check, executor, n)
+}
+
+func (s *Service) verifyClaimed(id, check, executor string, n Next) (Next, error) {
+	var e error
 	a := n.Attempt
 	t := n.Task
 	finished := false

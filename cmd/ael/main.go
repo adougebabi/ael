@@ -67,7 +67,7 @@ func parse(raw []string) args {
 }
 func booleanFlag(key string) bool {
 	switch key {
-	case "dry-run", "ack-stopped", "ack-drained", "apply", "codex", "json", "verbose", "no-color", "required":
+	case "dry-run", "ack-stopped", "ack-drained", "apply", "codex", "json", "verbose", "no-color", "required", "parallel":
 		return true
 	}
 	return false
@@ -79,6 +79,15 @@ func (a args) get(k, d string) string {
 	return d
 }
 func (a args) has(k string) bool { return a.Flags[k] == "true" }
+func csvValues(value string) []string {
+	result := []string{}
+	for _, part := range strings.Split(value, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			result = append(result, part)
+		}
+	}
+	return result
+}
 func input(path string, v any) error {
 	b, e := os.ReadFile(path)
 	if e != nil {
@@ -98,7 +107,7 @@ func input(path string, v any) error {
 func run(raw []string) (value any, runErr error) {
 	bootstrap.Build = build
 	a := parse(raw)
-	for _, flag := range []string{"json", "verbose", "no-color"} {
+	for _, flag := range []string{"json", "verbose", "no-color", "parallel"} {
 		if value, ok := a.Flags[flag]; ok && value != "true" && value != "false" {
 			return nil, core.Error("INVALID_FLAG_VALUE", flag)
 		}
@@ -109,7 +118,7 @@ func run(raw []string) (value any, runErr error) {
 	executor := a.get("executor", "attached")
 	switch cmd {
 	case "", "help":
-		return map[string]any{"commands": []string{"version", "doctor", "init [--dry-run] [--bundle-dir DIR]", "upgrade [--from DIR] [--prefix DIR] [--dry-run]", "update [--project PATH] [--from DIR] [--prefix DIR] [--dry-run] [--ack-stopped]", "task create --file definition.json", "task show|plan --task ID", "task list [--parent EPIC]", "task tree --task EPIC", "task link --parent EPIC --task LEAF [--required=false] [--milestone NAME]", "plan prepare --task EPIC --file input.json", "plan preview --file proposal.json", "plan apply --file proposal.json --digest HASH", "plan recover --task EPIC --plan-id ID --reason TEXT", "plan abandon --task EPIC --plan-id ID --reason TEXT", "task edit --task ID --file definition.json --reason TEXT", "task cancel --task ID --reason TEXT", "task delete --task ID --reason TEXT", "task budget --task ID --max-seconds 0 --reason TEXT", "claim --task ID --executor NAME [--unit CHECK] [--owner-pid PERSISTENT_AGENT_PID]", "heartbeat --task ID --attempt ID --token TOKEN", "context --task ID", "progress --task ID --attempt ID --token TOKEN --file progress.json", "assess --file assessment.json", "knowledge status", "knowledge index", "submit --file submission.json", "next --task ID", "resume --task ID [--ack-stopped] [--return-to execute]", "verify --task ID --check ID", "confirm --task ID --kind plan|revision|delivery --decision approve|adjust|reject --revision N --plan-revision N --candidate HASH --reason TEXT --executor PERSON", "confirm --kind review --task ID --check ID --artifacts report.md --reason TEXT --executor PERSON", "dashboard [--addr 0.0.0.0:7331]", "loop run --task ID --config executor.json | --codex [--session EXACT_ID]", "executor probe", "workspace bind --path WORKTREE", "knowledge search --query TEXT", "knowledge read --id ID", "migrate scan --out REPORT", "migrate plan --inventory REPORT/inventory.json --out REPORT", "migrate validate --plan REPORT/plan.json [--proposal proposal.json]", "migrate apply --plan REPORT/plan.json --approved-digest HASH [--proposal proposal.json]", "migrate verify|repair|rollback --migration ID", "activate --migration ID --approved-digest HASH --ack-drained", "storage stats", "storage backup --out NEW_DIR", "storage restore --from EXPORT_DIR", "storage prune [--before RFC3339] [--apply]", "repair"}, "global": "--project PATH; default text; --json for output protocol 1; --verbose; --no-color; errors stderr exit 1", "definition": core.Definition{}, "submission": core.Submission{}, "step_result": core.StepResult{}}, nil
+		return map[string]any{"commands": []string{"version", "doctor", "init [--dry-run] [--bundle-dir DIR]", "upgrade [--from DIR] [--prefix DIR] [--dry-run]", "update [--project PATH] [--from DIR] [--prefix DIR] [--dry-run] [--ack-stopped]", "task create --file definition.json", "task show|plan --task ID", "task list [--parent EPIC]", "task tree --task EPIC", "task link --parent EPIC --task LEAF [--required=false] [--milestone NAME]", "plan prepare --task EPIC --file input.json", "plan preview --file proposal.json", "plan apply --file proposal.json --digest HASH", "plan recover --task EPIC --plan-id ID --reason TEXT", "plan abandon --task EPIC --plan-id ID --reason TEXT", "task edit --task ID --file definition.json --reason TEXT", "task cancel --task ID --reason TEXT", "task delete --task ID --reason TEXT", "task budget --task ID --max-seconds 0 --reason TEXT", "claim --task ID --executor NAME [--unit CHECK] [--owner-pid PERSISTENT_AGENT_PID]", "heartbeat --task ID --attempt ID --token TOKEN", "context --task ID", "progress --task ID --attempt ID --token TOKEN --file progress.json", "assess --file assessment.json [--attempt ID --token TOKEN]", "knowledge status", "knowledge index", "submit --file submission.json", "next --task ID", "work next --parent EPIC --runner ID [--capabilities A,B]", "work claim --parent EPIC --runner ID [--capabilities A,B] [--parallel --resources A,B] [--owner-pid PID]", "work release --parent EPIC --runner ID --reason TEXT", "work checkpoint --parent EPIC --runner ID", "resume --task ID [--ack-stopped] [--return-to execute]", "verify --task ID --check ID [--attempt ID --token TOKEN --executor RUNNER]", "confirm --task ID --kind plan|revision|delivery --decision approve|adjust|reject --revision N --plan-revision N --candidate HASH --reason TEXT --executor PERSON", "confirm --kind review --task ID --check ID --artifacts report.md --reason TEXT --executor PERSON", "dashboard [--addr 0.0.0.0:7331]", "loop run --task ID --config executor.json | --codex [--session EXACT_ID]", "loop run --parent EPIC --runner ID --config executor.json [--capabilities A,B]", "executor probe", "workspace bind --path WORKTREE", "knowledge search --query TEXT", "knowledge read --id ID", "migrate scan --out REPORT", "migrate plan --inventory REPORT/inventory.json --out REPORT", "migrate validate --plan REPORT/plan.json [--proposal proposal.json]", "migrate apply --plan REPORT/plan.json --approved-digest HASH [--proposal proposal.json]", "migrate verify|repair|rollback --migration ID", "activate --migration ID --approved-digest HASH --ack-drained", "storage stats", "storage backup --out NEW_DIR", "storage restore --from EXPORT_DIR", "storage prune [--before RFC3339] [--apply]", "repair"}, "global": "--project PATH; default text; --json for output protocol 1; --verbose; --no-color; errors stderr exit 1", "definition": core.Definition{}, "submission": core.Submission{}, "step_result": core.StepResult{}}, nil
 	case "version":
 		return map[string]any{"version": bootstrap.Version, "build": build, "cli_output_protocol": 1}, nil
 	case "doctor":
@@ -190,6 +199,39 @@ func run(raw []string) (value any, runErr error) {
 		defer func() { value = withTextSummaries(svc, value, cmd) }()
 	}
 	switch cmd {
+	case "work next", "work claim":
+		request := core.WorkRequest{Parent: a.get("parent", id), Runner: a.get("runner", ""), Capabilities: csvValues(a.get("capabilities", "")), Resources: csvValues(a.get("resources", "")), Parallel: a.has("parallel"), Workspace: a.get("workspace", ""), Session: a.get("session", "")}
+		if cmd == "work next" {
+			return svc.NextWork(request)
+		}
+		owner, identity := 0, ""
+		if value := a.get("owner-pid", ""); value != "" {
+			owner, e = strconv.Atoi(value)
+			if e != nil {
+				return nil, e
+			}
+			identity, e = process.Identity(owner)
+			if e != nil {
+				return nil, e
+			}
+		}
+		selected, err := svc.ClaimNextWork(request)
+		if err != nil || owner == 0 || selected.Action != "claimed" {
+			return selected, err
+		}
+		started, err := startKeeper(svc, selected.Checkpoint.Task, *selected.Next, owner, identity)
+		if err != nil {
+			if selected.Next != nil && selected.Next.Attempt != nil {
+				_, _ = svc.Interrupt(selected.Checkpoint.Task, selected.Next.Attempt.ID, selected.Next.Attempt.Token, "attached keeper could not be established")
+			}
+			return selected, err
+		}
+		selected.Next = &started
+		return selected, nil
+	case "work release":
+		return svc.ReleaseWork(a.get("parent", id), a.get("runner", ""), a.get("reason", ""))
+	case "work checkpoint":
+		return svc.WorkCheckpoint(a.get("parent", id), a.get("runner", ""))
 	case "plan prepare":
 		var request core.PlanInput
 		if e = input(a.get("file", ""), &request); e != nil {
@@ -356,6 +398,12 @@ func run(raw []string) (value any, runErr error) {
 		}
 		return svc.Submit(sub)
 	case "verify":
+		if a.get("attempt", "") != "" || a.get("token", "") != "" {
+			if a.get("attempt", "") == "" || a.get("token", "") == "" {
+				return nil, core.Error("ATTEMPT_TOKEN_REQUIRED", "supply both attempt and token")
+			}
+			return svc.VerifyClaim(id, a.get("check", ""), executor, a.get("attempt", ""), a.get("token", ""))
+		}
 		return svc.Verify(id, a.get("check", ""), executor)
 	case "resume":
 		return svc.Resume(id, a.get("return-to", ""), a.has("ack-stopped"))
@@ -387,6 +435,17 @@ func run(raw []string) (value any, runErr error) {
 		}
 		c.Codex = c.Codex || a.has("codex")
 		c.Session = a.get("session", c.Session)
+		if parent := a.get("parent", ""); parent != "" {
+			c.Runner = a.get("runner", c.Runner)
+			if value := a.get("capabilities", ""); value != "" {
+				c.Capabilities = csvValues(value)
+			}
+			if value := a.get("resources", ""); value != "" {
+				c.Resources = csvValues(value)
+			}
+			c.Parallel = c.Parallel || a.has("parallel")
+			return execution.RunEpic(svc, parent, c)
+		}
 		return execution.Run(svc, id, c)
 	case "progress":
 		var p core.Progress
@@ -398,6 +457,12 @@ func run(raw []string) (value any, runErr error) {
 		var r core.Assessment
 		if e = input(a.get("file", ""), &r); e != nil {
 			return nil, e
+		}
+		if a.get("attempt", "") != "" || a.get("token", "") != "" {
+			if a.get("attempt", "") == "" || a.get("token", "") == "" {
+				return nil, core.Error("ATTEMPT_TOKEN_REQUIRED", "supply both attempt and token")
+			}
+			return svc.AssessExisting(r, a.get("attempt", ""), a.get("token", ""))
 		}
 		return svc.Assess(r)
 	case "knowledge index":

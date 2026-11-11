@@ -4,6 +4,7 @@ import (
 	"ael/internal/store"
 	"encoding/json"
 	"net/http"
+	"os"
 	"runtime"
 	"slices"
 	"strings"
@@ -25,6 +26,26 @@ type Assessment struct {
 
 func (s *Service) Assess(r Assessment) (Next, error)                  { return s.assess(r, nil) }
 func (s *Service) AssessClaim(r Assessment, a *Attempt) (Next, error) { return s.assess(r, a) }
+
+// AssessExisting submits evidence against the exact attempt claimed by work claim.
+func (s *Service) AssessExisting(r Assessment, attemptID, token string) (Next, error) {
+	if os.Getenv("AEL_MANAGED_CHILD") == "1" {
+		return Next{}, Error("MANAGED_CHILD_FORBIDDEN", "managed child must return its current result to the parent runner")
+	}
+	t, err := s.Get(r.Task)
+	if err != nil {
+		return Next{}, err
+	}
+	a, err := findAttempt(&t, attemptID, token)
+	if err != nil {
+		return Next{}, err
+	}
+	if a.Unit != "check:"+r.Check || a.Executor != r.Executor {
+		return Next{}, Error("WRONG_UNIT", r.Check)
+	}
+	copy := *a
+	return s.assess(r, &copy)
+}
 func (s *Service) assess(r Assessment, a *Attempt) (Next, error) {
 	t, e := s.Get(r.Task)
 	if e != nil {
