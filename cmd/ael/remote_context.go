@@ -284,7 +284,7 @@ func remoteContextCommand(cmd string, a args, config, project string, binding re
 		for _, source := range selected {
 			uploadKey := "context_" + store.Hash([]byte(key + "\n" + source.reference.ID))[:40]
 			uploadArgs := args{Flags: map[string]string{"task": taskID, "source": "knowledge snapshot", "candidate": task.Candidate, "expected-revision": revision, "operation-id": uploadKey, "idempotency-key": uploadKey}}
-			result, err := remoteUploadBytes(uploadArgs, config, project, binding, filepath.Base(source.reference.Source), source.data)
+			result, err := remoteUploadBytes(uploadArgs, config, project, binding, filepath.Base(source.reference.Source), source.data, nil)
 			if err != nil {
 				return nil, fmt.Errorf("%w; context source %s", err, source.reference.ID)
 			}

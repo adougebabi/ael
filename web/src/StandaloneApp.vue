@@ -365,7 +365,7 @@ onUnmounted(() => { if (previewTimer) clearInterval(previewTimer); clearPreview(
               <li v-for="item in artifacts" :key="item.id">
                 <div><strong>{{ item.filename }}</strong><small>{{ item.id }} · {{ item.size }} 字节 · {{ item.sha256 }}</small><small v-if="item.status !== 'finalized'">{{ item.status === 'purged' ? '原件已清理' : '原件不可用' }}</small></div>
                 <div v-if="item.status === 'finalized'" class="standalone-evidence-actions">
-                  <button v-if="item.mime !== 'video/mp4'" type="button" :disabled="busy" @click="preview(item)">预览</button>
+                  <button v-if="['image/png', 'image/jpeg', 'text/plain'].includes(item.mime)" type="button" :disabled="busy" @click="preview(item)">预览</button>
                   <a :href="`/api/v1/projects/${encodeURIComponent(selected.id)}/artifacts/${encodeURIComponent(item.id)}/content`" download>下载</a>
                 </div>
               </li>

@@ -93,6 +93,9 @@ func remoteCommand(cmd string, a args, binding remote.Binding) (any, error) {
 		"knowledge index": {}, "context publish": {"task", "observation", "expected-revision", "operation-id", "idempotency-key"},
 		"context show":         {"context", "task"},
 		"context record-check": {"context", "task", "check", "artifact", "expected-revision", "operation-id", "idempotency-key"},
+		"runner register":      {"file", "operation-id", "idempotency-key"}, "runner run": {"file", "task", "parent"},
+		"runner resume-result": {"file", "pending"},
+		"runner recover-claim": {"file", "claim"},
 		"task create":          {"file", "operation-id", "idempotency-key", "expected-revision"},
 		"task edit":            {"task", "file", "reason", "operation-id", "idempotency-key", "expected-revision"},
 		"task pause":           {"task", "reason", "operation-id", "idempotency-key", "expected-revision"},
@@ -135,6 +138,9 @@ func remoteCommand(cmd string, a args, binding remote.Binding) (any, error) {
 	}
 	if cmd == "knowledge index" || strings.HasPrefix(cmd, "context ") {
 		return remoteContextCommand(cmd, a, config, project, binding)
+	}
+	if strings.HasPrefix(cmd, "runner ") {
+		return remoteRunnerCommand(cmd, a, config, project, binding)
 	}
 	method, path := http.MethodGet, ""
 	var payload any

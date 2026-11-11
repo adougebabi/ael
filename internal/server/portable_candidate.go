@@ -25,7 +25,11 @@ CREATE TABLE IF NOT EXISTS portable_observations(id TEXT PRIMARY KEY,task_id TEX
 CREATE TABLE IF NOT EXISTS portable_operations(actor TEXT NOT NULL,key TEXT NOT NULL,hash TEXT NOT NULL,result TEXT NOT NULL,PRIMARY KEY(actor,key));
 CREATE TABLE IF NOT EXISTS portable_contexts(id TEXT PRIMARY KEY,task_id TEXT NOT NULL,candidate_id TEXT NOT NULL,body TEXT NOT NULL,created TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS portable_context_sources(context_id TEXT NOT NULL,id TEXT NOT NULL,path TEXT NOT NULL,artifact_id TEXT NOT NULL,sha256 TEXT NOT NULL,status TEXT NOT NULL,kind TEXT NOT NULL,reason TEXT NOT NULL,PRIMARY KEY(context_id,id));
-CREATE TABLE IF NOT EXISTS portable_checks(id TEXT PRIMARY KEY,context_id TEXT NOT NULL,task_id TEXT NOT NULL,candidate_id TEXT NOT NULL,check_id TEXT NOT NULL,artifact_id TEXT NOT NULL,body TEXT NOT NULL,created TEXT NOT NULL);`)
+CREATE TABLE IF NOT EXISTS portable_checks(id TEXT PRIMARY KEY,context_id TEXT NOT NULL,task_id TEXT NOT NULL,candidate_id TEXT NOT NULL,check_id TEXT NOT NULL,artifact_id TEXT NOT NULL,body TEXT NOT NULL,created TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS remote_runners(id TEXT PRIMARY KEY,actor TEXT NOT NULL,workspace_id TEXT NOT NULL,checkout_id TEXT NOT NULL,repository TEXT NOT NULL,version TEXT NOT NULL,capabilities TEXT NOT NULL,created TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS remote_runner_attempts(attempt_id TEXT PRIMARY KEY,task_id TEXT NOT NULL,runner_id TEXT NOT NULL,actor TEXT NOT NULL,context_id TEXT NOT NULL,candidate_id TEXT NOT NULL,claim_revision TEXT NOT NULL,output_candidate TEXT NOT NULL DEFAULT '',state TEXT NOT NULL DEFAULT 'running',fence INTEGER NOT NULL,token_hash TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS remote_artifact_leases(upload_id TEXT PRIMARY KEY,runner_id TEXT NOT NULL,attempt_id TEXT NOT NULL,fence INTEGER NOT NULL,token_hash TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS remote_runner_result_ops(submission_key TEXT PRIMARY KEY,actor TEXT NOT NULL,runner_id TEXT NOT NULL,operation_id TEXT NOT NULL);`)
 	if err != nil {
 		return nil, err
 	}
@@ -164,14 +168,16 @@ func portableError(w http.ResponseWriter, err error) {
 	code, detail, _ := strings.Cut(err.Error(), ": ")
 	status := http.StatusInternalServerError
 	switch code {
-	case "REPOSITORY_NOT_FOUND", "TASK_NOT_FOUND", "CANDIDATE_NOT_FOUND", "CONTEXT_NOT_FOUND", "OBSERVATION_NOT_FOUND", "CHECK_NOT_FOUND":
+	case "REPOSITORY_NOT_FOUND", "TASK_NOT_FOUND", "CANDIDATE_NOT_FOUND", "CONTEXT_NOT_FOUND", "OBSERVATION_NOT_FOUND", "CHECK_NOT_FOUND", "RUNNER_NOT_FOUND":
 		status = http.StatusNotFound
-	case "REVISION_CONFLICT", "IDEMPOTENCY_CONFLICT", "CANDIDATE_CONFLICT", "CONTEXT_SOURCE_MISMATCH", "KNOWLEDGE_MISSING", "KNOWLEDGE_CONFLICT":
+	case "REVISION_CONFLICT", "IDEMPOTENCY_CONFLICT", "CANDIDATE_CONFLICT", "CONTEXT_SOURCE_MISMATCH", "KNOWLEDGE_MISSING", "KNOWLEDGE_CONFLICT", "KNOWLEDGE_UNVERIFIED", "CANDIDATE_CHANGED", "REMOTE_WORKSPACE_MISMATCH", "STALE_TOKEN", "STALE_EXECUTION_UNIT", "CLAIM_CONFLICT", "RUNNER_WIP", "NEXT_WORK_CHANGED", "PARENT_SCOPE_REQUIRED", "NOT_RUNNABLE", "PLAN_APPLY_IN_PROGRESS", "DEPENDENCY_BLOCKED", "DELIVERY_MANUAL_REQUIRED", "PLAN_APPROVAL_REQUIRED", "HUMAN_REVIEW_REQUIRED", "RUNNER_CAPABILITY_MISSING", "CHECK_REQUIRED", "PARENT_WRITE_FORBIDDEN", "ROOT_CAUSE_REVIEW_REQUIRED", "BUDGET_EXHAUSTED", "POLICY_CHANGED", "INSPECTION_WRITE_DETECTED", "ARTIFACT_REQUIRED", "ARTIFACT_MISSING", "CHECK_METHOD_MISMATCH", "CHECK_RESULT_INVALID", "ASSESSMENT_EVIDENCE_REQUIRED", "SCREENSHOT_REQUIRED", "TASK_CONTEXT_REQUIRED", "KNOWLEDGE_OUTCOME_REQUIRED", "KNOWLEDGE_ARTIFACT_REQUIRED", "TRUSTED_CHECK_REQUIRED", "TERMINAL_TASK", "WRONG_UNIT":
 		status = http.StatusConflict
 	case "CONTEXT_SOURCE_UNAVAILABLE":
 		status = http.StatusGone
-	case "REMOTE_OPERATION_REQUIRED", "CANDIDATE_INVALID":
+	case "REMOTE_OPERATION_REQUIRED", "CANDIDATE_INVALID", "RUNNER_INVALID", "PROGRESS_REQUIRED", "INVALID_WORK_STAGE", "RESULT_REQUIRED", "INVALID_RESULT", "INVALID_FAILURE_CLASS":
 		status = http.StatusBadRequest
+	case "FORBIDDEN":
+		status = http.StatusForbidden
 	default:
 		standaloneFail(w, http.StatusInternalServerError, "CANDIDATE_STORAGE_ERROR")
 		return
@@ -225,6 +231,182 @@ func (h *standaloneHandler) remotePortable(w http.ResponseWriter, r *http.Reques
 		}
 		standaloneReply(w, http.StatusOK, map[string]any{"found": true, "result": result})
 		return
+	}
+	if kind == "runners" && len(parts) == 3 && parts[1] == "operations" && r.Method == http.MethodGet {
+		result, err := p.runnerResultReceipt(principal, parts[0], parts[2])
+		if err != nil {
+			portableError(w, err)
+			return
+		}
+		standaloneReply(w, http.StatusOK, result)
+		return
+	}
+	if kind == "runners" && len(parts) == 1 && r.Method == http.MethodGet {
+		result, err := p.getRunner(principal, parts[0])
+		if err != nil {
+			portableError(w, err)
+			return
+		}
+		standaloneReply(w, http.StatusOK, result)
+		return
+	}
+	if kind == "runners" && len(parts) == 2 && parts[1] == "next" && r.Method == http.MethodGet {
+		result, err := p.nextRunner(principal, parts[0], r.URL.Query().Get("parent"))
+		if err != nil {
+			portableError(w, err)
+			return
+		}
+		standaloneReply(w, http.StatusOK, result)
+		return
+	}
+	if kind == "runners" && r.Method == http.MethodPost {
+		// Process groups and same-user file permissions do not provide the
+		// required writer/credential isolation. Keep remote execution closed
+		// until a supported, independently verified isolation boundary exists.
+		if !remoteRunnerIsolationVerified() && len(parts) == 2 && (parts[1] == "claim" || parts[1] == "observe" || parts[1] == "submit") {
+			standaloneFail(w, http.StatusServiceUnavailable, "RUNNER_ISOLATION_REQUIRED")
+			return
+		}
+		if len(parts) == 0 {
+			var input remoteRunnerInput
+			if decode(r, &input) != nil {
+				portableError(w, errors.New("RUNNER_INVALID"))
+				return
+			}
+			result, err := p.registerRunner(principal, input)
+			if err != nil {
+				portableError(w, err)
+				return
+			}
+			standaloneReply(w, http.StatusCreated, result)
+			return
+		}
+		if len(parts) == 2 && parts[1] == "claim" {
+			if service.Store.Flush() != nil {
+				standaloneFail(w, http.StatusServiceUnavailable, "PROJECTION_BLOCKED")
+				return
+			}
+			artifacts, err := h.server.artifacts(project, service)
+			if err != nil {
+				portableError(w, err)
+				return
+			}
+			var input remoteRunnerClaimInput
+			if decode(r, &input) != nil {
+				portableError(w, errors.New("RUNNER_INVALID"))
+				return
+			}
+			result, err := p.claimRunner(principal, role, parts[0], input, artifacts)
+			if err != nil {
+				portableError(w, err)
+				return
+			}
+			if service.Store.Flush() != nil {
+				standaloneFail(w, http.StatusServiceUnavailable, "PROJECTION_BLOCKED")
+				return
+			}
+			standaloneReply(w, http.StatusCreated, result)
+			return
+		}
+		if len(parts) == 2 && parts[1] == "heartbeat" {
+			var input remoteRunnerHeartbeatInput
+			if decode(r, &input) != nil {
+				portableError(w, errors.New("RUNNER_INVALID"))
+				return
+			}
+			result, err := p.heartbeatRunner(principal, parts[0], input)
+			if err != nil {
+				portableError(w, err)
+				return
+			}
+			standaloneReply(w, http.StatusOK, result)
+			return
+		}
+		if len(parts) == 2 && parts[1] == "progress" {
+			if service.Store.Flush() != nil {
+				standaloneFail(w, http.StatusServiceUnavailable, "PROJECTION_BLOCKED")
+				return
+			}
+			var input remoteRunnerProgressInput
+			if decode(r, &input) != nil {
+				portableError(w, errors.New("RUNNER_INVALID"))
+				return
+			}
+			if strings.Contains(input.Summary, input.Token) || strings.Contains(input.Next, input.Token) {
+				portableError(w, errors.New("RUNNER_INVALID"))
+				return
+			}
+			result, err := p.progressRunner(principal, parts[0], input)
+			if err != nil {
+				portableError(w, err)
+				return
+			}
+			if service.Store.Flush() != nil {
+				standaloneFail(w, http.StatusServiceUnavailable, "PROJECTION_BLOCKED")
+				return
+			}
+			standaloneReply(w, http.StatusOK, result)
+			return
+		}
+		if len(parts) == 2 && parts[1] == "observe" {
+			var input remoteRunnerObservationInput
+			if decode(r, &input) != nil {
+				portableError(w, errors.New("RUNNER_INVALID"))
+				return
+			}
+			result, err := p.observeRunner(principal, parts[0], input)
+			if err != nil {
+				portableError(w, err)
+				return
+			}
+			standaloneReply(w, http.StatusOK, result)
+			return
+		}
+		if len(parts) == 2 && parts[1] == "interrupt" {
+			if service.Store.Flush() != nil {
+				standaloneFail(w, http.StatusServiceUnavailable, "PROJECTION_BLOCKED")
+				return
+			}
+			var input remoteRunnerInterruptInput
+			if decode(r, &input) != nil {
+				portableError(w, errors.New("RUNNER_INVALID"))
+				return
+			}
+			result, err := p.interruptRunner(principal, parts[0], input)
+			if err != nil {
+				portableError(w, err)
+				return
+			}
+			if service.Store.Flush() != nil {
+				standaloneFail(w, http.StatusServiceUnavailable, "PROJECTION_BLOCKED")
+				return
+			}
+			standaloneReply(w, http.StatusOK, result)
+			return
+		}
+		if len(parts) == 2 && parts[1] == "submit" {
+			if service.Store.Flush() != nil {
+				standaloneFail(w, http.StatusServiceUnavailable, "PROJECTION_BLOCKED")
+				return
+			}
+			artifacts, err := h.server.artifacts(project, service)
+			if err != nil {
+				portableError(w, err)
+				return
+			}
+			var input remoteRunnerSubmitInput
+			if decode(r, &input) != nil {
+				portableError(w, errors.New("RUNNER_INVALID"))
+				return
+			}
+			result, err := p.submitRunner(principal, parts[0], input, artifacts)
+			if err != nil {
+				portableError(w, err)
+				return
+			}
+			standaloneReply(w, http.StatusOK, result)
+			return
+		}
 	}
 	if kind == "repositories" && len(parts) == 0 && r.Method == http.MethodPost {
 		var input portableRepositoryInput

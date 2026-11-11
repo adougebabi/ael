@@ -116,6 +116,10 @@ func (s *Service) validateContext(t *Task, a *Attempt, result StepResult) error 
 	if e != nil {
 		return e
 	}
+	return validateContextWith(t, a, result, refs, func(ref string) ([]byte, error) { return s.artifactAt(a.Workspace, ref) })
+}
+
+func validateContextWith(t *Task, a *Attempt, result StepResult, refs []BasisReference, read func(string) ([]byte, error)) error {
 	if len(refs) > 0 && (t.ContextAttempt != a.ID || !sameBasis(t.Basis, refs)) {
 		return Error("TASK_CONTEXT_REQUIRED", "load context for this attempt and current source versions before submitting actual work")
 	}
@@ -128,7 +132,7 @@ func (s *Service) validateContext(t *Task, a *Attempt, result StepResult) error 
 			return Error("KNOWLEDGE_ARTIFACT_REQUIRED", "reference changed spec/decision")
 		}
 		for _, ref := range k.Artifacts {
-			if _, e := s.artifactAt(a.Workspace, ref); e != nil {
+			if _, e := read(ref); e != nil {
 				return e
 			}
 		}

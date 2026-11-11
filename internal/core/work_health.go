@@ -2,6 +2,7 @@ package core
 
 import (
 	"ael/internal/store"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -76,7 +77,7 @@ func checkProgressKey(e Evidence) string { return e.Check + "\x00" + e.Candidate
 func checkConclusion(e Evidence) string {
 	hashes := []string{}
 	for _, ref := range e.Artifacts {
-		if !strings.HasSuffix(strings.ToLower(ref), ".log") && e.ArtifactHashes[ref] != "" {
+		if !strings.HasSuffix(strings.ToLower(ref), ".log") && !slices.Contains(e.DiagnosticArtifacts, ref) && e.ArtifactHashes[ref] != "" {
 			hashes = append(hashes, e.ArtifactHashes[ref])
 		}
 	}
@@ -107,6 +108,10 @@ func recordCheckProgress(t *Task, e Evidence, prior []Evidence, at time.Time) bo
 }
 
 func (s *Service) recordSubmittedProgress(t *Task, a *Attempt, result StepResult, e *Evidence, prior []Evidence, at time.Time) bool {
+	return recordSubmittedProgressWith(t, a, result, e, prior, at, func(ref string) ([]byte, error) { return s.artifactAt(a.Workspace, ref) }, nil)
+}
+
+func recordSubmittedProgressWith(t *Task, a *Attempt, result StepResult, e *Evidence, prior []Evidence, at time.Time, read func(string) ([]byte, error), diagnostic map[string]bool) bool {
 	if e != nil {
 		return recordCheckProgress(t, *e, prior, at)
 	}
@@ -115,7 +120,10 @@ func (s *Service) recordSubmittedProgress(t *Task, a *Attempt, result StepResult
 	}
 	hashes := map[string]string{}
 	for _, ref := range result.Artifacts {
-		if data, err := s.artifactAt(a.Workspace, ref); err == nil {
+		if diagnostic[ref] {
+			continue
+		}
+		if data, err := read(ref); err == nil {
 			hashes[ref] = store.Hash(data)
 		}
 	}

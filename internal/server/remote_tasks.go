@@ -79,7 +79,7 @@ func standaloneTaskError(w http.ResponseWriter, err error) {
 		standaloneFail(w, http.StatusNotFound, "TASK_NOT_FOUND")
 		return
 	}
-	for _, code := range []string{"REVISION_CONFLICT", "IDEMPOTENCY_CONFLICT", "TASK_EXISTS", "REMOTE_OPERATION_REPLAY", "TERMINAL_TASK", "PLAN_DIGEST_MISMATCH", "PLAN_PARENT_CHANGED", "PLAN_TASK_CHANGED", "PLAN_STALE_TASK", "PLAN_APPLY_IN_PROGRESS", "PLAN_APPLY_INCOMPLETE"} {
+	for _, code := range []string{"REVISION_CONFLICT", "IDEMPOTENCY_CONFLICT", "TASK_EXISTS", "REMOTE_OPERATION_REPLAY", "TERMINAL_TASK", "PLAN_DIGEST_MISMATCH", "PLAN_PARENT_CHANGED", "PLAN_TASK_CHANGED", "PLAN_STALE_TASK", "PLAN_APPLY_IN_PROGRESS", "PLAN_APPLY_INCOMPLETE", "REMOTE_CANDIDATE_REQUIRED"} {
 		if strings.HasPrefix(err.Error(), code+":") {
 			standaloneFail(w, http.StatusConflict, code)
 			return

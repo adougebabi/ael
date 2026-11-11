@@ -83,16 +83,20 @@ func failureKey(t *Task, unit, class, signature string, hashes map[string]bool) 
 }
 
 func (s *Service) failureEvidence(a *Attempt, result StepResult, evidence *Evidence) map[string]bool {
+	return failureEvidenceWith(result, evidence, func(ref string) ([]byte, error) { return s.artifactAt(a.Workspace, ref) }, nil)
+}
+
+func failureEvidenceWith(result StepResult, evidence *Evidence, read func(string) ([]byte, error), diagnostic map[string]bool) map[string]bool {
 	refs := append([]string{}, result.Artifacts...)
 	if evidence != nil {
 		refs = append(refs, evidence.Artifacts...)
 	}
 	hashes := map[string]bool{}
 	for _, ref := range refs {
-		if strings.HasSuffix(strings.ToLower(ref), ".log") {
+		if diagnostic[ref] || strings.HasSuffix(strings.ToLower(ref), ".log") {
 			continue
 		}
-		if data, err := s.artifactAt(a.Workspace, ref); err == nil {
+		if data, err := read(ref); err == nil {
 			hashes[store.Hash(data)] = true
 		}
 	}

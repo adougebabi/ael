@@ -118,14 +118,19 @@ func remoteArtifactCommand(cmd string, a args, config, project string, binding r
 		if closeErr != nil {
 			return nil, closeErr
 		}
-		return remoteUploadBytes(a, config, project, binding, filepath.Base(path), data)
+		return remoteUploadBytes(a, config, project, binding, filepath.Base(path), data, nil)
 	}
 	return nil, core.Error("REMOTE_COMMAND_UNSUPPORTED", cmd)
 }
 
 // Upload the exact caller-supplied bytes, so an already verified knowledge
 // snapshot cannot be swapped by changing its local file between steps.
-func remoteUploadBytes(a args, config, project string, binding remote.Binding, filename string, data []byte) (remoteOutput, error) {
+type runnerUploadLease struct {
+	RunnerID, Token string
+	Fence           int
+}
+
+func remoteUploadBytes(a args, config, project string, binding remote.Binding, filename string, data []byte, lease *runnerUploadLease) (remoteOutput, error) {
 	if len(data) == 0 || len(data) > remoteArtifactLimit {
 		return nil, core.Error("ARTIFACT_INVALID", "file must be between 1 byte and 10 MiB")
 	}
@@ -152,6 +157,9 @@ func remoteUploadBytes(a args, config, project string, binding remote.Binding, f
 		return remote.Call(config, project, binding, method, path, body, nil)
 	}
 	start := map[string]any{"operation_id": op, "idempotency_key": key, "expected_revision": revision, "task_id": task, "attempt_id": a.get("attempt", ""), "candidate": a.get("candidate", ""), "filename": filename, "mime": mimeType, "size": len(data), "sha256": store.Hash(data), "source": a.get("source", "CLI")}
+	if lease != nil {
+		start["runner_id"], start["lease_token"], start["fence"] = lease.RunnerID, lease.Token, lease.Fence
+	}
 	result, err := call(http.MethodPost, "/artifacts/uploads", start)
 	if err != nil {
 		return nil, err
@@ -174,7 +182,11 @@ func remoteUploadBytes(a args, config, project string, binding remote.Binding, f
 	if result["status"] == "open" {
 		for offset < int64(len(data)) {
 			end := min(offset+remoteArtifactChunk, int64(len(data)))
-			result, err = call(http.MethodPost, "/artifacts/uploads/"+url.PathEscape(upload)+"/chunks", map[string]any{"offset": offset, "data": data[offset:end]})
+			chunk := map[string]any{"offset": offset, "data": data[offset:end]}
+			if lease != nil {
+				chunk["runner_id"], chunk["lease_token"], chunk["fence"] = lease.RunnerID, lease.Token, lease.Fence
+			}
+			result, err = call(http.MethodPost, "/artifacts/uploads/"+url.PathEscape(upload)+"/chunks", chunk)
 			if err != nil {
 				return nil, fmt.Errorf("%w; upload %s: retry the same command and keys, or cancel the upload", err, upload)
 			}
@@ -188,7 +200,11 @@ func remoteUploadBytes(a args, config, project string, binding remote.Binding, f
 			}
 		}
 	}
-	result, err = call(http.MethodPost, "/artifacts/uploads/"+url.PathEscape(upload)+"/finalize", map[string]string{"operation_id": op, "idempotency_key": key})
+	finish := map[string]any{"operation_id": op, "idempotency_key": key}
+	if lease != nil {
+		finish["runner_id"], finish["lease_token"], finish["fence"] = lease.RunnerID, lease.Token, lease.Fence
+	}
+	result, err = call(http.MethodPost, "/artifacts/uploads/"+url.PathEscape(upload)+"/finalize", finish)
 	if err != nil {
 		return nil, fmt.Errorf("%w; upload %s: retry the same command and keys, or cancel the upload", err, upload)
 	}

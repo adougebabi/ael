@@ -121,24 +121,25 @@ type Attempt struct {
 	OwnerIdentity      string     `json:"owner_identity,omitempty" yaml:"owner_identity,omitempty"`
 }
 type Evidence struct {
-	ReviewNoteID   string            `json:"review_note_id,omitempty" yaml:"review_note_id,omitempty"`
-	ReusedFrom     string            `json:"reused_from,omitempty"`
-	Executor       string            `json:"executor,omitempty"`
-	Recovery       string            `json:"recovery,omitempty"`
-	Inputs         []string          `json:"inputs,omitempty"`
-	ArtifactStatus map[string]string `json:"artifact_status,omitempty" yaml:"artifact_status"`
-	Check          string            `json:"check" yaml:"check"`
-	Candidate      string            `json:"candidate" yaml:"candidate"`
-	Revision       int               `json:"acceptance_revision" yaml:"acceptance_revision"`
-	PlanRevision   int               `json:"plan_revision" yaml:"plan_revision"`
-	Config         string            `json:"config_hash" yaml:"config_hash"`
-	Result         string            `json:"result" yaml:"result"`
-	Source         string            `json:"source" yaml:"source"`
-	Environment    string            `json:"environment" yaml:"environment"`
-	Artifacts      []string          `json:"artifacts" yaml:"artifacts"`
-	ArtifactHashes map[string]string `json:"artifact_hashes" yaml:"artifact_hashes"`
-	Reason         string            `json:"reason" yaml:"reason"`
-	At             time.Time         `json:"at" yaml:"at"`
+	DiagnosticArtifacts []string          `json:"diagnostic_artifacts,omitempty" yaml:"diagnostic_artifacts,omitempty"`
+	ReviewNoteID        string            `json:"review_note_id,omitempty" yaml:"review_note_id,omitempty"`
+	ReusedFrom          string            `json:"reused_from,omitempty"`
+	Executor            string            `json:"executor,omitempty"`
+	Recovery            string            `json:"recovery,omitempty"`
+	Inputs              []string          `json:"inputs,omitempty"`
+	ArtifactStatus      map[string]string `json:"artifact_status,omitempty" yaml:"artifact_status"`
+	Check               string            `json:"check" yaml:"check"`
+	Candidate           string            `json:"candidate" yaml:"candidate"`
+	Revision            int               `json:"acceptance_revision" yaml:"acceptance_revision"`
+	PlanRevision        int               `json:"plan_revision" yaml:"plan_revision"`
+	Config              string            `json:"config_hash" yaml:"config_hash"`
+	Result              string            `json:"result" yaml:"result"`
+	Source              string            `json:"source" yaml:"source"`
+	Environment         string            `json:"environment" yaml:"environment"`
+	Artifacts           []string          `json:"artifacts" yaml:"artifacts"`
+	ArtifactHashes      map[string]string `json:"artifact_hashes" yaml:"artifact_hashes"`
+	Reason              string            `json:"reason" yaml:"reason"`
+	At                  time.Time         `json:"at" yaml:"at"`
 }
 
 // HumanReviewNote is an explicitly recorded observation, not check evidence.

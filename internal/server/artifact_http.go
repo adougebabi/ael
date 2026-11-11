@@ -5,17 +5,20 @@ import (
 	"errors"
 	"mime"
 	"net/http"
+	"strings"
 )
 
 func artifactError(w http.ResponseWriter, err error) {
 	switch {
+	case err.Error() == "RUNNER_ISOLATION_REQUIRED":
+		standaloneFail(w, http.StatusServiceUnavailable, "RUNNER_ISOLATION_REQUIRED")
 	case errors.Is(err, sql.ErrNoRows), err.Error() == "ARTIFACT_NOT_FOUND", err.Error() == "UPLOAD_NOT_FOUND", err.Error() == "TASK_NOT_FOUND":
 		standaloneFail(w, http.StatusNotFound, "ARTIFACT_NOT_FOUND")
 	case err.Error() == "ARTIFACT_PURGED", err.Error() == "ARTIFACT_UNAVAILABLE":
 		standaloneFail(w, http.StatusGone, "ARTIFACT_UNAVAILABLE")
 	case err.Error() == "QUOTA_EXCEEDED":
 		standaloneFail(w, http.StatusRequestEntityTooLarge, "QUOTA_EXCEEDED")
-	case err.Error() == "UPLOAD_INCOMPLETE", err.Error() == "UPLOAD_CONFLICT", err.Error() == "IDEMPOTENCY_CONFLICT", err.Error() == "REVISION_CONFLICT", err.Error() == "PRUNE_STALE", err.Error() == "QUOTA_TOO_SMALL", err.Error() == "ARTIFACT_CANDIDATE_MISMATCH", err.Error() == "ARTIFACT_CONFLICT":
+	case err.Error() == "UPLOAD_INCOMPLETE", err.Error() == "UPLOAD_CONFLICT", err.Error() == "IDEMPOTENCY_CONFLICT", err.Error() == "REVISION_CONFLICT", err.Error() == "PRUNE_STALE", err.Error() == "QUOTA_TOO_SMALL", err.Error() == "ARTIFACT_CANDIDATE_MISMATCH", err.Error() == "ARTIFACT_CONFLICT", strings.HasPrefix(err.Error(), "STALE_TOKEN"), strings.HasPrefix(err.Error(), "STALE_EXECUTION_UNIT"):
 		standaloneFail(w, http.StatusConflict, err.Error())
 	case err.Error() == "ARTIFACT_INVALID", err.Error() == "ARTIFACT_MIME_INVALID", err.Error() == "ARTIFACT_CONTENT_MISMATCH", err.Error() == "ATTEMPT_NOT_FOUND":
 		standaloneFail(w, http.StatusBadRequest, err.Error())
@@ -149,14 +152,17 @@ func (h *standaloneHandler) remoteArtifacts(w http.ResponseWriter, r *http.Reque
 		switch parts[2] {
 		case "chunks":
 			var input struct {
-				Offset int64  `json:"offset"`
-				Data   []byte `json:"data"`
+				Offset     int64  `json:"offset"`
+				Data       []byte `json:"data"`
+				RunnerID   string `json:"runner_id,omitempty"`
+				LeaseToken string `json:"lease_token,omitempty"`
+				Fence      int    `json:"fence,omitempty"`
 			}
 			if decode(r, &input) != nil {
 				standaloneFail(w, http.StatusBadRequest, "ARTIFACT_INVALID")
 				return
 			}
-			result, err := a.chunk(principal, parts[1], input.Offset, input.Data)
+			result, err := a.chunk(principal, parts[1], input.Offset, input.Data, artifactLeaseInput{RunnerID: input.RunnerID, LeaseToken: input.LeaseToken, Fence: input.Fence})
 			if err != nil {
 				artifactError(w, err)
 				return
@@ -167,12 +173,15 @@ func (h *standaloneHandler) remoteArtifacts(w http.ResponseWriter, r *http.Reque
 			var input struct {
 				OperationID    string `json:"operation_id"`
 				IdempotencyKey string `json:"idempotency_key"`
+				RunnerID       string `json:"runner_id,omitempty"`
+				LeaseToken     string `json:"lease_token,omitempty"`
+				Fence          int    `json:"fence,omitempty"`
 			}
 			if decode(r, &input) != nil {
 				standaloneFail(w, http.StatusBadRequest, "ARTIFACT_INVALID")
 				return
 			}
-			item, err := a.finalize(principal, parts[1], input.OperationID, input.IdempotencyKey)
+			item, err := a.finalize(principal, parts[1], input.OperationID, input.IdempotencyKey, artifactLeaseInput{RunnerID: input.RunnerID, LeaseToken: input.LeaseToken, Fence: input.Fence})
 			if err != nil {
 				artifactError(w, err)
 				return
@@ -236,7 +245,7 @@ func (h *standaloneHandler) remoteArtifacts(w http.ResponseWriter, r *http.Reque
 			if item.MIME == "text/plain" {
 				contentType = "text/plain; charset=utf-8"
 			}
-			if item.MIME == "video/mp4" {
+			if item.MIME == "video/mp4" || item.MIME == "application/octet-stream" {
 				contentType, disposition = "application/octet-stream", "attachment"
 			}
 			w.Header().Set("Content-Type", contentType)

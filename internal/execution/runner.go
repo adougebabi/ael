@@ -9,7 +9,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -52,6 +51,10 @@ func prepareConfig(c *Config) error {
 	}
 	return nil
 }
+
+// PrepareConfig applies the same bounded-loop and non-recursion rules to
+// another transport that executes the existing command/Codex protocol locally.
+func PrepareConfig(c *Config) error { return prepareConfig(c) }
 
 func Run(s *core.Service, id string, c Config) (result core.Next, runErr error) {
 	if err := prepareConfig(&c); err != nil {
@@ -190,11 +193,7 @@ func runAttempt(s *core.Service, id string, c *Config, n core.Next) (core.Next, 
 		if _, e = exec.LookPath("codex"); e != nil {
 			return block(s, id, a, "Codex CLI unavailable")
 		}
-		command = []string{"codex", "exec", "--sandbox", "workspace-write", "--add-dir", dir, "--json", "--output-schema", schemaPath, "--output-last-message", resultPath}
-		if c.Session != "" {
-			command = append(command, "resume", c.Session)
-		}
-		command = append(command, prompt)
+		command = CodexCommand(dir, schemaPath, resultPath, c.Session, prompt)
 	}
 	cmd := process.Command(ctx, command[0], command[1:]...)
 	cmd.Dir = a.Workspace
@@ -246,25 +245,11 @@ func runAttempt(s *core.Service, id string, c *Config, n core.Next) (core.Next, 
 		}
 		return block(s, id, a, reason)
 	}
-	f, e := os.Open(resultPath)
+	result, assessment, e := ReadAttemptResult(resultPath, n.Step == "verify")
 	if e != nil {
-		return block(s, id, a, "process exited without final StepResult")
-	}
-	var result core.StepResult
-	var assessment core.Assessment
-	var target any = &result
-	if n.Step == "verify" {
-		target = &assessment
-	}
-	dec := json.NewDecoder(io.LimitReader(f, 1<<20))
-	dec.DisallowUnknownFields()
-	e = dec.Decode(target)
-	var trailing any
-	if e == nil && dec.Decode(&trailing) != io.EOF {
-		e = core.Error("INVALID_RESULT", "trailing bytes")
-	}
-	f.Close()
-	if e != nil {
+		if os.IsNotExist(e) {
+			return block(s, id, a, "process exited without final StepResult")
+		}
 		return block(s, id, a, "invalid StepResult: "+e.Error())
 	}
 	if n.Step == "verify" {
@@ -276,6 +261,14 @@ func runAttempt(s *core.Service, id string, c *Config, n core.Next) (core.Next, 
 		return block(s, id, a, "StepResult rejected: "+e.Error())
 	}
 	return n, nil
+}
+
+func CodexCommand(dir, schemaPath, resultPath, session, prompt string) []string {
+	command := []string{"codex", "exec", "--sandbox", "workspace-write", "--add-dir", dir, "--json", "--output-schema", schemaPath, "--output-last-message", resultPath}
+	if session != "" {
+		command = append(command, "resume", session)
+	}
+	return append(command, prompt)
 }
 
 func block(s *core.Service, id string, a *core.Attempt, reason string) (core.Next, error) {

@@ -93,15 +93,19 @@ func (s *Service) Interrupt(id, attempt, token, reason string) (Next, error) {
 			if a.Token != token || a.Status != "running" {
 				return Error("STALE_TOKEN", attempt)
 			}
-			a.Status = "interrupted"
-			a.Reason = reason
-			t.Paused = true
-			t.Failure = reason
-			t.Blocker = &Blocker{Category: "recovery", Reason: reason, Scope: t.Definition.Scope, Tried: reason, Recovery: "inspect failed execution and confirm old processes stopped, then resume", ResumeAt: t.Step, Unit: a.Unit, Input: a.Input, Next: "核实旧进程停止后，从保留的责任节点恢复"}
+			markInterrupted(t, a, reason)
 			return nil
 		}
 		return Error("ATTEMPT_MISSING", attempt)
 	})
+}
+
+func markInterrupted(t *Task, a *Attempt, reason string) {
+	a.Status = "interrupted"
+	a.Reason = reason
+	t.Paused = true
+	t.Failure = reason
+	t.Blocker = &Blocker{Category: "recovery", Reason: reason, Scope: t.Definition.Scope, Tried: reason, Recovery: "inspect failed execution and confirm old processes stopped, then resume", ResumeAt: t.Step, Unit: a.Unit, Input: a.Input, Next: "核实旧进程停止后，从保留的责任节点恢复"}
 }
 
 // WatchLease is the attached-mode keeper. It is explicitly bound to the Agent's

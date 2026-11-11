@@ -4,6 +4,7 @@ import (
 	"ael/internal/core"
 	"ael/internal/store"
 	"bytes"
+	"crypto/subtle"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -46,6 +47,15 @@ type artifactStartInput struct {
 	Size             int64  `json:"size"`
 	SHA256           string `json:"sha256"`
 	Source           string `json:"source"`
+	RunnerID         string `json:"runner_id,omitempty"`
+	LeaseToken       string `json:"lease_token,omitempty"`
+	Fence            int    `json:"fence,omitempty"`
+}
+
+type artifactLeaseInput struct {
+	RunnerID   string `json:"runner_id,omitempty"`
+	LeaseToken string `json:"lease_token,omitempty"`
+	Fence      int    `json:"fence,omitempty"`
 }
 
 type artifactUpload struct {
@@ -105,6 +115,7 @@ CREATE TABLE IF NOT EXISTS artifact_uploads(id TEXT PRIMARY KEY,artifact_id TEXT
 CREATE TABLE IF NOT EXISTS artifact_objects(id TEXT PRIMARY KEY,project_id TEXT NOT NULL,task_id TEXT NOT NULL,attempt_id TEXT NOT NULL,candidate TEXT NOT NULL,filename TEXT NOT NULL,mime TEXT NOT NULL,size INTEGER NOT NULL,sha256 TEXT NOT NULL,source TEXT NOT NULL,uploader TEXT NOT NULL,created TEXT NOT NULL,status TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS artifact_references(artifact_id TEXT NOT NULL,task_id TEXT NOT NULL,purpose TEXT NOT NULL,candidate TEXT NOT NULL,actor TEXT NOT NULL,actor_name TEXT NOT NULL,operation_id TEXT NOT NULL,idempotency_key TEXT NOT NULL,request_hash TEXT NOT NULL,created TEXT NOT NULL,PRIMARY KEY(actor,idempotency_key));
 CREATE TABLE IF NOT EXISTS portable_context_sources(context_id TEXT NOT NULL,id TEXT NOT NULL,path TEXT NOT NULL,artifact_id TEXT NOT NULL,sha256 TEXT NOT NULL,status TEXT NOT NULL,kind TEXT NOT NULL,reason TEXT NOT NULL,PRIMARY KEY(context_id,id));
+CREATE TABLE IF NOT EXISTS remote_artifact_leases(upload_id TEXT PRIMARY KEY,runner_id TEXT NOT NULL,attempt_id TEXT NOT NULL,fence INTEGER NOT NULL,token_hash TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS artifact_settings(key TEXT PRIMARY KEY,value INTEGER NOT NULL);`)
 	if err != nil {
 		return nil, err
@@ -131,6 +142,8 @@ func artifactNameValid(name, mimeType string) bool {
 		return ext == ".txt" || ext == ".md" || ext == ".log" || ext == ".json" || ext == ".csv"
 	case "video/mp4":
 		return ext == ".mp4"
+	case "application/octet-stream":
+		return ext == ".bin"
 	default:
 		return false
 	}
@@ -178,9 +191,39 @@ func (a *artifactStore) objectPath(id string) (string, error) {
 	return store.SafePath(a.objects, id)
 }
 
+func (a *artifactStore) verifyUploadLease(tx *store.Tx, principal standalonePrincipal, upload artifactUpload, auth artifactLeaseInput) error {
+	var runner, attemptID, hash string
+	var fence int
+	err := tx.Row("SELECT runner_id,attempt_id,fence,token_hash FROM remote_artifact_leases WHERE upload_id=?", upload.ID).Scan(&runner, &attemptID, &fence, &hash)
+	if err == sql.ErrNoRows {
+		if auth.RunnerID != "" || auth.LeaseToken != "" || auth.Fence != 0 {
+			return errors.New("ARTIFACT_INVALID")
+		}
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !remoteRunnerIsolationVerified() {
+		return errors.New("RUNNER_ISOLATION_REQUIRED")
+	}
+	if auth.RunnerID != runner || auth.Fence != fence || auth.LeaseToken == "" || subtle.ConstantTimeCompare([]byte(store.Hash([]byte(auth.LeaseToken))), []byte(hash)) != 1 || upload.AttemptID != attemptID {
+		return errors.New("STALE_TOKEN")
+	}
+	p := &portableStore{service: a.service, project: a.project}
+	if err = p.verifyRunnerLease(tx, principal, runner, upload.TaskID, attemptID, auth.LeaseToken, fence); err != nil {
+		return err
+	}
+	_, _, err = a.service.RemoteAttemptTx(tx, upload.TaskID, runner, attemptID, auth.LeaseToken, fence)
+	return err
+}
+
 func (a *artifactStore) begin(principal standalonePrincipal, in artifactStartInput) (artifactStartResult, error) {
 	var result artifactStartResult
 	if !standaloneID.MatchString(in.OperationID) || !standaloneID.MatchString(in.IdempotencyKey) || in.ExpectedRevision == "" || in.TaskID == "" || !artifactNameValid(in.Filename, in.MIME) || in.Size <= 0 || in.Size > artifactFileLimit || !artifactDigest.MatchString(in.SHA256) || strings.TrimSpace(in.Source) == "" || len(in.Source) > 200 {
+		return result, errors.New("ARTIFACT_INVALID")
+	}
+	if in.MIME == "application/octet-stream" && in.RunnerID == "" {
 		return result, errors.New("ARTIFACT_INVALID")
 	}
 	request, err := json.Marshal(struct {
@@ -215,13 +258,38 @@ func (a *artifactStore) begin(principal standalonePrincipal, in artifactStartInp
 		if err != nil {
 			return errors.New("TASK_NOT_FOUND")
 		}
-		if core.RemoteRevision(task) != in.ExpectedRevision || task.Candidate != in.Candidate {
+		runnerUpload := in.RunnerID != "" || in.LeaseToken != "" || in.Fence != 0
+		if runnerUpload {
+			if !remoteRunnerIsolationVerified() {
+				return errors.New("RUNNER_ISOLATION_REQUIRED")
+			}
+			if !standaloneID.MatchString(in.RunnerID) || !standaloneID.MatchString(in.AttemptID) || in.LeaseToken == "" || in.Fence < 1 {
+				return errors.New("STALE_TOKEN")
+			}
+			p := &portableStore{service: a.service, project: a.project}
+			if err = p.verifyRunnerLease(tx, principal, in.RunnerID, in.TaskID, in.AttemptID, in.LeaseToken, in.Fence); err != nil {
+				return err
+			}
+			if _, _, err = a.service.RemoteAttemptTx(tx, in.TaskID, in.RunnerID, in.AttemptID, in.LeaseToken, in.Fence); err != nil {
+				return err
+			}
+			var revision, output string
+			if err = tx.Row("SELECT claim_revision,output_candidate FROM remote_runner_attempts WHERE attempt_id=?", in.AttemptID).Scan(&revision, &output); err != nil {
+				return err
+			}
+			if revision != in.ExpectedRevision || output == "" || output != in.Candidate {
+				return errors.New("REVISION_CONFLICT")
+			}
+		} else if core.RemoteRevision(task) != in.ExpectedRevision || task.Candidate != in.Candidate {
 			return errors.New("REVISION_CONFLICT")
 		}
-		if in.AttemptID != "" {
+		if in.AttemptID != "" && !runnerUpload {
 			found := false
 			for _, attempt := range task.Attempts {
 				if attempt.ID == in.AttemptID && (in.Candidate == "" || attempt.Input == in.Candidate || attempt.Candidate == in.Candidate) {
+					if strings.HasPrefix(attempt.Workspace, "remote:") {
+						return errors.New("STALE_TOKEN")
+					}
 					found = true
 				}
 			}
@@ -238,6 +306,9 @@ func (a *artifactStore) begin(principal standalonePrincipal, in artifactStartInp
 		}
 		created := time.Now().UTC().Format(time.RFC3339Nano)
 		_, err = tx.Exec("INSERT INTO artifact_uploads("+uploadColumns+") VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", uploadID, artifactID, a.project, in.TaskID, in.AttemptID, in.Candidate, in.Filename, in.MIME, in.Size, in.SHA256, in.Source, principal.UserID, principal.Username, in.OperationID, in.IdempotencyKey, hash, "open", 0, created)
+		if err == nil && runnerUpload {
+			_, err = tx.Exec("INSERT INTO remote_artifact_leases(upload_id,runner_id,attempt_id,fence,token_hash) VALUES(?,?,?,?,?)", uploadID, in.RunnerID, in.AttemptID, in.Fence, store.Hash([]byte(in.LeaseToken)))
+		}
 		if err == nil {
 			result = artifactStartResult{UploadID: uploadID, ArtifactID: artifactID, Status: "open"}
 		}
@@ -256,6 +327,9 @@ func (a *artifactStore) begin(principal standalonePrincipal, in artifactStartInp
 		result = artifactStartResult{UploadID: upload.ID, ArtifactID: upload.ArtifactID, Received: upload.Received, Status: upload.Status}
 		if upload.Status != "open" {
 			return nil
+		}
+		if err = a.verifyUploadLease(tx, principal, upload, artifactLeaseInput{RunnerID: in.RunnerID, LeaseToken: in.LeaseToken, Fence: in.Fence}); err != nil {
+			return err
 		}
 		dest, err := a.objectPath(upload.ArtifactID)
 		if err != nil {
@@ -282,7 +356,7 @@ func (a *artifactStore) begin(principal standalonePrincipal, in artifactStartInp
 	return result, err
 }
 
-func (a *artifactStore) chunk(principal standalonePrincipal, id string, offset int64, data []byte) (artifactStartResult, error) {
+func (a *artifactStore) chunk(principal standalonePrincipal, id string, offset int64, data []byte, auth artifactLeaseInput) (artifactStartResult, error) {
 	var result artifactStartResult
 	if offset < 0 || len(data) == 0 || len(data) > artifactChunkLimit {
 		return result, errors.New("ARTIFACT_INVALID")
@@ -294,6 +368,9 @@ func (a *artifactStore) chunk(principal standalonePrincipal, id string, offset i
 		}
 		if upload.Status != "open" || offset+int64(len(data)) > upload.Size {
 			return errors.New("UPLOAD_CONFLICT")
+		}
+		if err = a.verifyUploadLease(tx, principal, upload, auth); err != nil {
+			return err
 		}
 		path, err := a.uploadPath(id)
 		if err != nil || standaloneSafeDatabaseFile(path) != nil {
@@ -322,6 +399,9 @@ func (a *artifactStore) chunk(principal standalonePrincipal, id string, offset i
 			if err = file.Sync(); err != nil {
 				return err
 			}
+		}
+		if err = a.verifyUploadLease(tx, principal, upload, auth); err != nil {
+			return err
 		}
 		received := max(info.Size(), offset+int64(len(data)))
 		if _, err = tx.Exec("UPDATE artifact_uploads SET received=? WHERE id=?", received, id); err != nil {
@@ -356,6 +436,9 @@ func validateArtifactBytes(data []byte, mimeType string) error {
 		if http.DetectContentType(data) != "video/mp4" {
 			return errors.New("ARTIFACT_MIME_INVALID")
 		}
+	case "application/octet-stream":
+		// Runner outputs are download-only; they are never rendered as active
+		// same-origin content. Size and hash are still verified.
 	default:
 		return errors.New("ARTIFACT_MIME_INVALID")
 	}
@@ -398,7 +481,7 @@ func artifactSyncDirs(dirs ...string) error {
 	return nil
 }
 
-func (a *artifactStore) finalize(principal standalonePrincipal, id, operationID, key string) (artifactObject, error) {
+func (a *artifactStore) finalize(principal standalonePrincipal, id, operationID, key string, auth artifactLeaseInput) (artifactObject, error) {
 	var result artifactObject
 	err := a.service.Store.Write(func(tx *store.Tx) error {
 		upload, err := scanUpload(tx.Row("SELECT "+uploadColumns+" FROM artifact_uploads WHERE id=?", id))
@@ -414,6 +497,9 @@ func (a *artifactStore) finalize(principal standalonePrincipal, id, operationID,
 		}
 		if upload.Status != "open" {
 			return errors.New("UPLOAD_CONFLICT")
+		}
+		if err = a.verifyUploadLease(tx, principal, upload, auth); err != nil {
+			return err
 		}
 		temp, err := a.uploadPath(id)
 		if err != nil {
@@ -459,6 +545,9 @@ func (a *artifactStore) finalize(principal standalonePrincipal, id, operationID,
 		// Make the new object name and removal of the staging name durable
 		// before recording a finalized object in SQLite.
 		if err = artifactSyncDirs(a.objects, a.uploads); err != nil {
+			return err
+		}
+		if err = a.verifyUploadLease(tx, principal, upload, auth); err != nil {
 			return err
 		}
 		result = artifactObject{ID: upload.ArtifactID, ProjectID: upload.ProjectID, TaskID: upload.TaskID, AttemptID: upload.AttemptID, Candidate: upload.Candidate, Filename: upload.Filename, MIME: upload.MIME, Size: upload.Size, SHA256: upload.SHA256, Source: upload.Source, Uploader: upload.Uploader, Created: upload.Created, Status: "finalized"}

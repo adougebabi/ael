@@ -203,7 +203,7 @@ func (p *portableStore) context(principal standalonePrincipal, input portableCon
 		}
 		created := time.Now().UTC().Format(time.RFC3339Nano)
 		inventoryBytes, _ := json.Marshal(input.Inventory)
-		result := map[string]any{"id": id, "task_id": taskID, "task_revision": taskRevision, "candidate_id": candidateID, "repository": candidate.Repository, "commit": candidate.Commit, "observation_id": input.ObservationID, "checkout_id": checkoutID, "workspace_id": workspaceID, "runner_id": runnerID, "inputs_known": inputsKnown, "capture_stability_proven": false, "actor": principal.Username, "created_at": created, "sources": sources, "inventory_count": len(input.Inventory), "inventory_hash": store.Hash(inventoryBytes), "inventory_origin": "client_attested", "inventory_unverified": inventoryUnverified, "check_status": "not_recorded", "operation_id": input.OperationID}
+		result := map[string]any{"id": id, "task_id": taskID, "task_revision": taskRevision, "definition_revision": task.Definition.Revision, "plan_revision": task.Plan.Revision, "policy_hash": task.PolicyHash, "candidate_id": candidateID, "repository": candidate.Repository, "commit": candidate.Commit, "observation_id": input.ObservationID, "checkout_id": checkoutID, "workspace_id": workspaceID, "runner_id": runnerID, "inputs_known": inputsKnown, "capture_stability_proven": false, "actor": principal.Username, "created_at": created, "sources": sources, "inventory_count": len(input.Inventory), "inventory_hash": store.Hash(inventoryBytes), "inventory_origin": "client_attested", "inventory_unverified": inventoryUnverified, "check_status": "not_recorded", "operation_id": input.OperationID}
 		body, err := json.Marshal(result)
 		if err != nil {
 			return nil, err
@@ -249,12 +249,26 @@ func (p *portableStore) getContext(id string, artifacts *artifactStore) (map[str
 	}
 	reasons := []string{}
 	impactUnknown := false
-	if result["task_revision"] != core.RemoteRevision(task) {
+	definitionRevision, hasDefinition := result["definition_revision"].(float64)
+	planRevision, hasPlan := result["plan_revision"].(float64)
+	if hasDefinition && hasPlan {
+		if int(definitionRevision) != task.Definition.Revision || int(planRevision) != task.Plan.Revision || result["policy_hash"] != task.PolicyHash {
+			reasons = append(reasons, "task definition, plan or policy changed")
+			impactUnknown = true
+		}
+	} else if result["task_revision"] != core.RemoteRevision(task) {
 		reasons = append(reasons, "task revision changed")
 		impactUnknown = true
 	}
+	if task.Status != "open" || task.Paused || task.Confirmation != nil {
+		reasons = append(reasons, "task is terminal, paused or awaiting a decision")
+	}
 	var latest string
-	if err := p.service.Store.DB.QueryRow("SELECT candidate_id FROM portable_observations WHERE task_id=? ORDER BY rowid DESC LIMIT 1", taskID).Scan(&latest); err != nil {
+	latestErr := p.service.Store.DB.QueryRow("SELECT candidate_id FROM portable_observations WHERE task_id=? ORDER BY rowid DESC LIMIT 1", taskID).Scan(&latest)
+	if task.Candidate != "" && task.Candidate != result["candidate_id"] {
+		latest, latestErr = task.Candidate, nil
+	}
+	if latestErr != nil {
 		reasons = append(reasons, "a newer candidate observation is unavailable")
 		impactUnknown = true
 	} else if result["candidate_id"] != latest {

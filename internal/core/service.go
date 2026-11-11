@@ -886,6 +886,10 @@ func (s *Service) submit(sub Submission, evidence *Evidence) (Next, error) {
 	return s.submitWithHash(sub, evidence, "")
 }
 func (s *Service) submitWithHash(sub Submission, evidence *Evidence, requestHash string) (Next, error) {
+	return s.submitWithEnvironment(sub, evidence, requestHash, nil)
+}
+
+func (s *Service) submitWithEnvironment(sub Submission, evidence *Evidence, requestHash string, remote *RemoteSubmitEnvironment) (Next, error) {
 	if sub.Key == "" {
 		return Next{}, Error("IDEMPOTENCY_KEY_REQUIRED", "")
 	}
@@ -918,6 +922,17 @@ func (s *Service) submitWithHash(sub Submission, evidence *Evidence, requestHash
 		if e != nil {
 			return e
 		}
+		readArtifact := func(ref string) ([]byte, error) { return s.artifactAt(a.Workspace, ref) }
+		if remote != nil {
+			if a.Fence != remote.Fence || !strings.HasPrefix(a.Workspace, "remote:") {
+				return Error("STALE_TOKEN", "remote fence or workspace changed")
+			}
+			readArtifact = func(ref string) ([]byte, error) { return remote.ReadArtifact(tx, ref) }
+			evidence, e = remote.Prepare(tx, &t, a)
+			if e != nil {
+				return e
+			}
+		}
 		if t.Status != "open" {
 			return Error("TERMINAL_TASK", sub.Task)
 		}
@@ -942,9 +957,14 @@ func (s *Service) submitWithHash(sub Submission, evidence *Evidence, requestHash
 		a.Ended = &now
 		a.Reason = sub.Result.Summary
 		a.Outputs = sub.Result.Artifacts
-		outputSnapshot, e := captureCandidate(a.Workspace)
-		if e != nil {
-			return e
+		var outputSnapshot candidateSnapshot
+		if remote != nil {
+			outputSnapshot = candidateSnapshot{Fingerprint: remote.CandidateID, Head: remote.Head, Files: remote.Files}
+		} else {
+			outputSnapshot, e = captureCandidate(a.Workspace)
+			if e != nil {
+				return e
+			}
 		}
 		candidate := outputSnapshot.Fingerprint
 		if a.Unit == "execute" && t.ExecutionBase != nil {
@@ -980,7 +1000,7 @@ func (s *Service) submitWithHash(sub Submission, evidence *Evidence, requestHash
 				return Error("CANDIDATE_CHANGED", "human review candidate changed")
 			}
 			for ref, hash := range evidence.ArtifactHashes {
-				data, err := s.artifactAt(a.Workspace, ref)
+				data, err := readArtifact(ref)
 				if err != nil || store.Hash(data) != hash {
 					return Error("REVIEW_EVIDENCE_CHANGED", ref)
 				}
@@ -1006,7 +1026,7 @@ func (s *Service) submitWithHash(sub Submission, evidence *Evidence, requestHash
 					return Error("REVIEW_NOTE_VERSION_MISMATCH", "record a new opinion for the current definition and plan")
 				}
 				for ref, hash := range note.ArtifactHashes {
-					data, err := s.artifactAt(a.Workspace, ref)
+					data, err := readArtifact(ref)
 					if err != nil || store.Hash(data) != hash {
 						return Error("REVIEW_EVIDENCE_CHANGED", ref)
 					}
@@ -1019,7 +1039,11 @@ func (s *Service) submitWithHash(sub Submission, evidence *Evidence, requestHash
 		progressEvidence := evidence
 		var failureHashes map[string]bool
 		if sub.Result.Status == "fail" {
-			failureHashes = s.failureEvidence(a, sub.Result, evidence)
+			var diagnostic map[string]bool
+			if remote != nil {
+				diagnostic = remote.DiagnosticArtifacts
+			}
+			failureHashes = failureEvidenceWith(sub.Result, evidence, readArtifact, diagnostic)
 		}
 		if sub.Result.Status == "blocked" && a.PID > 0 {
 			a.Status = "interrupted"
@@ -1035,7 +1059,12 @@ func (s *Service) submitWithHash(sub Submission, evidence *Evidence, requestHash
 			return Error("INSPECTION_WRITE_DETECTED", "inspection may write reports only into runtime; source candidate must remain unchanged")
 		}
 		if sub.Result.Status == "pass" && t.Step == "execute" {
-			if e = s.validateContext(&t, a, sub.Result); e != nil {
+			if remote != nil {
+				e = validateContextWith(&t, a, sub.Result, remote.Basis, readArtifact)
+			} else {
+				e = s.validateContext(&t, a, sub.Result)
+			}
+			if e != nil {
 				return e
 			}
 		}
@@ -1178,7 +1207,7 @@ func (s *Service) submitWithHash(sub Submission, evidence *Evidence, requestHash
 					return Error("ARTIFACT_REQUIRED", "execute result must reference actual deliverable")
 				}
 				for _, p := range sub.Result.Artifacts {
-					if _, e = s.artifactAt(a.Workspace, p); e != nil {
+					if _, e = readArtifact(p); e != nil {
 						return e
 					}
 				}
@@ -1188,8 +1217,11 @@ func (s *Service) submitWithHash(sub Submission, evidence *Evidence, requestHash
 				t.Candidate = candidate
 				t.CandidateWorkspace = a.Workspace
 				t.CandidateProof = nil
-				outputRepository, repoErr := localGitRepository(a.Workspace, outputSnapshot.Head)
-				if base := t.ExecutionBase; base != nil && !base.Unknown && repoErr == nil && base.LocalRepository == outputRepository && slices.Equal(base.PolicyExclusions, outputSnapshot.PolicyExclusions) {
+				outputRepository, repoErr := "", error(nil)
+				if remote == nil {
+					outputRepository, repoErr = localGitRepository(a.Workspace, outputSnapshot.Head)
+				}
+				if base := t.ExecutionBase; remote == nil && base != nil && !base.Unknown && repoErr == nil && base.LocalRepository == outputRepository && slices.Equal(base.PolicyExclusions, outputSnapshot.PolicyExclusions) {
 					t.CandidateProof = &CandidateProof{Input: base.Fingerprint, InputHead: base.Head, Candidate: candidate, Head: outputSnapshot.Head, LocalRepository: outputRepository,
 						Changes: candidateChanges(base.Files, outputSnapshot.Files), Files: outputSnapshot.Files,
 						Exclusions: uniqueSorted(base.Exclusions, outputSnapshot.Exclusions), UnboundArtifacts: slices.Clone(base.UnboundArtifacts)}
@@ -1215,7 +1247,7 @@ func (s *Service) submitWithHash(sub Submission, evidence *Evidence, requestHash
 				if t.Definition.Goal == "merged" && (d.Target == "" || d.Target != t.Definition.Target) {
 					return Error("TARGET_REQUIRED", "merge target")
 				}
-				raw, e := s.artifactAt(a.Workspace, d.Artifact)
+				raw, e := readArtifact(d.Artifact)
 				if e != nil {
 					return e
 				}
@@ -1242,9 +1274,16 @@ func (s *Service) submitWithHash(sub Submission, evidence *Evidence, requestHash
 		if evidence != nil && sub.Result.Status != "pass" && !staleEpicCheck {
 			t.Evidence = append(t.Evidence, *evidence)
 		}
-		progressChanged := s.recordSubmittedProgress(&t, a, sub.Result, progressEvidence, priorEvidence, now)
+		var diagnostic map[string]bool
+		if remote != nil {
+			diagnostic = remote.DiagnosticArtifacts
+		}
+		progressChanged := recordSubmittedProgressWith(&t, a, sub.Result, progressEvidence, priorEvidence, now, readArtifact, diagnostic)
 		if sub.Result.Status == "pass" && !staleEpicCheck {
 			noteSuccess(&t, a)
+		}
+		if remote != nil && !a.Lease.After(time.Now()) {
+			return Error("STALE_TOKEN", "lease expired before result commit")
 		}
 		if e = s.save(tx, &t); e != nil {
 			return e
@@ -1534,6 +1573,9 @@ func (s *Service) Resume(id, returnTo string, ack bool) (Next, error) {
 			workspace := t.CandidateWorkspace
 			if workspace == "" {
 				workspace = s.Root
+			}
+			if s.RemoteAuthority && strings.HasPrefix(workspace, "remote:") {
+				return Error("REMOTE_CANDIDATE_REQUIRED", "remote workspace cannot be checked on the server; explicitly return to execute after verifying the old writer stopped")
 			}
 			current, e := Fingerprint(workspace)
 			if e != nil {
