@@ -23,7 +23,7 @@ func TestCLISubprocess(t *testing.T) {
 			break
 		}
 	}
-	v, e := run(os.Args[at:])
+	v, e := run(append(os.Args[at:], "--json"))
 	if e != nil {
 		json.NewEncoder(os.Stdout).Encode(map[string]string{"error": e.Error()})
 		os.Exit(1)

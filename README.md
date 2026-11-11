@@ -54,7 +54,7 @@
 ## 本机升级与项目更新（0.1.5）
 
 ```sh
-# 首次引导：旧版不认识新命令时，从新分发运行一次
+# 首次引导：旧版默认 JSON 无法探测默认文本的新发行包，从新分发运行一次
 ./dist/ael-darwin-arm64 upgrade
 
 # 此后升级本机已安装的 AEL，默认读取已登记的本地分发源
@@ -72,7 +72,7 @@ ael update --project /path/to/project
 
 两者均支持 `--dry-run`。初次或更换来源可用 `--from /path/to/unpacked-distribution`（`--bundle-dir` 仍为来源参数兼容写法）；`--prefix DIR` 或 `AEL_INSTALL_PREFIX` 可选择自定义本机安装。默认安装前缀从当前受管可执行文件/PATH 推导，无法推导时为 `~/.local`。设置过 `AEL_DATA_DIR` 的项目须沿用原值，预览和结果会报告实际数据路径。
 
-目前来源是本地完整分发目录或 `AEL_BUNDLE_DIR`，没有虚构的在线发行接口。首次从本仓库 dist 安装会记住该目录；以后构建新版本后可直接 `ael upgrade`，再对项目执行 `ael update`。旧版本客户端遇到新版包，由新版包自身的程序完成项目更新，避免混用新二进制和旧 Skill。
+目前来源是本地完整分发目录或 `AEL_BUNDLE_DIR`，没有虚构的在线发行接口。首次从本仓库 dist 安装会记住该目录；本机已安装支持输出协议 1 的客户端后，可用 `ael upgrade`，再对项目执行 `ael update`。默认 JSON 的旧客户端无法探测默认文本的新发行包，必须先直接运行新分发二进制 `upgrade --from DIR`；项目更新也应使用已升级的本机二进制或新分发二进制，而非尚未更新的旧项目入口。新版探测与委派会兼容旧版的严格参数检查，避免混用二进制和 Skill。
 
 预览执行完整受管资产冲突检查，不写项目/运行库。正式项目更新拒绝运行中、未核实停止的 Attempt、工作区 fence 和待修复文件意图，生成项目外资产备份；新内核也拒绝在工具更新锁期间领取写单元。本机升级保留旧可执行文件及安装元数据、校验分发、原子替换，并保存中断恢复意图。旧服务不会自动被停止或热替换，更新后要重启对应看板/运行器。回退与限制见 [updating.md](docs/updating.md)，实测见 [update-acceptance-report.md](docs/update-acceptance-report.md)。
 
@@ -120,7 +120,7 @@ claim 返回 Attempt ID 与 token。创建 submission.json：
 
 本文后续的`ael`子命令，在目标项目中均使用项目根的`./ael`调用。
 
-所有输出 JSON；命令参数/状态非法时 stderr JSON、exit 1。exit 0 表示协议调用成功，是否完成必须读 `next_action` 和 evidence；blocked、等待确认或命令执行失败形成的检查点不会被当作成功验收。`ael help` 输出全部实际命令及结构样例。
+命令默认输出无色可读文本；`--verbose` 显示更多任务版本信息，`--no-color` 明确选择无色。脚本和 Agent 使用 `--json` 获取兼容既有字段的 JSON（CLI 输出协议 1；`ael version --json` 包含 `cli_output_protocol`），错误写 stderr 且返回码为 1。exit 0 表示协议调用成功，是否完成必须读 `next_action` 和 evidence；blocked、等待确认或检查命令失败形成的检查点不会被当作成功验收。`ael help` 列出命令，`ael help --json` 提供机器结构样例。Dashboard 启动时输出一次监听地址并持续运行；Managed 子进程日志写入运行目录，`loop run --json` 在结束时返回一个 JSON 结果。
 
 Fast/Standard/Strict/Research 为同一有序步骤引擎的预设。后端不带 UI/UX；界面影响独立增加视觉/交互门禁。未配置命令时生成 method=model 的语义审查，不会自动通过；由真实 Agent 读取具体输入、产出报告，再用 `assess --file assessment.json` 提交准确候选。明确声明 method=human 的检查，以及旧记录中未指定方法且没有命令的检查，可使用人工入口；显式 model、scenario 或 command 不会被替换为人工判断：
 

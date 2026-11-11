@@ -34,6 +34,8 @@ ael update --project /path/to/initialized-project
 /path/to/distribution/ael-darwin-arm64 upgrade
 ```
 
+从默认输出为 JSON 的旧客户端升级到默认文本的新版本时，旧客户端的版本探针无法解析新版本的默认文本；请直接使用新分发中的二进制引导 `upgrade`，再由新二进制执行所需项目的 `update`。不要把旧客户端探测失败当作升级成功。脚本需显式使用 `--json`；新程序探测旧版时兼容旧版默认 JSON。
+
 从分发目录运行会自动识别相邻的 `ael-toolchain.lock`。也可显式用 `--from DIR`，自定义安装用 `--prefix DIR`。临时目录测试不会改默认安装或业务工程。
 
 ## 版本从哪里来

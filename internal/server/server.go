@@ -391,7 +391,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sub, _ := fs.Sub(ui, "ui")
 	http.FileServer(http.FS(sub)).ServeHTTP(w, r)
 }
-func Listen(s *core.Service, addr string, extra func(http.ResponseWriter, *http.Request) bool) error {
+func Listen(s *core.Service, addr string, extra func(http.ResponseWriter, *http.Request) bool, ready func(string)) error {
 	if _, _, e := net.SplitHostPort(addr); e != nil {
 		return e
 	}
@@ -401,7 +401,9 @@ func Listen(s *core.Service, addr string, extra func(http.ResponseWriter, *http.
 	}
 	h := New(s, ln.Addr().String())
 	h.Extra = extra
-	fmt.Printf("{\"url\":\"http://%s\"}\n", ln.Addr())
+	if ready != nil {
+		ready("http://" + ln.Addr().String())
+	}
 	return (&http.Server{Handler: h, ReadHeaderTimeout: 5 * time.Second}).Serve(ln)
 }
 

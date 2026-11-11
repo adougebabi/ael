@@ -269,7 +269,7 @@ if [ "$1" = version ]; then printf '%s\n' '{"version":"0.2.0","build":"fixture-f
 printf '%s\n' "$@" > "$AEL_DELEGATION_TRACE"
 shift
 while [ "$#" -gt 0 ]; do
- case "$1" in --project) shift; target=$1 ;; esac
+ case "$1" in --project) shift; target=$1 ;; --json) echo 'legacy update rejects --json' >&2; exit 1 ;; esac
  shift
 done
 printf '{"operation":"update","status":"preview","target":"%s","available":{"version":"0.2.0","build":"fixture-future"},"files":[]}' "$target"

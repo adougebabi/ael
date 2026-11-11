@@ -27,7 +27,7 @@ ael migrate repair --project /tmp/ael-legacy-rehearsal --migration ID
 ael migrate rollback --project /tmp/ael-legacy-rehearsal --migration ID
 ```
 
-所有命令输出 JSON，源变更拒绝旧计划，目标被用户改动拒绝覆盖。报告默认写在显式 out；浏览器预览只将计划保存到运行库，不改源目录。原文、大小、哈希、来源类型、风险、目标映射均可逐条审阅。所有来源都计入 import/historical/preserve/pending/ignore 对账，未解析内容仍有原文和风险。
+命令默认输出可读文本；自动化读取结果时追加 `--json`，显式 out 中的 inventory/plan 文件仍为 JSON。源变更拒绝旧计划，目标被用户改动拒绝覆盖。报告默认写在显式 out；浏览器预览只将计划保存到运行库，不改源目录。原文、大小、哈希、来源类型、风险、目标映射均可逐条审阅。所有来源都计入 import/historical/preserve/pending/ignore 对账，未解析内容仍有原文和风险。
 
 ## 语义 proposal
 

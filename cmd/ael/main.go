@@ -22,14 +22,17 @@ import (
 var build = "dev"
 
 func main() {
+	options := parse(os.Args[1:])
 	v, e := run(os.Args[1:])
 	if e != nil {
-		code := strings.SplitN(e.Error(), ":", 2)[0]
-		_ = json.NewEncoder(os.Stderr).Encode(map[string]any{"error": e.Error(), "code": code})
+		_ = writeError(os.Stderr, e, options.has("json"))
 		os.Exit(1)
 	}
 	if v != nil {
-		_ = json.NewEncoder(os.Stdout).Encode(v)
+		if e = writeOutput(os.Stdout, v, options.has("json"), options.has("verbose")); e != nil {
+			_ = writeError(os.Stderr, e, options.has("json"))
+			os.Exit(1)
+		}
 	}
 }
 
@@ -48,7 +51,7 @@ func parse(raw []string) args {
 				continue
 			}
 			a.Flags[key] = "true"
-			if key == "dry-run" || key == "ack-stopped" {
+			if booleanFlag(key) {
 				continue
 			}
 			if i+1 < len(raw) && !strings.HasPrefix(raw[i+1], "--") {
@@ -60,6 +63,13 @@ func parse(raw []string) args {
 		}
 	}
 	return a
+}
+func booleanFlag(key string) bool {
+	switch key {
+	case "dry-run", "ack-stopped", "ack-drained", "apply", "codex", "json", "verbose", "no-color":
+		return true
+	}
+	return false
 }
 func (a args) get(k, d string) string {
 	if v := a.Flags[k]; v != "" {
@@ -77,31 +87,36 @@ func input(path string, v any) error {
 	d.DisallowUnknownFields()
 	return d.Decode(v)
 }
-func run(raw []string) (any, error) {
+func run(raw []string) (value any, runErr error) {
 	bootstrap.Build = build
 	a := parse(raw)
+	for _, flag := range []string{"json", "verbose", "no-color"} {
+		if value, ok := a.Flags[flag]; ok && value != "true" && value != "false" {
+			return nil, core.Error("INVALID_FLAG_VALUE", flag)
+		}
+	}
 	cmd := strings.Join(a.Words, " ")
 	root := a.get("project", ".")
 	id := a.get("task", "")
 	executor := a.get("executor", "attached")
 	switch cmd {
 	case "", "help":
-		return map[string]any{"commands": []string{"version", "doctor", "init [--dry-run] [--bundle-dir DIR]", "upgrade [--from DIR] [--prefix DIR] [--dry-run]", "update [--project PATH] [--from DIR] [--prefix DIR] [--dry-run] [--ack-stopped]", "task create --file definition.json", "task show|plan --task ID", "task list", "task edit --task ID --file definition.json --reason TEXT", "task cancel --task ID --reason TEXT", "task delete --task ID --reason TEXT", "task budget --task ID --max-seconds 0 --reason TEXT", "claim --task ID --executor NAME [--unit CHECK] [--owner-pid PERSISTENT_AGENT_PID]", "heartbeat --task ID --attempt ID --token TOKEN", "context --task ID", "progress --task ID --attempt ID --token TOKEN --file progress.json", "assess --file assessment.json", "knowledge status", "knowledge index", "submit --file submission.json", "next --task ID", "resume --task ID [--ack-stopped] [--return-to execute]", "verify --task ID --check ID", "confirm --task ID --kind plan|revision|delivery --decision approve|adjust|reject --revision N --plan-revision N --candidate HASH --reason TEXT --executor PERSON", "confirm --kind review --task ID --check ID --artifacts report.md --reason TEXT --executor PERSON", "dashboard [--addr 0.0.0.0:7331]", "loop run --task ID --config executor.json | --codex [--session EXACT_ID]", "executor probe", "workspace bind --path WORKTREE", "knowledge search --query TEXT", "knowledge read --id ID", "migrate scan --out REPORT", "migrate plan --inventory REPORT/inventory.json --out REPORT", "migrate validate --plan REPORT/plan.json [--proposal proposal.json]", "migrate apply --plan REPORT/plan.json --approved-digest HASH [--proposal proposal.json]", "migrate verify|repair|rollback --migration ID", "activate --migration ID --approved-digest HASH --ack-drained", "storage stats", "storage backup --out NEW_DIR", "storage restore --from EXPORT_DIR", "storage prune [--before RFC3339] [--apply]", "repair"}, "global": "--project PATH; all output JSON; errors stderr exit 1", "definition": core.Definition{}, "submission": core.Submission{}, "step_result": core.StepResult{}}, nil
+		return map[string]any{"commands": []string{"version", "doctor", "init [--dry-run] [--bundle-dir DIR]", "upgrade [--from DIR] [--prefix DIR] [--dry-run]", "update [--project PATH] [--from DIR] [--prefix DIR] [--dry-run] [--ack-stopped]", "task create --file definition.json", "task show|plan --task ID", "task list", "task edit --task ID --file definition.json --reason TEXT", "task cancel --task ID --reason TEXT", "task delete --task ID --reason TEXT", "task budget --task ID --max-seconds 0 --reason TEXT", "claim --task ID --executor NAME [--unit CHECK] [--owner-pid PERSISTENT_AGENT_PID]", "heartbeat --task ID --attempt ID --token TOKEN", "context --task ID", "progress --task ID --attempt ID --token TOKEN --file progress.json", "assess --file assessment.json", "knowledge status", "knowledge index", "submit --file submission.json", "next --task ID", "resume --task ID [--ack-stopped] [--return-to execute]", "verify --task ID --check ID", "confirm --task ID --kind plan|revision|delivery --decision approve|adjust|reject --revision N --plan-revision N --candidate HASH --reason TEXT --executor PERSON", "confirm --kind review --task ID --check ID --artifacts report.md --reason TEXT --executor PERSON", "dashboard [--addr 0.0.0.0:7331]", "loop run --task ID --config executor.json | --codex [--session EXACT_ID]", "executor probe", "workspace bind --path WORKTREE", "knowledge search --query TEXT", "knowledge read --id ID", "migrate scan --out REPORT", "migrate plan --inventory REPORT/inventory.json --out REPORT", "migrate validate --plan REPORT/plan.json [--proposal proposal.json]", "migrate apply --plan REPORT/plan.json --approved-digest HASH [--proposal proposal.json]", "migrate verify|repair|rollback --migration ID", "activate --migration ID --approved-digest HASH --ack-drained", "storage stats", "storage backup --out NEW_DIR", "storage restore --from EXPORT_DIR", "storage prune [--before RFC3339] [--apply]", "repair"}, "global": "--project PATH; default text; --json for output protocol 1; --verbose; --no-color; errors stderr exit 1", "definition": core.Definition{}, "submission": core.Submission{}, "step_result": core.StepResult{}}, nil
 	case "version":
-		return map[string]string{"version": bootstrap.Version, "build": build}, nil
+		return map[string]any{"version": bootstrap.Version, "build": build, "cli_output_protocol": 1}, nil
 	case "doctor":
 		return bootstrap.Doctor(root)
 	case "init":
 		return bootstrap.InitProject(root, a.has("dry-run"), false, a.get("bundle-dir", ""))
 	case "upgrade", "update":
 		for flag, value := range a.Flags {
-			if flag != "project" && flag != "prefix" && flag != "from" && flag != "bundle-dir" && flag != "dry-run" && flag != "ack-stopped" {
+			if flag != "project" && flag != "prefix" && flag != "from" && flag != "bundle-dir" && flag != "dry-run" && flag != "ack-stopped" && flag != "json" && flag != "verbose" && flag != "no-color" {
 				return nil, core.Error("UNKNOWN_FLAG", flag)
 			}
-			if flag != "dry-run" && flag != "ack-stopped" && value == "true" {
+			if !booleanFlag(flag) && value == "true" {
 				return nil, core.Error("FLAG_VALUE_REQUIRED", flag)
 			}
-			if (flag == "dry-run" || flag == "ack-stopped") && value != "true" && value != "false" {
+			if booleanFlag(flag) && value != "true" && value != "false" {
 				return nil, core.Error("INVALID_FLAG_VALUE", flag)
 			}
 		}
@@ -161,6 +176,11 @@ func run(raw []string) (any, error) {
 		return nil, e
 	}
 	defer svc.Store.Close()
+	if !a.has("json") {
+		// Summaries need the open store. A display failure must not turn an
+		// already successful mutation into an apparent command failure.
+		defer func() { value = withTextSummaries(svc, value, cmd) }()
+	}
 	switch cmd {
 	case "migrate apply":
 		var p migration.Plan
@@ -361,7 +381,9 @@ func run(raw []string) (any, error) {
 		}
 		return nil, core.Error("KNOWLEDGE_MISSING", a.get("id", ""))
 	case "dashboard":
-		return nil, server.Listen(svc, a.get("addr", "0.0.0.0:7331"), nil)
+		return nil, server.Listen(svc, a.get("addr", "0.0.0.0:7331"), nil, func(url string) {
+			_ = writeOutput(os.Stdout, map[string]string{"url": url}, a.has("json"), a.has("verbose"))
+		})
 	default:
 		return nil, core.Error("UNKNOWN_COMMAND", cmd)
 	}

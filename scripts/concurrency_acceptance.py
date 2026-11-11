@@ -48,7 +48,7 @@ def run(*argv, expect_ok=True, timeout=60):
 
 
 def cli(*args, expect_ok=True):
-    return run(root / "ael", *args, "--project", root, expect_ok=expect_ok)
+    return run(root / "ael", *args, "--project", root, "--json", expect_ok=expect_ok)
 
 
 def json_file(name, data):
@@ -94,7 +94,7 @@ pathlib.Path(os.environ["AEL_RESULT"]).write_text(json.dumps(result))
 
 summary = {"fixture": "isolated temporary project; deterministic executor programs, not real Agents", "out": str(out)}
 try:
-    run(binary, "init", "--project", root, "--bundle-dir", bundle)
+    run(binary, "init", "--project", root, "--bundle-dir", bundle, "--json")
     summary["version"] = cli("version")
     summary["data_dir"] = cli("doctor")["data_dir"]
     for name in ("a", "b"):
@@ -102,7 +102,7 @@ try:
     processes = []
     for name in ("a", "b"):
         cfg = json_file(name + "-executor.json", {"command": [sys.executable, str(executor), name, str(barrier)], "timeout_seconds": 40})
-        argv = [str(root / "ael"), "loop", "run", "--task", "parallel-" + name, "--config", str(cfg), "--project", str(root)]
+        argv = [str(root / "ael"), "loop", "run", "--task", "parallel-" + name, "--config", str(cfg), "--project", str(root), "--json"]
         processes.append((name, argv, subprocess.Popen(argv, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)))
     outcomes = {}
     for name, argv, proc in processes:

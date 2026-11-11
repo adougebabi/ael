@@ -77,6 +77,11 @@ func UpdateProject(root string, o UpdateOptions) (UpdateReport, error) {
 			return r, e
 		}
 		args := []string{"update", "--project", root, "--from", bundle.Root}
+		// Old releases already return JSON and reject unknown update flags.
+		// New releases advertise support in their version probe.
+		if version.OutputProtocol >= 1 {
+			args = append(args, "--json")
+		}
 		if o.DryRun {
 			args = append(args, "--dry-run")
 		}

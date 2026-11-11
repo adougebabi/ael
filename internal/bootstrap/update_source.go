@@ -25,8 +25,9 @@ type UpdateOptions struct {
 	AckStopped bool
 }
 type BinaryVersion struct {
-	Version string `json:"version"`
-	Build   string `json:"build"`
+	Version        string `json:"version"`
+	Build          string `json:"build"`
+	OutputProtocol int    `json:"cli_output_protocol,omitempty"`
 }
 type UpdateReport struct {
 	Operation       string            `json:"operation"`
@@ -266,7 +267,9 @@ func probeBinary(path string) (BinaryVersion, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	var stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, path, "version")
+	// The legacy parser accepts a trailing unknown flag and still emits JSON;
+	// putting it first would instead consume the version command.
+	cmd := exec.CommandContext(ctx, path, "version", "--json")
 	cmd.Stderr = &stderr
 	b, e := cmd.Output()
 	if e != nil {

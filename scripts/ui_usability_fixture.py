@@ -22,7 +22,7 @@ if out.exists() and any(out.iterdir()):
 out.mkdir(parents=True, exist_ok=True)
 (out / 'ISOLATED-UI-FIXTURE').write_text('Disposable AEL usability test projects. No real business data.\n')
 native = Path(args.seed_binary).resolve() if args.seed_binary else bundle / 'ael-darwin-arm64'
-native_version = json.loads(subprocess.check_output([str(native), 'version'], text=True))
+native_version = json.loads(subprocess.check_output([str(native), 'version', '--json'], text=True))
 manifest = {'isolated': True, 'out': str(out), 'projects': {}}
 manifest['version'] = native_version['version']
 manifest['build'] = native_version['build']
@@ -39,7 +39,7 @@ def write(root, rel, body):
 def run(project, *argv, ok=True):
     env = dict(os.environ, AEL_DATA_DIR=project['runtime'])
     binary = native if args.seed_binary else Path(project['root']) / 'ael'
-    p = subprocess.run([str(binary), *map(str, argv), '--project', project['root']],
+    p = subprocess.run([str(binary), *map(str, argv), '--project', project['root'], '--json'],
                        text=True, capture_output=True, env=env, timeout=90)
     commands.append({'project': project['root'], 'args': list(map(str, argv)), 'code': p.returncode,
                      'error': p.stderr if p.returncode else ''})
@@ -57,7 +57,7 @@ def init(name, port, legacy=False):
         write(root, '.trellis/spec/backend/rules.md', '# 隔离夹具规范\n写入必须支持幂等键。\n')
         write(root, '.trellis/research/old.md', '# 隔离夹具历史记录\n[未接入资料](not-present.md)\n')
     env = dict(os.environ, AEL_DATA_DIR=project['runtime'])
-    p = subprocess.run([str(native), 'init', '--project', str(root), '--bundle-dir', str(bundle)],
+    p = subprocess.run([str(native), 'init', '--project', str(root), '--bundle-dir', str(bundle), '--json'],
                        env=env, capture_output=True, text=True, timeout=90)
     if p.returncode:
         raise RuntimeError(p.stderr)

@@ -16,7 +16,7 @@ def run(argv,ok=True,timeout=60,cwd=None):
  except json.JSONDecodeError:v={'stdout':p.stdout,'stderr':p.stderr,'code':p.returncode}
  return v
 binary=bundle/'ael-darwin-arm64'
-def cli(*argv,project=None,ok=True):return run([root/'ael',*argv,'--project',project or root],ok)
+def cli(*argv,project=None,ok=True):return run([root/'ael',*argv,'--project',project or root,'--json'],ok)
 def put(name,data):
  path=out/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(json.dumps(data,ensure_ascii=False,indent=2));return path
 
@@ -49,7 +49,7 @@ def t01():
  (root/'test_calculator.py').write_text('import unittest\nfrom calculator import add\nclass Addition(unittest.TestCase):\n    def test_positive(self): self.assertEqual(add(2,3),5)\n    def test_zero(self): self.assertEqual(add(2,0),2)\n    def test_negative(self): self.assertEqual(add(-2,-3),-5)\n')
  run(['git','init','-q',root]);before={str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob('*') if p.is_file() and '.git' not in p.parts}
  put('baseline-before-init.json',before)
- run([binary,'init','--project',root,'--bundle-dir',bundle]);v=cli('version');assert v['version']==run([binary,'version'])['version']
+ run([binary,'init','--project',root,'--bundle-dir',bundle,'--json']);v=cli('version');assert v['version']==run([binary,'version','--json'])['version']
  health=cli('knowledge','status');assert health['state']=='ready';assert sum(health['counts'].values())==len(health['sources'])
  k=cli('knowledge','read','--id','arithmetic');assert k['status']=='current';assert k['path']=='docs/spec/arithmetic.md';assert 'a+b' in k['body']
  assert cli('knowledge','read','--id','old-decision')['status']=='rejected'
@@ -108,7 +108,7 @@ def t06():
  for id in ['T06-lock-a','T06-lock-b']:
   cli('resume','--task',id,'--ack-stopped');cli('task','cancel','--task',id,'--reason','fixture concurrent claim exercise done')
  create('T06-parallel-a');create('T06-parallel-b')
- processes=[subprocess.Popen([str(root/'ael'),'claim','--task',id,'--workspace',str(root),'--executor',actor,'--project',str(root)],env=env,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE) for id,actor in [('T06-parallel-a','parallel-a'),('T06-parallel-b','parallel-b')]]
+ processes=[subprocess.Popen([str(root/'ael'),'claim','--task',id,'--workspace',str(root),'--executor',actor,'--project',str(root),'--json'],env=env,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE) for id,actor in [('T06-parallel-a','parallel-a'),('T06-parallel-b','parallel-b')]]
  for proc,id in zip(processes,['T06-parallel-a','T06-parallel-b']):
   stdout,stderr=proc.communicate(timeout=30);assert proc.returncode==0,stderr;claim=json.loads(stdout);assert claim['task']['definition']['id']==id
   a=claim['attempt'];cli('submit','--file',put(id+'-parallel.json',{'task':id,'attempt':a['id'],'token':a['token'],'key':a['id'],'result':{'status':'pass','summary':'independent parallel task definition inspected; no shared writes','artifacts':[]}}))
@@ -152,7 +152,7 @@ def t10():
  return {'non_publish':'verified task requires no deployment','feedback':'linked new task; original outcome retained','local_delivery_receipt':receipt,'target':str(local),'production':'never touched'}
 
 def t11():
- empty=out/'empty';empty.mkdir(exist_ok=True);run([binary,'init','--project',empty,'--bundle-dir',bundle]);assert cli('knowledge','status',project=empty)['state']=='empty'
+ empty=out/'empty';empty.mkdir(exist_ok=True);run([binary,'init','--project',empty,'--bundle-dir',bundle,'--json']);assert cli('knowledge','status',project=empty)['state']=='empty'
  idx=empty/'.ael/knowledge-sources.json';idx.unlink();assert cli('knowledge','status',project=empty)['state']=='not_indexed'
  idx.write_text('corrupt');assert cli('knowledge','status',project=empty)['state']=='index_error'
  cli('knowledge','index',project=empty);(empty/'docs/spec').mkdir(parents=True);(empty/'docs/spec/missing.md').symlink_to(out/'missing-target');cli('knowledge','index',project=empty,ok=False)
@@ -160,7 +160,7 @@ def t11():
  return {'distinguished':['empty','not_indexed','index_error','read_failed'],'no_inferred_specs':True}
 
 def t12():
- prefix=out/'user-install';run(['sh',P(__file__).resolve().parent/'install.sh',prefix,binary,bundle]);run([prefix/'bin/ael','version']);run(['sh',P(__file__).resolve().parent/'uninstall.sh',prefix]);assert not (prefix/'bin/ael').exists();assert cli('version')['version']==run([binary,'version'])['version']
+ prefix=out/'user-install';run(['sh',P(__file__).resolve().parent/'install.sh',prefix,binary,bundle]);run([prefix/'bin/ael','version','--json']);run(['sh',P(__file__).resolve().parent/'uninstall.sh',prefix]);assert not (prefix/'bin/ael').exists();assert cli('version')['version']==run([binary,'version','--json'])['version']
  skill=root/'.agents/skills/ael-work/SKILL.md';saved=skill.read_bytes();skill.write_text('user customization preserved\n')
  assert cli('update','--from',bundle,ok=False).get('code')==1;assert skill.read_text()=='user customization preserved\n';skill.write_bytes(saved)
  entry=(root/'AGENTS.md').read_text();assert '$ael-work' in entry;assert 'Read project rules before editing.' in entry
