@@ -78,6 +78,8 @@ ael update --project /path/to/project
 
 ## 初始化与查看
 
+独立 Server 可在没有业务 checkout 的专用本地数据目录启动，提供浏览器登录、项目注册、成员授权和可撤销的 Agent 令牌；本机项目模式不受影响。初始化、代理信任、协议和限制见 [独立 Server](docs/standalone-server.md)。本阶段只监听 loopback，未部署真实服务。
+
 ```sh
 ./dist/ael-darwin-arm64 init --project /path/to/project --bundle-dir ./dist --dry-run
 ./dist/ael-darwin-arm64 init --project /path/to/project --bundle-dir ./dist

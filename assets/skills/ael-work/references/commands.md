@@ -5,6 +5,7 @@
 先按工作流程的 W0 判断请求目的。普通讨论、查询、审阅或仅供审核的材料直接处理，不因落盘而运行下列 AEL 流程；用户明确要求某项 AEL 操作时按该请求执行。
 
 - 工具维护：`ael upgrade` 更新本机安装；`ael update` 或 `./ael update` 检查并更新当前已接入工程，`--project PATH` 指定其他工程。`--from DIR` 指定完整本地分发，`--dry-run` 预览。安装维护不领取业务写单元；有运行/中断单元先安全结束或交接，不在 Managed 子执行器中替换工具。旧刷新命令已移除。
+- 独立 Server：管理员使用 `ael server bootstrap --data-dir /absolute/local/DIR --username NAME --password-stdin` 初始化专用空目录，再用 `ael server start --data-dir /absolute/local/DIR` 启动 loopback 服务；密码从标准输入读取，不放在命令行。浏览器登录后管理项目、成员与可撤销令牌；服务端不接受任意客户端路径或执行任务命令。协议、TLS 代理与本机卷限制见 `docs/standalone-server.md`。
 - 项目与知识：`./ael doctor`、`./ael knowledge status`、`./ael knowledge search --query TEXT`、`./ael knowledge read --id ID`。原文变更后先审阅差异，再 `./ael knowledge index` 重建来源账本。索引只读取当前工程，绝不执行旧脚本。
 - 任务：进入工程流程后，先 `./ael task list`、`./ael task show --task ID` 复用相关工作；新增已授权工程工作用 `./ael task create --file /tmp/definition.json`。原始请求填 original_request，scope/non_goals/acceptance/goal/checks 明确。明确要求使用 AEL 的只验收任务：intent=inspect，goal=report 或 analysis，报告写运行目录；不得改业务源码。
 - 任务树：大任务定义使用 `type: "epic"`；创建叶子时 `parent` 可指向本项目已存在的 Epic（默认必需）。已有叶子使用 `./ael task link --parent EPIC --task LEAF --milestone 阶段 --json` 关联，可选叶子加 `--required=false`；用 `./ael task tree --task EPIC --json` 查看真实子任务状态，`./ael task progress --task EPIC --json` 使用相同汇总。必要叶子达标后，`./ael task integrate --task EPIC --json` 核对内容并记录父候选，再用 `verify --task EPIC --check CHECK --json` 在准备候选的工作区逐项运行父级必需检查；缺少内容证明或候选变化时先核实，不能把叶子通过当作父级集成通过。与其他工作或同一父级其他检查共用可写工作区的父检查只保留历史结果；核实旧工作停止后重新准备父候选并逐项复验。独立运行库和外部编辑器不受这一协调保护，应使用稳定隔离工作区。各类叶子计数可以重叠，发布目标仍需明确确认和真实回执。
