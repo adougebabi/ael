@@ -52,3 +52,38 @@
 - 新增本机保守租约截止与实际发送前检查：续租阻塞不会延长本机执行；在途 HTTP 请求随失权取消、在续租后可继续；证据分块与待提交结果恢复覆盖了过期情形。Server 心跳增加签发时间，旧 Server 缺少该字段时新客户端会拒绝并提示升级。真实回环测试、受控时间测试、Server 心跳契约和竞态回归见 `../evidence/V2-12-scope-recovery/lease-final.log`、`server-heartbeat.log`、`latest-cli-remote-knowledge-race.log`、`cli-remote-execution-race.log` 和 `server-race.log`。睡眠后的轮询检测仍有约一秒及调度延迟，不能把它说成即时停写或旧进程已停止。
 - 已脱组的合成旧进程继续向旧副本写相对路径时，原 checkout 和从已保留副本创建的新副本未受影响，见 `relative-writer.log`；测试不证明同用户进程无法主动访问其他路径。发现的现有便携候选索引执行位歧义记为 `../NON-BLOCKING-ISSUES.md` 的 NB-010，未顺手修改原候选协议。
 - 仍未完成：将副本与领取、候选/规范、执行、制品、Server 回执、断线恢复和原 checkout 安全交付接成一条链；补齐必要的失权、旧写者及未授权发布验收。客户端和 Server 总门禁仍关闭，两个原远程正向测试仍未重新通过。本项状态以 `../WORKLOG.md` 为准，不得进入 V2-13。
+
+## 本轮范围收敛与验收诊断（仍未 PASS）
+
+- 内部循环现已关联阶段副本、证据和 Server 回执；在任务完成时尝试把确认结果交回授权 checkout。交付前发现原 checkout 改变或缺少回执时保留副本并报告；临时 Git fixture 覆盖已有暂存/未跟踪内容、冲突和缺少回执，见 `../evidence/V2-12-scope-recovery/delivery-stop-red.log` 与 `delivery-stop-green.log`。这些检查不能证明交付与其他程序的并发写入是原子操作。
+- 真实 Server 诊断先后因父任务超过原有 90 秒上限失败两次；重复候选采样及逐项 Git 配置查询优化后，第三次在相同限制内完成原脚本和新增的隔离副本未授权命令检查，见 `../evidence/V2-12-scope-recovery/real-server-diagnostic-copy.log`。此诊断程序仅在 `/private/tmp/ael-v212-diagnostic-sevow5le/` 使用 Go overlay 绕过客户端和 Server 两个门禁，未修改产品门禁，也未运行本次 Codex smoke，因此**不是正式验收**。
+- 产品代码的完整 `go test ./... -count=1` 回归中，本地执行和其他非 Server 包通过；两个原远程 Runner 正向测试仍因产品门禁返回 503 而失败，见 `../evidence/V2-12-scope-recovery/go-full-current.log`。旧写者和凭据风险仍在，不能以诊断结果替代。
+- 用户已明确要求 V2-12 完成后暂停；即使本项最终 PASS，也不要自动开始 V2-13。实际当前状态和下一步以 `../WORKLOG.md` 为准。
+- 当前真实阻塞：未经授权的间接发布在独立 fixture 中可执行，且现有代码没有验证过的后代命令约束机制。仅修改顶层黑名单或 PATH 不能阻止绝对路径；不为消除失败而更改原验收、删除用例或把门禁恒置为开放。恢复时先在保留的失败测试上验证符合原任务设定的实际约束，再完成上述正式验收。
+
+### 原范围内尚需核实的具体边界
+
+- `internal/core/remote_runner.go` 的 `RemoteAttemptTx` 在任务暂停、状态或定义/计划版本变化后拒绝责任；`cmd/ael/remote_runner_loop.go` 和 `remote_runner_lease.go` 则在续租被拒或本地期限到达时发现失权。两者之间普通命令可能开始写入，属于代码路径分析，尚未通过当前真实 Server 的提前撤权场景实测。
+- `cmd/ael/remote_runner_loop.go` 的完成动作在 Server 接受结果之后调用 `runnerDeliverWorkspace`；此时原 attempt 已结束，代码没有明确的独立交付授权。需要明确并验证该动作所依据的授权，不能把收到回执自动等同于仍持有原租约。
+- `cmd/ael/remote_runner_config.go` 对任务检查执行精确的本地授权匹配，发布拦截只检查顶层命令。隔离 fixture 实测获准的 `make test` 间接启动了仅写标记、不能发布的假 `git push`，PATH 查找和绝对路径两种调用均未拦住；失败测试源码和输出为 `../evidence/V2-12-scope-recovery/indirect-publish-test.go.txt`、`indirect-publish-red.log`、`indirect-publish-paths-red.log`。`cmd/ael/remote_runner_process.go` 对已知控制令牌及特定带标签内容脱敏；无法单凭这些匹配证明未标注的其他凭据不会进入日志。
+- 旧写者在原进程组取消后仍可能向旧副本写相对路径，见 `TestRunnerWorkspaceKeepsOldRelativeWriterOutOfNextCopy` 与历史 fixture；该测试同时验证原 checkout、已接受副本和下一副本在此相对路径场景未受影响，但没有验证所有路径或提前撤权。这里的风险不要求把“崩溃瞬间杀死所有后代”或抵御任意同用户恶意进程额外设为原任务验收。
+- 本轮诊断还在 `/private/tmp/ael-v212-diagnostic-sevow5le/fixture-codex/` 用真实已登录 Codex 完成一个 define 步骤；这仍是临时绕过门禁的诊断，任务保持 open，见 `../evidence/V2-12-scope-recovery/codex-diagnostic.log`。
+
+间接发布失败测试可从仓库根目录重现；测试仅执行一次性目录中的假 Git，不连接任何发布服务：
+
+```sh
+python3 - <<'PY'
+from pathlib import Path
+import json, os, subprocess, tempfile
+root = Path.cwd()
+with tempfile.TemporaryDirectory(prefix="ael-v212-overlay-") as directory:
+    overlay = Path(directory) / "overlay.json"
+    overlay.write_text(json.dumps({"Replace": {
+        str(root / "cmd/ael/zz_v212_indirect_publish_test.go"):
+        str(root / "docs/v2-execution/evidence/V2-12-scope-recovery/indirect-publish-test.go.txt")
+    }}))
+    env = dict(os.environ, GOCACHE="/private/tmp/ael-v212-go-build")
+    raise SystemExit(subprocess.call(["go", "test", "-overlay", str(overlay), "./cmd/ael",
+                                      "-run", "^TestV212ApprovedCheckCannotLaunchIndirectPublish$", "-count=1"], env=env))
+PY
+```

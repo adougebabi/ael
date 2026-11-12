@@ -1,0 +1,7 @@
+--- FAIL: TestRunnerCompletedDeliversConfirmedWorkspace (4.64s)
+    remote_runner_delivery_test.go:103: confirmed workspace was not delivered: map[action:wait_workspace_delivery detail: mode:remote next_action:completed stop_reason:wait_workspace_delivery workspace:/private/var/folders/gv/hlfcpzxj63b3813yxlrkqv6r0000gn/T/TestRunnerCompletedDeliversConfirmedWorkspace3132513455/001/runtime/io/attempts/AT-delivery/snapshot workspace_delivery:pending]
+--- FAIL: TestRunnerCompletedRetainsConflictingWorkspace (4.63s)
+    remote_runner_delivery_test.go:117: conflicting checkout was not reported: map[action:wait_workspace_delivery detail: mode:remote next_action:completed stop_reason:wait_workspace_delivery workspace:/private/var/folders/gv/hlfcpzxj63b3813yxlrkqv6r0000gn/T/TestRunnerCompletedRetainsConflictingWorkspace2431848499/001/runtime/io/attempts/AT-delivery/snapshot workspace_delivery:pending]
+FAIL
+FAIL	ael/cmd/ael	15.060s
+FAIL

@@ -3,6 +3,7 @@ package main
 import (
 	"ael/internal/knowledge"
 	"ael/internal/remote"
+	"context"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -127,6 +128,18 @@ func TestRunnerWorkspaceRejectsUnknownInputsAndExistingDestination(t *testing.T)
 	}
 }
 
+func TestRunnerWorkspaceDoesNotStartCopyAfterLeaseExpiry(t *testing.T) {
+	source, runtime := runnerWorkspaceFixture(t)
+	guard := newRunnerLeaseGuard(context.Background(), time.Now().Add(-time.Second))
+	destination := filepath.Join(runtime, "expired")
+	if _, err := runnerCreateWorkspaceGuarded(source, destination, "fixture-repo", guard); err == nil || !strings.Contains(err.Error(), "LEASE_LOST") {
+		t.Fatalf("expired lease was allowed to start a copy: %v", err)
+	}
+	if _, err := os.Stat(destination); !os.IsNotExist(err) {
+		t.Fatalf("expired lease created a workspace: %v", err)
+	}
+}
+
 func TestRunnerWorkspaceRejectsExcludedTrackedFilesAndSpecialIndexFlags(t *testing.T) {
 	for _, kind := range []string{"tracked-runtime", "skip-worktree", "intent-to-add"} {
 		t.Run(kind, func(t *testing.T) {
@@ -204,6 +217,88 @@ func TestRunnerWorkspacePreservesStagedMode(t *testing.T) {
 	}
 }
 
+func TestRunnerWorkspaceFingerprintIncludesStagedMode(t *testing.T) {
+	source, runtime := runnerWorkspaceFixture(t)
+	candidate, before, err := runnerWorkspaceFingerprint(source, "fixture-repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(runtime, "fingerprint")
+	if _, err = runnerCreateWorkspace(source, dest, "fixture-repo"); err != nil {
+		t.Fatal(err)
+	}
+	copyCandidate, copyFingerprint, err := runnerWorkspaceFingerprint(dest, "fixture-repo")
+	if err != nil || copyCandidate.ID != candidate.ID || copyFingerprint != before {
+		t.Fatalf("equivalent workspace changed fingerprint: %v", err)
+	}
+	runnerWorkspaceFixtureGit(t, source, "update-index", "--chmod=+x", "--", "spec/rules.md")
+	changedCandidate, after, err := runnerWorkspaceFingerprint(source, "fixture-repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changedCandidate.ID != candidate.ID || after == before {
+		t.Fatalf("staged mode was not independently protected: candidate unchanged=%v fingerprint unchanged=%v", changedCandidate.ID == candidate.ID, after == before)
+	}
+}
+
+func TestRunnerWorkspaceFingerprintIncludesFilePermissions(t *testing.T) {
+	source, _ := runnerWorkspaceFixture(t)
+	candidate, before, err := runnerWorkspaceFingerprint(source, "fixture-repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Chmod(filepath.Join(source, "app.txt"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	changedCandidate, after, err := runnerWorkspaceFingerprint(source, "fixture-repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changedCandidate.ID != candidate.ID || after == before {
+		t.Fatalf("file permissions were not independently protected: candidate unchanged=%v fingerprint unchanged=%v", changedCandidate.ID == candidate.ID, after == before)
+	}
+}
+
+func TestRunnerWorkspaceFingerprintRejectsChangesBetweenSamples(t *testing.T) {
+	source, runtime := runnerWorkspaceFixture(t)
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	quote := func(value string) string { return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'" }
+	marker := filepath.Join(runtime, "first-sample")
+	wrapper := filepath.Join(runtime, "git")
+	script := "#!/bin/sh\ncase \"$*\" in\n*'rev-parse --show-toplevel'*) if [ -f " + quote(marker) + " ]; then printf 'changed between samples\\n' > " + quote(filepath.Join(source, "app.txt")) + "; else : > " + quote(marker) + "; fi ;;\nesac\nexec " + quote(realGit) + " \"$@\"\n"
+	if err = os.WriteFile(wrapper, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", runtime+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if _, _, err = runnerWorkspaceFingerprint(source, "fixture-repo"); err == nil || !strings.Contains(err.Error(), "RUNNER_WORKSPACE_CHANGED") {
+		t.Fatalf("workspace change between complete samples was not rejected: %v", err)
+	}
+}
+
+func TestRunnerWorkspaceRejectsSourceMutationDuringCopy(t *testing.T) {
+	source, runtime := runnerWorkspaceFixture(t)
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	quote := func(value string) string { return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'" }
+	wrapper := filepath.Join(runtime, "git")
+	script := "#!/bin/sh\ncase \"$*\" in\n*'remote remove origin'*) printf 'user edit during copy\\n' > " + quote(filepath.Join(source, "app.txt")) + " ;;\nesac\nexec " + quote(realGit) + " \"$@\"\n"
+	if err = os.WriteFile(wrapper, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", runtime+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if _, err = runnerCreateWorkspace(source, filepath.Join(runtime, "copy"), "fixture-repo"); err == nil {
+		t.Fatal("source edit during copying was accepted")
+	}
+	if raw, err := os.ReadFile(filepath.Join(source, "app.txt")); err != nil || string(raw) != "user edit during copy\n" {
+		t.Fatalf("source edit was not retained: %q %v", raw, err)
+	}
+}
+
 func TestRunnerWorkspaceRejectsUncapturedLocalGitRules(t *testing.T) {
 	for _, kind := range []string{"filter", "attributes"} {
 		t.Run(kind, func(t *testing.T) {
@@ -223,6 +318,25 @@ func TestRunnerWorkspaceRejectsUncapturedLocalGitRules(t *testing.T) {
 				t.Fatalf("%s was rejected only after creating a workspace: %v", kind, err)
 			}
 		})
+	}
+}
+
+func TestRunnerWorkspaceIgnoresUnrelatedValuelessConfig(t *testing.T) {
+	source, _ := runnerWorkspaceFixture(t)
+	path := filepath.Join(source, ".git", "config")
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = f.WriteString("\n[fixture]\n\tboolean\n")
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = runnerWorkspaceOptions(source); err != nil {
+		t.Fatalf("unrelated valueless Git configuration was rejected: %v", err)
 	}
 }
 

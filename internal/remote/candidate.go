@@ -349,6 +349,13 @@ func CapturePortableCandidate(root, repository string) (PortableCandidate, error
 	return second, nil
 }
 
+// CapturePortableCandidateSample performs one candidate observation. Callers
+// must compare two independent observations before treating it as stable;
+// CapturePortableCandidate should be used when no broader comparison exists.
+func CapturePortableCandidateSample(root, repository string) (PortableCandidate, error) {
+	return capturePortableCandidateOnce(root, repository)
+}
+
 func capturePortableCandidateOnce(root, repository string) (PortableCandidate, error) {
 	var result PortableCandidate
 	if !identifier.MatchString(repository) {

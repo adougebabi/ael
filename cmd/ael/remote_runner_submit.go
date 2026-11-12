@@ -6,11 +6,8 @@ import (
 	"ael/internal/store"
 	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -93,116 +90,23 @@ func sanitizeRunnerResult(result core.StepResult, secrets ...string) core.StepRe
 	return result
 }
 
-func runnerSubmitResult(ctx context.Context, cfg remoteRunnerConfig, config, project string, binding remote.Binding, lease remoteRunnerLease, task core.Task, output remote.PortableCandidate, processResult remoteProcessResult, paths runnerAttemptPaths, profileToken string, guard *runnerLeaseGuard) error {
+func runnerSubmitResult(ctx context.Context, cfg remoteRunnerConfig, config, project string, binding remote.Binding, lease remoteRunnerLease, task core.Task, output remote.PortableCandidate, processResult remoteProcessResult, paths runnerAttemptPaths, profileToken string, guard *runnerLeaseGuard, operationID string, chain *runnerWorkspaceChain) error {
 	if guard == nil || ctx.Err() != nil {
 		return core.Error("LEASE_LOST", "runner lost execution authority")
 	}
 	if err := guard.check(); err != nil {
 		return err
 	}
-	result := sanitizeRunnerResult(processResult.Result, profileToken, lease.Token)
-	if strings.TrimSpace(result.Summary) == "" || (result.Status != "pass" && result.Status != "fail" && result.Status != "blocked") {
-		result = core.StepResult{Status: "blocked", Summary: "local process did not produce a valid final result"}
-	}
-	if task.Step == "execute" && result.Status == "pass" && len(result.Artifacts) == 0 {
-		result = core.StepResult{Status: "blocked", Summary: "execution result omitted a required deliverable"}
-	}
-	key, err := runnerOperation("output")
+	plan, err := runnerBuildSubmissionPlan(cfg, lease, task, output, processResult, paths, profileToken, guard, operationID, chain)
 	if err != nil {
 		return err
 	}
-	observed := map[string]any{"task_id": lease.TaskID, "attempt_id": lease.AttemptID, "token": lease.Token, "fence": lease.Fence, "expected_revision": lease.ClaimRevision, "candidate": output, "operation_id": key, "idempotency_key": key}
-	if _, err = runnerGuardedCall(config, project, binding, guard, http.MethodPost, "/runners/"+url.PathEscape(cfg.RunnerID)+"/observe", observed); err != nil {
-		return runnerProblem(err, "record candidate")
+	if err = runnerEnsureSubmissionChain(cfg, project, binding, lease, plan, guard); err != nil {
+		return err
 	}
-	refs := append([]string{}, result.Artifacts...)
-	if result.Knowledge != nil {
-		refs = append(refs, result.Knowledge.Artifacts...)
-	}
-	ids := map[string]string{}
-	bindings := make([]map[string]string, 0, len(refs))
-	for _, ref := range refs {
-		if _, exists := ids[ref]; exists {
-			continue
-		}
-		if err = guard.check(); err != nil {
-			return err
-		}
-		data, filename, mimeType, err := runnerOutputFile(cfg, paths.IO, ref, output, profileToken, lease.Token)
-		if err != nil {
-			return runnerProblem(err, "read explicit artifact")
-		}
-		key, err := runnerOperation("artifact")
-		if err != nil {
-			return err
-		}
-		uploadArgs := args{Flags: map[string]string{"task": lease.TaskID, "attempt": lease.AttemptID, "candidate": output.ID, "expected-revision": lease.ClaimRevision, "source": "remote runner result", "mime": mimeType, "operation-id": key, "idempotency-key": key}}
-		receipt, err := remoteUploadBytes(uploadArgs, config, project, binding, filename, data, &runnerUploadLease{RunnerID: cfg.RunnerID, Token: lease.Token, Fence: lease.Fence, guard: guard})
-		if err != nil {
-			return runnerProblem(err, "upload artifact")
-		}
-		artifactID, ok := receipt["id"].(string)
-		if !ok || receipt["sha256"] != store.Hash(data) {
-			return core.Error("REMOTE_RESPONSE_INVALID", "finalized artifact receipt does not match")
-		}
-		ids[ref] = artifactID
-		bindings = append(bindings, map[string]string{"path": ref, "artifact_id": artifactID})
-	}
-	for i, ref := range result.Artifacts {
-		result.Artifacts[i] = ids[ref]
-	}
-	if result.Knowledge != nil {
-		for i, ref := range result.Knowledge.Artifacts {
-			result.Knowledge.Artifacts[i] = ids[ref]
-		}
-	}
-	key, err = runnerOperation("submit")
+	receipt, err := runnerExecuteSubmissionPlan(cfg, config, project, binding, lease, plan, paths, guard)
 	if err != nil {
 		return err
 	}
-	payload := map[string]any{"task_id": lease.TaskID, "attempt_id": lease.AttemptID, "token": lease.Token, "fence": lease.Fence, "expected_revision": lease.ClaimRevision, "candidate_id": output.ID, "result": result, "method": processResult.Method, "inputs": processResult.Inputs, "bindings": bindings, "operation_id": key, "idempotency_key": key}
-	if processResult.ExitCode != nil {
-		payload["exit_code"] = *processResult.ExitCode
-	}
-	pendingPayload := make(map[string]any, len(payload)-1)
-	for name, value := range payload {
-		if name != "token" {
-			pendingPayload[name] = value
-		}
-	}
-	pending, err := json.Marshal(pendingPayload)
-	if err != nil {
-		return err
-	}
-	pendingPath := filepath.Join(paths.Control, "pending-submission.json")
-	if err = store.Atomic(pendingPath, pending, 0600); err != nil {
-		return err
-	}
-	if err = guard.check(); err != nil {
-		return core.Error("LEASE_LOST", "pending result retained in private attempt directory")
-	}
-	receipt, err := runnerGuardedCall(config, project, binding, guard, http.MethodPost, "/runners/"+url.PathEscape(cfg.RunnerID)+"/submit", payload)
-	if err != nil && strings.Contains(err.Error(), "REMOTE_UNAVAILABLE") {
-		lookup, lookupErr := runnerCall(config, project, binding, http.MethodGet, "/runners/"+url.PathEscape(cfg.RunnerID)+"/operations/"+url.PathEscape(key), nil)
-		if lookupErr == nil && lookup["found"] == true && lookup["operation_id"] == key {
-			receipt, err = lookup, nil
-		}
-	}
-	if err != nil {
-		return core.Error("RUNNER_RESULT_PENDING", fmt.Sprintf("result retained at %s; query the same operation before retrying: %v", pendingPath, err))
-	}
-	receiptBytes, err := json.Marshal(receipt)
-	if err != nil {
-		return err
-	}
-	if err = store.Atomic(filepath.Join(paths.Control, "receipt.json"), receiptBytes, 0600); err != nil {
-		return err
-	}
-	if err = os.Remove(pendingPath); err != nil {
-		return err
-	}
-	if err = os.Remove(filepath.Join(paths.Control, "lease.json")); err != nil {
-		return err
-	}
-	return nil
+	return runnerFinishSubmission(cfg, project, binding, lease, paths, receipt)
 }

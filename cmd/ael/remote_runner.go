@@ -61,16 +61,31 @@ func remoteRunnerCommand(cmd string, a args, config, project string, binding rem
 		if err = verifyRegisteredRunner(cfg, config, project, binding); err != nil {
 			return nil, err
 		}
+		unlock, err := runnerLockRuntime(cfg)
+		if err != nil {
+			return nil, err
+		}
+		defer unlock()
 		return runRemoteLoop(cfg, config, project, binding, taskID, parentID)
 	case "runner resume-result":
 		if err = verifyRegisteredRunner(cfg, config, project, binding); err != nil {
 			return nil, err
 		}
+		unlock, err := runnerLockRuntime(cfg)
+		if err != nil {
+			return nil, err
+		}
+		defer unlock()
 		return resumeRunnerResult(cfg, config, project, binding, a.get("pending", ""))
 	case "runner recover-claim":
 		if err = verifyRegisteredRunner(cfg, config, project, binding); err != nil {
 			return nil, err
 		}
+		unlock, err := runnerLockRuntime(cfg)
+		if err != nil {
+			return nil, err
+		}
+		defer unlock()
 		return recoverRunnerClaim(cfg, config, project, binding, a.get("claim", ""))
 	}
 	return nil, core.Error("REMOTE_COMMAND_UNSUPPORTED", cmd)
@@ -115,9 +130,9 @@ func runnerTask(config, project string, binding remote.Binding, id string) (core
 	return next, revision, nil
 }
 
-func runnerContext(cfg remoteRunnerConfig, config, project string, binding remote.Binding, taskID, revision string) (string, remote.PortableCandidate, map[string]any, error) {
+func runnerContext(cfg remoteRunnerConfig, config, project, workspace string, binding remote.Binding, taskID, revision string) (string, remote.PortableCandidate, map[string]any, error) {
 	var candidate remote.PortableCandidate
-	candidate, err := remote.CapturePortableCandidate(project, cfg.Repository)
+	candidate, err := remote.CapturePortableCandidate(workspace, cfg.Repository)
 	if err != nil {
 		return "", candidate, nil, err
 	}
@@ -139,7 +154,7 @@ func runnerContext(cfg remoteRunnerConfig, config, project string, binding remot
 		return "", candidate, nil, err
 	}
 	contextArgs := args{Flags: map[string]string{"task": taskID, "observation": observation, "expected-revision": revision, "operation-id": key, "idempotency-key": key}}
-	value, err := remoteContextCommand("context publish", contextArgs, config, project, binding)
+	value, err := remoteContextCommandAtWorkspace("context publish", contextArgs, config, project, workspace, binding)
 	if err != nil {
 		return "", candidate, nil, err
 	}
@@ -151,7 +166,7 @@ func runnerContext(cfg remoteRunnerConfig, config, project string, binding remot
 	if !ok || id == "" || published["inventory_unverified"] == true {
 		return "", candidate, nil, core.Error("KNOWLEDGE_UNVERIFIED", "context has unclassified or missing source inventory")
 	}
-	value, err = remoteContextCommand("context show", args{Flags: map[string]string{"context": id}}, config, project, binding)
+	value, err = remoteContextCommandAtWorkspace("context show", args{Flags: map[string]string{"context": id}}, config, project, workspace, binding)
 	if err != nil {
 		return "", candidate, nil, err
 	}

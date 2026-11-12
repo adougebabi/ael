@@ -2,7 +2,11 @@ package main
 
 import (
 	"ael/internal/core"
+	"ael/internal/remote"
+	"ael/internal/store"
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -112,6 +116,67 @@ func TestRunnerLogRedactsCredentialsSplitAcrossLines(t *testing.T) {
 	data, err := buffer.finish()
 	if err != nil || strings.Contains(string(data), "synthetic-password-123456") || strings.Contains(string(data), "synthetic-bearer-123456") || strings.Count(string(data), "[REDACTED]") != 2 {
 		t.Fatalf("credentials split across lines were not redacted: %q %v", data, err)
+	}
+}
+
+func TestRunnerArtifactsProtectShortKnownCredentials(t *testing.T) {
+	for _, secret := range []string{"abc1234", "ACT"} {
+		t.Run(secret, func(t *testing.T) {
+			workspace, dir := t.TempDir(), t.TempDir()
+			data := []byte("token=" + secret + "\n")
+			if err := os.WriteFile(filepath.Join(workspace, "output.txt"), data, 0600); err != nil {
+				t.Fatal(err)
+			}
+			candidate := remote.PortableCandidate{Files: []remote.PortableFile{{Path: "output.txt", SHA256: store.Hash(data)}}}
+			cfg := remoteRunnerConfig{Workspace: workspace}
+			if _, _, _, err := runnerOutputFile(cfg, dir, "output.txt", candidate, secret); err == nil {
+				t.Fatal("short known credential was accepted in a workspace artifact")
+			}
+			if err := os.WriteFile(filepath.Join(dir, "log.txt"), data, 0600); err != nil {
+				t.Fatal(err)
+			}
+			redacted, _, _, err := runnerOutputFile(cfg, dir, "runtime:log.txt", candidate, secret)
+			if err != nil || strings.Contains(string(redacted), secret) || bytes.Equal(redacted, data) {
+				t.Fatalf("short known credential was not redacted from runtime artifact: %q %v", redacted, err)
+			}
+			if secret == "abc1234" && !strings.Contains(string(redacted), "[REDACTED]") {
+				t.Fatalf("ordinary redaction marker is missing: %q", redacted)
+			}
+		})
+	}
+}
+
+func TestRunnerArtifactsProtectJSONEscapedCredentials(t *testing.T) {
+	for _, item := range []struct{ secret, content string }{
+		{"a&z", `{"value":"a\u0026z"}`},
+		{"ael_fixture", `{"value":"\u0061el_fixture"}`},
+	} {
+		t.Run(item.secret, func(t *testing.T) {
+			workspace, dir := t.TempDir(), t.TempDir()
+			data := []byte(item.content)
+			if err := os.WriteFile(filepath.Join(workspace, "output.json"), data, 0600); err != nil {
+				t.Fatal(err)
+			}
+			candidate := remote.PortableCandidate{Files: []remote.PortableFile{{Path: "output.json", SHA256: store.Hash(data)}}}
+			cfg := remoteRunnerConfig{Workspace: workspace}
+			if _, _, _, err := runnerOutputFile(cfg, dir, "output.json", candidate, item.secret); err == nil {
+				t.Fatal("JSON-escaped credential was accepted in a workspace artifact")
+			}
+			if err := os.WriteFile(filepath.Join(dir, "report.json"), data, 0600); err != nil {
+				t.Fatal(err)
+			}
+			redacted, _, _, err := runnerOutputFile(cfg, dir, "runtime:report.json", candidate, item.secret)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var decoded any
+			if err = json.Unmarshal(redacted, &decoded); err != nil {
+				t.Fatalf("redacted JSON is invalid: %q %v", redacted, err)
+			}
+			if sensitive, err := runnerMetadataContainsSecrets(decoded, item.secret); err != nil || sensitive {
+				t.Fatalf("JSON-escaped credential remains after redaction: %q %v", redacted, err)
+			}
+		})
 	}
 }
 

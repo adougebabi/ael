@@ -190,6 +190,12 @@ func buildCatalog(root string) (Catalog, error) {
 }
 
 func Index(root string) (Catalog, error) {
+	return IndexGuarded(root, nil)
+}
+
+// IndexGuarded rechecks the caller's authority immediately before the first
+// index write. Existing local callers keep the original Index behavior.
+func IndexGuarded(root string, beforeWrite func() error) (Catalog, error) {
 	c, e := buildCatalog(root)
 	if e != nil {
 		return c, e
@@ -201,6 +207,11 @@ func Index(root string) (Catalog, error) {
 	b, e := json.MarshalIndent(c, "", "  ")
 	if e != nil {
 		return c, e
+	}
+	if beforeWrite != nil {
+		if e = beforeWrite(); e != nil {
+			return c, e
+		}
 	}
 	return c, store.Atomic(p, append(b, '\n'), 0644)
 }

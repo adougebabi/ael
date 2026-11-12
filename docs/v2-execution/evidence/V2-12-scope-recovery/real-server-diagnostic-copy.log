@@ -1,0 +1,1 @@
+{"status": "passed", "isolated": true, "repair": "failed check then fixed and passed", "missing_result": "blocked", "unauthorized_check": "not executed", "codex_smoke": {"status": "not_requested"}}

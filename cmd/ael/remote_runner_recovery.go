@@ -4,7 +4,6 @@ import (
 	"ael/internal/core"
 	"ael/internal/remote"
 	"ael/internal/securityfs"
-	"ael/internal/store"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -34,6 +33,9 @@ func readRunnerPrivateFile(path string) ([]byte, error) {
 }
 
 func resumeRunnerResult(cfg remoteRunnerConfig, config, project string, binding remote.Binding, pendingPath string) (any, error) {
+	if filepath.Base(pendingPath) == "submission-plan.json" {
+		return resumeRunnerSubmissionPlan(cfg, config, project, binding, pendingPath)
+	}
 	if !filepath.IsAbs(pendingPath) {
 		return nil, core.Error("RUNNER_RECOVERY_INVALID", "provide an absolute pending-submission path")
 	}
@@ -56,6 +58,14 @@ func resumeRunnerResult(cfg remoteRunnerConfig, config, project string, binding 
 	}
 	if err != nil || !remoteRunnerID.MatchString(attemptID) {
 		return nil, core.Error("RUNNER_RECOVERY_INVALID", "pending submission is outside this runner runtime")
+	}
+	if parts[0] == "control" {
+		planPath := filepath.Join(filepath.Dir(real), "submission-plan.json")
+		if _, err = os.Lstat(planPath); err == nil {
+			return resumeRunnerSubmissionPlan(cfg, config, project, binding, planPath)
+		} else if !os.IsNotExist(err) {
+			return nil, err
+		}
 	}
 	raw, err := readRunnerPrivateFile(real)
 	if err != nil {
@@ -95,11 +105,30 @@ func resumeRunnerResult(cfg remoteRunnerConfig, config, project string, binding 
 		return nil, err
 	}
 	receipt := lookup
-	if lookup["found"] == true {
+	found, ok := lookup["found"].(bool)
+	if !ok {
+		return nil, core.Error("REMOTE_RESPONSE_INVALID", "result operation lookup is invalid")
+	}
+	if found {
 		if lookup["operation_id"] != op {
 			return nil, core.Error("IDEMPOTENCY_CONFLICT", "stored operation does not match")
 		}
 	} else {
+		if parts[0] == "control" {
+			reference := filepath.Join(filepath.Dir(real), "workspace.json")
+			if _, refErr := os.Lstat(reference); refErr == nil {
+				return nil, core.Error("RUNNER_RECOVERY_REQUIRED", "journaled submission plan is missing; retain the attempt for inspection")
+			} else if !os.IsNotExist(refErr) {
+				return nil, refErr
+			}
+			journaled, scanErr := runnerWorkspaceJournalMentionsAttempt(cfg, project, binding, attemptID)
+			if scanErr != nil {
+				return nil, scanErr
+			}
+			if journaled {
+				return nil, core.Error("RUNNER_RECOVERY_REQUIRED", "journaled submission plan and reference are missing")
+			}
+		}
 		deadline, err := runnerHeartbeatDeadline(cfg, config, project, binding, lease)
 		if err != nil {
 			if strings.Contains(err.Error(), "REMOTE_PROTOCOL_UNSUPPORTED") {
@@ -114,17 +143,8 @@ func resumeRunnerResult(cfg remoteRunnerConfig, config, project string, binding 
 			return nil, core.Error("RUNNER_RESULT_PENDING", "result remains in the private attempt directory; retry the same pending file")
 		}
 	}
-	encoded, err := json.Marshal(receipt)
-	if err != nil {
-		return nil, err
-	}
-	if err = store.Atomic(filepath.Join(filepath.Dir(real), "receipt.json"), encoded, 0600); err != nil {
-		return nil, err
-	}
-	if err = os.Remove(real); err != nil {
-		return nil, err
-	}
-	if err = os.Remove(filepath.Join(filepath.Dir(real), "lease.json")); err != nil {
+	paths := runnerAttemptPaths{Control: filepath.Dir(real)}
+	if err = runnerFinishSubmission(cfg, project, binding, lease, paths, receipt); err != nil {
 		return nil, err
 	}
 	return remoteOutput(receipt), nil

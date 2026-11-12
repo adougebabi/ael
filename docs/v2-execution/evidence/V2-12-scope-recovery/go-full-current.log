@@ -1,0 +1,20 @@
+?   	ael/assets	[no test files]
+ok  	ael/cmd/ael	90.216s
+?   	ael/cmd/aelbench	[no test files]
+ok  	ael/internal/bootstrap	7.997s
+ok  	ael/internal/core	56.130s
+ok  	ael/internal/execution	10.243s
+ok  	ael/internal/knowledge	3.227s
+ok  	ael/internal/migration	10.750s
+?   	ael/internal/process	[no test files]
+?   	ael/internal/projectmode	[no test files]
+ok  	ael/internal/remote	10.371s
+?   	ael/internal/securityfs	[no test files]
+--- FAIL: TestRemoteRunnerClaimIsOwnedFencedAndIdempotent (0.64s)
+    remote_runner_test.go:41: status 503, want 201: {"code":"RUNNER_ISOLATION_REQUIRED","error":"RUNNER_ISOLATION_REQUIRED"}
+--- FAIL: TestRemoteRunnerSubmitsFinalizedAttemptThroughTaskStateMachine (0.65s)
+    remote_runner_test.go:161: status 503, want 201: {"code":"RUNNER_ISOLATION_REQUIRED","error":"RUNNER_ISOLATION_REQUIRED"}
+FAIL
+FAIL	ael/internal/server	16.595s
+ok  	ael/internal/store	1.144s
+FAIL

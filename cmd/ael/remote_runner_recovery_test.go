@@ -53,6 +53,8 @@ func TestRunnerPendingSubmissionRestoresTokenOnlyForReplay(t *testing.T) {
 			_, _ = fmt.Fprint(w, `{"mode":"server","protocol":1,"capabilities":["remote_runners"]}`)
 		case strings.HasSuffix(r.URL.Path, "/observe"):
 			_, _ = fmt.Fprint(w, `{}`)
+		case strings.Contains(r.URL.Path, "/portable-operations/"):
+			_, _ = fmt.Fprint(w, `{"found":false}`)
 		case strings.Contains(r.URL.Path, "/operations/"):
 			_, _ = fmt.Fprint(w, `{"found":false}`)
 		case strings.HasSuffix(r.URL.Path, "/heartbeat"):
@@ -88,7 +90,7 @@ func TestRunnerPendingSubmissionRestoresTokenOnlyForReplay(t *testing.T) {
 	result := remoteProcessResult{Result: core.StepResult{Status: "pass", Summary: "fixture"}}
 	ctx := context.Background()
 	guard := newRunnerLeaseGuard(ctx, time.Now().Add(time.Minute))
-	err = runnerSubmitResult(ctx, cfg, config, project, binding, lease, task, remote.PortableCandidate{ID: "candidate"}, result, paths, "fixture-profile-token", guard)
+	err = runnerSubmitResult(ctx, cfg, config, project, binding, lease, task, remote.PortableCandidate{ID: "candidate"}, result, paths, "fixture-profile-token", guard, "submit-fixture", nil)
 	if err == nil || !strings.Contains(err.Error(), "RUNNER_RESULT_PENDING") {
 		t.Fatalf("submission was not retained: %v", err)
 	}

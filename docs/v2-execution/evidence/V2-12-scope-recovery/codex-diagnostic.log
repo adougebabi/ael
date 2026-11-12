@@ -1,0 +1,1 @@
+{"status": "diagnostic-only", "scope": "Codex smoke only; other acceptance cases skipped", "codex_smoke": {"status": "passed", "action": "max_steps", "task_status": "open", "logs": "/private/tmp/ael-v212-diagnostic-sevow5le/fixture-codex/runner-runtime-codex/io/attempts"}}

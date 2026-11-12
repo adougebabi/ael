@@ -129,15 +129,128 @@ var runnerAuthorizationPattern = regexp.MustCompile(`(?i)(authorization["'\s:=]+
 var runnerUnfinishedSecretPattern = regexp.MustCompile(`(?i)((api[_-]?key|access[_-]?token|password|secret|authorization)["'\s:=]+|authorization["'\s:=]+(bearer|basic)[\s]+)$`)
 var runnerTruncatedSecretSuffix = regexp.MustCompile(`(?i)(api[_-]?key|access[_-]?token|password|secret|authorization)["'\s:=]+[^\s"',;]{0,7}$`)
 
-func redactRunnerText(data []byte, secrets ...string) []byte {
-	text := string(data)
-	for _, secret := range secrets {
-		if len(secret) >= 8 {
-			text = strings.ReplaceAll(text, secret, "[REDACTED]")
+func runnerRedactionMarker(secrets ...string) string {
+	marker := ""
+	for _, candidate := range []string{"[REDACTED]", "[HIDDEN]", "***", "###", "..."} {
+		safe := true
+		for _, secret := range secrets {
+			if secret != "" && strings.Contains(candidate, secret) {
+				safe = false
+				break
+			}
+		}
+		if safe {
+			marker = candidate
+			break
 		}
 	}
-	text = runnerAuthorizationPattern.ReplaceAllString(text, "${1}[REDACTED]")
-	return []byte(runnerSecretPattern.ReplaceAllString(text, "${1}${2}[REDACTED]"))
+	return marker
+}
+
+func runnerValueContainsSecrets(value any, secrets ...string) bool {
+	contains := func(text string) bool {
+		for _, secret := range secrets {
+			if secret != "" && strings.Contains(text, secret) {
+				return true
+			}
+		}
+		return false
+	}
+	switch v := value.(type) {
+	case string:
+		return contains(v)
+	case json.Number:
+		return contains(string(v))
+	case []any:
+		for _, child := range v {
+			if runnerValueContainsSecrets(child, secrets...) {
+				return true
+			}
+		}
+	case map[string]any:
+		for key, child := range v {
+			if contains(key) || runnerValueContainsSecrets(child, secrets...) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func runnerRedactPlain(text, marker string, secrets ...string) string {
+	for _, secret := range secrets {
+		if secret != "" {
+			text = strings.ReplaceAll(text, secret, marker)
+		}
+	}
+	text = runnerAuthorizationPattern.ReplaceAllString(text, "${1}"+marker)
+	text = runnerSecretPattern.ReplaceAllString(text, "${1}${2}"+marker)
+	for _, secret := range secrets {
+		if secret != "" && strings.Contains(text, secret) {
+			return marker
+		}
+	}
+	return text
+}
+
+func runnerRedactJSONValue(value any, marker string, secrets ...string) (any, bool) {
+	switch v := value.(type) {
+	case string:
+		return runnerRedactPlain(v, marker, secrets...), true
+	case json.Number:
+		if runnerValueContainsSecrets(v, secrets...) {
+			return marker, true
+		}
+		return v, true
+	case []any:
+		result := make([]any, len(v))
+		for i, child := range v {
+			var ok bool
+			result[i], ok = runnerRedactJSONValue(child, marker, secrets...)
+			if !ok {
+				return nil, false
+			}
+		}
+		return result, true
+	case map[string]any:
+		result := make(map[string]any, len(v))
+		for key, child := range v {
+			cleanKey := runnerRedactPlain(key, marker, secrets...)
+			if _, exists := result[cleanKey]; exists {
+				return nil, false
+			}
+			clean, ok := runnerRedactJSONValue(child, marker, secrets...)
+			if !ok {
+				return nil, false
+			}
+			result[cleanKey] = clean
+		}
+		return result, true
+	default:
+		return v, true
+	}
+}
+
+func redactRunnerText(data []byte, secrets ...string) []byte {
+	marker := runnerRedactionMarker(secrets...)
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	var decoded, extra any
+	if decoder.Decode(&decoded) == nil && decoder.Decode(&extra) == io.EOF && runnerValueContainsSecrets(decoded, secrets...) {
+		clean, ok := runnerRedactJSONValue(decoded, marker, secrets...)
+		if !ok || runnerValueContainsSecrets(clean, secrets...) {
+			clean = marker
+		}
+		raw, err := json.Marshal(clean)
+		if err == nil {
+			if bytes.HasSuffix(data, []byte("\n")) {
+				raw = append(raw, '\n')
+			}
+			return raw
+		}
+		return []byte(marker)
+	}
+	return []byte(runnerRedactPlain(string(data), marker, secrets...))
 }
 
 func runnerChildEnvironment(contextPath, resultPath, step, attempt string) []string {
@@ -329,7 +442,7 @@ func runRemoteProcess(ctx context.Context, cfg remoteRunnerConfig, task core.Tas
 		if code != 0 {
 			status, summary = "fail", fmt.Sprintf("authorized command failed with exit code %d", code)
 		}
-		report := append([]byte("AEL command check output (redacted)\n"), redactedLog...)
+		report := redactRunnerText(append([]byte("AEL command check output (redacted)\n"), redactedLog...), secrets...)
 		if err = store.Atomic(filepath.Join(dir, "check.log"), report, 0600); err != nil {
 			return result, err
 		}

@@ -305,6 +305,7 @@ with open(os.environ["AEL_RESULT"], "w") as output: json.dump(result, output)
     client("a", "runner", "register", "--file", deniedConfig, "--operation-id", "register-denied", "--idempotency-key", "register-denied")
     denied = client("a", "runner", "run", "--task", "unauthorized", "--file", deniedConfig)
     assert denied["action"] == "wait_environment" and not (projects["a"] / "unauthorized-marker").exists()
+    assert not any((out / "runner-runtime-denied" / "io" / "attempts").rglob("unauthorized-marker"))
 
     (projects["a"] / "app.txt").write_text("original\n")
     ambiguous = dict(definition, id="ambiguous", title="Ambiguous review method", checks=[{"id": "mixed", "kind": "functional", "method": "scenario", "command": unauthorizedCommand, "covers": ["fixed"], "required": True}])
@@ -314,6 +315,7 @@ with open(os.environ["AEL_RESULT"], "w") as output: json.dump(result, output)
     client("a", "runner", "register", "--file", ambiguousConfig, "--operation-id", "register-ambiguous", "--idempotency-key", "register-ambiguous")
     client("a", "runner", "run", "--task", "ambiguous", "--file", ambiguousConfig, expect_ok=False)
     assert "CHECK_METHOD_MISMATCH" in commands[-1]["stderr"] and not (projects["a"] / "unauthorized-marker").exists()
+    assert not any((out / "runner-runtime-ambiguous" / "io" / "attempts").rglob("unauthorized-marker"))
 
     badWorkspaceConfig = out / "runner-bad-workspace.json"
     unauthorizedConfig = json.loads(configFile.read_text())
