@@ -50,3 +50,13 @@ UI/UX 标志只声明需要对应能力，不推断具体验收映射；自动�
 Markdown 使用随应用打包的 markdown-it，关闭原始 HTML、图片自动读取和自动链接，保留默认危险协议校验并拒绝 data/协议相对链接。相对文档链接经后端已索引来源白名单及 SafePath 检查；不存在、越界和 symlink 目标不能通过阅读器获得额外文件权限。任务证据沿用 TaskArtifact 的可访问范围，只有经真实字节类型检测的 PNG/JPEG 可以作为图片展示，其他内容仍为纯文本。无外部 CDN 或远程字体。列表响应有分页且不带正文；当前后端仍从文件权威来源读取全部元数据，不声称已经建立大型索引数据库。
 
 最终交互边界：任务列表以一次请求携带各组 offset，先收集并去重 ID，再调用共享 Next；前端仅按返回的权威 board 分组。检查执行状态与有效验收结果分别投影，执行中项不计入尚未运行；不从执行中推断通过。HTTP 人工通过入口使用 ReviewExact，将候选、定义与计划修订绑定到操作者实际审阅的版本，原 Review CLI 入口保留；原声明方法、产物和候选指纹校验继续执行。前端只有读取请求设置恢复超时，命令检查和迁移写入等待实际回执，不因读取超时阈值把仍在执行的操作标为失败。
+
+## 2026-11-12 · AD-AGENT-DRIVEN-01
+
+远程新默认是 Agent → Client → Server：外部 Agent 管宿主编辑/检查/截图/Git，Client 只通信和读取选定输入；Server 复用身份、项目权限、责任租约/fence、候选、规范、附件、幂等及状态机判定。取消通信对宿主隔离的总门禁；旧远程 run/resume-result/recover-claim 明确拒绝，不可进入历史 loop/process/copy/delivery。稳定 Local Managed 仍为显式兼容功能。Oracle Docker 部署属于后续授权任务，客户端不强制 Docker。
+
+租约保护接口接收权，不证明宿主 OS 停写或进程终止；Agent 必须遵守停工请求。共享未知工作区不能自动安全接管。最小权限与撤销、项目隔离、固定 finalized 字节、版本/候选绑定及基本凭据防泄露继续保留。请求与领取租约使用项目外私有文件；CLI 输出去除 token，不默认采集 HOME/聊天/整库。哈希与外部命令报告不构成执行真实性签名，也不能替代独立审批。
+
+verify 结果必须携带 runtime:report.json，绑定 candidate/check/definition/plan/method/source/covers/observations，不能用单独摘要、任意文件或退出码满足门禁。远程证据可用性由授权附件接口查询，不按 Server 的源码目录推断原件丢失。
+
+候选清单增加可选 index_executable 位（纳入现有内容 ID），修复仅暂存执行位变化遗漏；普通非可执行索引的 ID 不变。旧清单继续作为历史读取；含该位的新候选必须由支持它的 Server 与 CLI 配套使用，升级后重采样并复验，不将旧候选 ID 改写。NB-010 的旧失败原文保留，修复测试见 TestPortableCandidateTracksStagedExecutableMode。本项不承诺同 UID 对抗隔离、任意命令拦截或断电级文件系统持久性。

@@ -533,7 +533,9 @@ func (s *Service) nextWithConstraints(id string, includeArtifacts bool, resolveB
 	if e != nil {
 		return Next{}, e
 	}
-	if includeArtifacts {
+	// Remote evidence lives in the central artifact store, never in Root.
+	// Its authorized artifact endpoint reports availability.
+	if includeArtifacts && !s.RemoteAuthority {
 		for i := range t.Evidence {
 			ev := &t.Evidence[i]
 			ev.ArtifactStatus = map[string]string{}

@@ -236,8 +236,10 @@ func TestRunnerWorkspaceFingerprintIncludesStagedMode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if changedCandidate.ID != candidate.ID || after == before {
-		t.Fatalf("staged mode was not independently protected: candidate unchanged=%v fingerprint unchanged=%v", changedCandidate.ID == candidate.ID, after == before)
+	// NB-010 is now fixed in the shared candidate, while the historical
+	// workspace fingerprint must continue protecting the same staged change.
+	if changedCandidate.ID == candidate.ID || after == before {
+		t.Fatalf("staged mode was not protected by candidate and fingerprint: candidate unchanged=%v fingerprint unchanged=%v", changedCandidate.ID == candidate.ID, after == before)
 	}
 }
 

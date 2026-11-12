@@ -49,6 +49,17 @@ class WorklogChecks(unittest.TestCase):
         text = self.replace_status(self.text, 'V2-00', 'DONE', 'receipts/V2-00.md')
         text = text.replace('当前任务: V2-00', '当前任务: V2-01')
         self.assertEqual([], self.run_case(text))
+    def test_done_pause_requires_receipt_and_pending_successor(self):
+        (self.root / 'receipts').mkdir()
+        receipt = self.root / 'receipts' / 'V2-00.md'
+        receipt.write_text('结论: PASS\n', encoding='utf-8')
+        text = self.replace_status(self.text, 'V2-00', 'DONE', 'receipts/V2-00.md') + '暂停于: V2-00\n'
+        self.assertEqual([], self.run_case(text))
+        active = self.replace_status(text, 'V2-01', 'ACTIVE')
+        self.assertTrue(self.run_case(active))
+        receipt.unlink()
+        self.assertTrue(self.run_case(text))
+
     def test_wrong_current_rejected(self):
         text = self.text.replace('当前任务: V2-00', '当前任务: V2-02')
         self.assertTrue(any('当前任务应是' in x for x in self.run_case(text)))

@@ -50,6 +50,14 @@ def check(path: Path) -> list[str]:
         errors.append("WIP 超限：ACTIVE / VERIFYING / BLOCKED 合计最多一个。")
     first_open = next((t for t in TASK_IDS if rows.get(t) != "DONE"), None)
     expected_current = first_open or "COMPLETE"
+    pauses = re.findall(r"^暂停于:\s*(V2-\d{2})\s*$", text, re.M)
+    if pauses:
+        paused = pauses[0]
+        previous = TASK_IDS[TASK_IDS.index(first_open)-1] if first_open and TASK_IDS.index(first_open)>0 else None
+        if len(pauses) != 1 or paused != previous or rows.get(paused) != "DONE" or rows.get(first_open) != "PENDING":
+            errors.append("暂停位置必须为最后一个连续 DONE，且下一项保持 PENDING。")
+        else:
+            expected_current = paused
     if current and current.group(1) != expected_current:
         errors.append(f"当前任务应是 {expected_current}，不是 {current.group(1)}。")
     if first_open:

@@ -113,10 +113,10 @@ func TestRemoteRunnerClaimIsOwnedFencedAndIdempotent(t *testing.T) {
 	}
 }
 
-func TestRemoteRunnerFailsClosedWithoutVerifiedIsolation(t *testing.T) {
+func TestRemoteAgentInvalidClaimStillRejected(t *testing.T) {
 	f := newArtifactFixture(t)
 	w := standaloneRequest(t, f.h, "POST", "/api/v1/projects/shared/runners/runner-a/claim", map[string]any{}, nil, "", f.uploader, "", "1")
-	if w.Code != http.StatusServiceUnavailable || !strings.Contains(w.Body.String(), "RUNNER_ISOLATION_REQUIRED") {
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "RUNNER_INVALID") {
 		t.Fatalf("unverified runner was not refused: %d %s", w.Code, w.Body.String())
 	}
 	service, err := f.s.projectService("shared")

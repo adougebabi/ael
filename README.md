@@ -93,7 +93,13 @@ ael update --project /path/to/project
 
 运行数据位于用户配置目录 `ael/runtime/<canonical-checkout-hash>/`；可用 `AEL_DATA_DIR` 指定基目录。doctor 显示实际路径。同 project_id 的独立 clone 不自动共享租约；显式绑定 worktree 可共用一个运行实例。运行库、WAL、原始命令输出、截图、备份都在仓库之外。
 
-## 最小真实闭环
+## 远程 Agent 主导闭环
+
+现有 Agent 主动调用 CLI 领取、获取依据、上报进度、上传证据及提交结果，并消费 next_action；编码、测试、截图、Git 和宿主工作区由 Agent 自己管理。客户端不要求 Docker。Server 只接收并校验，不启动 Agent 或工程命令、不复制/回写源码、不掌管模型/发布凭据。Oracle Docker 部署仍为后续授权阶段。
+
+接入、私有请求 schema、失败修复及恢复见 [远程 Agent 协议](assets/skills/ael-work/references/remote-agent.md)。旧远程 runner run/resume-result/recover-claim 已明确停用。正式独立验收入口为 `scripts/remote_agent_acceptance.py`；`scripts/remote_runner_acceptance.py` 转发至该入口，旧托管脚本保存在 scripts/history，仅供历史研究。
+
+## 最小本地真实闭环
 
 创建 definition.json（放项目外可避免把协议中间文件计入代码候选）：
 
@@ -136,7 +142,7 @@ ael confirm --kind review --task ID --check review --executor person --reason '�
 
 使用 `type: "epic"` 创建父任务；叶子可在定义中指定 `parent`，或用 `./ael task link --parent EPIC --task LEAF --milestone 阶段 --json` 关联已有叶子。可选成员加 `--required=false`，用 `./ael task tree --task EPIC --json` 查看各叶子真实状态；父级不会因子任务完成自动通过集成。`task integrate` 核对叶子内容并记录父候选，父级必需检查和交付门禁仍须单独通过。完整命令、HTTP 入口和隔离演示见 [本地任务树](docs/epic-tree.md)。已有分项可复用，Agent 或用户可通过 [拆分计划](docs/decomposition.md) 准备、预览并幂等应用结构化提议。
 
-## 连续执行与交接
+## 本地连续执行与交接
 
 父任务可使用 `work next/claim` 按计划顺序原子选择并领取叶子，或用 `loop run --parent EPIC --runner RUNNER` 连续推进；失败先修复当前叶子，达到上限返回 stop_reason 和 checkpoint。命令、能力与交接边界见 [父任务内顺序推进](docs/sequential-work.md)。
 

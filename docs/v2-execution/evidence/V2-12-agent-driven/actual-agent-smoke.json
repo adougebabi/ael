@@ -1,0 +1,13 @@
+{
+  "kind": "current Codex desktop Agent direct CLI smoke",
+  "responsibilities": [
+    "define",
+    "execute",
+    "verify"
+  ],
+  "external_action": "Agent edited disposable app.txt and independently asserted actual content; declared minimal smoke command true also ran externally",
+  "final_step_build": "final dist CLI and final dist Server, after index_executable patch",
+  "next_action": "completed",
+  "result": "PASS",
+  "limit": "minimal real Agent fixture smoke; full failed-check repair loop covered separately by deterministic driver; no separate codex exec or three-host claim"
+}

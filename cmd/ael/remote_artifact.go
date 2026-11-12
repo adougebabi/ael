@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const remoteArtifactLimit = 10 << 20
@@ -118,7 +119,18 @@ func remoteArtifactCommand(cmd string, a args, config, project string, binding r
 		if closeErr != nil {
 			return nil, closeErr
 		}
-		return remoteUploadBytes(a, config, project, binding, filepath.Base(path), data, nil)
+		var lease *runnerUploadLease
+		if a.get("lease-file", "") != "" {
+			var in agentUploadLease
+			if err := readAgentRequest(a.get("lease-file", ""), &in); err != nil {
+				return nil, err
+			}
+			if in.RunnerID == "" || in.Token == "" || in.Fence < 1 || in.TaskID != task || in.AttemptID != a.get("attempt", "") || in.ExpectedRevision != revision || !in.LeaseUntil.After(time.Now()) {
+				return nil, core.Error("LEASE_LOST", "upload lease is missing, expired or belongs to another responsibility")
+			}
+			lease = &runnerUploadLease{RunnerID: in.RunnerID, Token: in.Token, Fence: in.Fence}
+		}
+		return remoteUploadBytes(a, config, project, binding, filepath.Base(path), data, lease)
 	}
 	return nil, core.Error("REMOTE_COMMAND_UNSUPPORTED", cmd)
 }
@@ -155,7 +167,7 @@ func remoteUploadBytes(a args, config, project string, binding remote.Binding, f
 		}
 	}
 	call := func(method, path string, body any) (map[string]any, error) {
-		if lease != nil {
+		if lease != nil && lease.guard != nil {
 			return runnerGuardedCall(config, project, binding, lease.guard, method, path, body)
 		}
 		return remote.Call(config, project, binding, method, path, body, nil)

@@ -204,9 +204,6 @@ func (a *artifactStore) verifyUploadLease(tx *store.Tx, principal standalonePrin
 	if err != nil {
 		return err
 	}
-	if !remoteRunnerIsolationVerified() {
-		return errors.New("RUNNER_ISOLATION_REQUIRED")
-	}
 	if auth.RunnerID != runner || auth.Fence != fence || auth.LeaseToken == "" || subtle.ConstantTimeCompare([]byte(store.Hash([]byte(auth.LeaseToken))), []byte(hash)) != 1 || upload.AttemptID != attemptID {
 		return errors.New("STALE_TOKEN")
 	}
@@ -260,9 +257,6 @@ func (a *artifactStore) begin(principal standalonePrincipal, in artifactStartInp
 		}
 		runnerUpload := in.RunnerID != "" || in.LeaseToken != "" || in.Fence != 0
 		if runnerUpload {
-			if !remoteRunnerIsolationVerified() {
-				return errors.New("RUNNER_ISOLATION_REQUIRED")
-			}
 			if !standaloneID.MatchString(in.RunnerID) || !standaloneID.MatchString(in.AttemptID) || in.LeaseToken == "" || in.Fence < 1 {
 				return errors.New("STALE_TOKEN")
 			}

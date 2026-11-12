@@ -1,0 +1,101 @@
+{
+  "revision": "AD-AGENT-DRIVEN-01",
+  "kind": "documentation-only",
+  "files": [
+    {
+      "path": "00-ARCHITECTURE-DECISION.md",
+      "bytes": 9362,
+      "sha256": "51b0c8c9101d82ba5eb85d61437ac67cd34e4e0986159705adadbf479aa176d9"
+    },
+    {
+      "path": "01-ALL-TASKS-IMPACT.md",
+      "bytes": 4872,
+      "sha256": "aa02d1573ef4fc7872fd6ab6a3ff9488d820e7d742feb4c442a29698e908c90e"
+    },
+    {
+      "path": "02-RESUME-AT-V2-12.md",
+      "bytes": 5255,
+      "sha256": "877231d571848d4b3e61d304a2a42bb2ce975e6d18477e022643254e93b02377"
+    },
+    {
+      "path": "03-REQUIREMENTS-TEST-REMAP.md",
+      "bytes": 3228,
+      "sha256": "867b6993be8292694e8ab4007c0f6250bdd7adcfcc00ac88c6794e0e2c8d9312"
+    },
+    {
+      "path": "IMPLEMENT-NOW.md",
+      "bytes": 3904,
+      "sha256": "fb95752b786a9dd2815e28d19701b72b38422d31f06d1c196da45049c3e5a4cc"
+    },
+    {
+      "path": "PACKAGE-CHECK.md",
+      "bytes": 1023,
+      "sha256": "1d8541cb3c24a876665cf11046c3cbeb1ff3332df95658ad9ccba5f02d45d20f"
+    },
+    {
+      "path": "START-HERE.md",
+      "bytes": 2814,
+      "sha256": "3d75ddeccf91bb94bb887f2c1e7eef65c48ea5eef49611cc9ae21e4f56f77a44"
+    },
+    {
+      "path": "tasks/V2-12.md",
+      "bytes": 5527,
+      "sha256": "8ac9a848ff6f867fbc238cc9cb4ab1a583c8d123646a4743de591dd35db9161d"
+    },
+    {
+      "path": "tasks/V2-13.md",
+      "bytes": 2855,
+      "sha256": "ce9ce1842fc2146469a1992f3b1ad8a94404ae15ae6e52a9c6a8556eb4153bc6"
+    },
+    {
+      "path": "tasks/V2-14.md",
+      "bytes": 2233,
+      "sha256": "cfecfd4d85eaaf460f85c70ba6a0c8ccbc7afafa4ef3371ab17e9120d4a6ade9"
+    },
+    {
+      "path": "tasks/V2-15.md",
+      "bytes": 2143,
+      "sha256": "c8f05f49c4966dc8a5405f316ec9c643dff1be203bcc4fce4b77bf12a2012cc5"
+    },
+    {
+      "path": "tasks/V2-16.md",
+      "bytes": 2037,
+      "sha256": "915b99b9d3f3ea406747a9760220e55cd6ee9563ba0a90a70cf43276153c55c8"
+    },
+    {
+      "path": "tasks/V2-17.md",
+      "bytes": 1927,
+      "sha256": "90665d5958f0620a332127b8c63ea4d881d85b2dcb089385380b418177d533ae"
+    },
+    {
+      "path": "tasks/V2-18.md",
+      "bytes": 2094,
+      "sha256": "4efc3aa9bb979cdf54d0f0075a0ff307f4249f76506f1524ade386f09f19ce4a"
+    },
+    {
+      "path": "tasks/V2-19.md",
+      "bytes": 1996,
+      "sha256": "a768146931e1b1606e20f4612d773946bfca86d7ac676c332ea3e9a0ec6e585e"
+    },
+    {
+      "path": "tasks/V2-20.md",
+      "bytes": 2321,
+      "sha256": "3149d4090948c605d84f07b2cbb66d6b5e3a7560940e284f7cc2b6f05a4db36f"
+    },
+    {
+      "path": "tasks/V2-21.md",
+      "bytes": 2211,
+      "sha256": "9d9f99892a1ced5aa52f0ee3f31fda04cac695ff2a9871e0dc48d855db69ab7a"
+    },
+    {
+      "path": "tasks/V2-22.md",
+      "bytes": 2554,
+      "sha256": "663351d6338e29d9e0086f9764d9950035bfff574c0817c67a5186b8c76c55b2"
+    },
+    {
+      "path": "tasks/V2-23.md",
+      "bytes": 2417,
+      "sha256": "fab0697420952c43046f481261dda6cf72859fb31c29d7aeee10e9ac3664fc1c"
+    }
+  ]
+}

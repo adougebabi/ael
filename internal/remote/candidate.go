@@ -33,11 +33,12 @@ type PortableCandidate struct {
 }
 
 type PortableFile struct {
-	Path       string `json:"path"`
-	SHA256     string `json:"sha256,omitempty"`
-	Index      string `json:"index,omitempty"`
-	Executable bool   `json:"executable,omitempty"`
-	Deleted    bool   `json:"deleted,omitempty"`
+	Path            string `json:"path"`
+	SHA256          string `json:"sha256,omitempty"`
+	Index           string `json:"index,omitempty"`
+	Executable      bool   `json:"executable,omitempty"`
+	IndexExecutable bool   `json:"index_executable,omitempty"`
+	Deleted         bool   `json:"deleted,omitempty"`
 }
 
 type PortableDiff struct {
@@ -134,6 +135,9 @@ func ValidatePortableCandidate(candidate PortableCandidate) error {
 				return errors.New("CANDIDATE_INVALID")
 			}
 		} else if !portableDigest.MatchString(file.SHA256) {
+			return errors.New("CANDIDATE_INVALID")
+		}
+		if file.IndexExecutable && (file.Index == "" || file.Index == "removed") {
 			return errors.New("CANDIDATE_INVALID")
 		}
 		if file.Index != "" && file.Index != "removed" && !portableCommit.MatchString(file.Index) {
@@ -402,7 +406,7 @@ func capturePortableCandidateOnce(root, repository string) (PortableCandidate, e
 		}
 		before, err := os.Lstat(full)
 		if os.IsNotExist(err) {
-			files = append(files, PortableFile{Path: path, Index: index[path], Deleted: true})
+			files = append(files, PortableFile{Path: path, Index: index[path], IndexExecutable: index[path] != "removed" && index[path] != "" && modes[path], Deleted: true})
 			continue
 		}
 		if err != nil || !before.Mode().IsRegular() {
@@ -420,7 +424,7 @@ func capturePortableCandidateOnce(root, repository string) (PortableCandidate, e
 		if trackedMode, ok := modes[path]; ok && !filemode {
 			executable = trackedMode
 		}
-		files = append(files, PortableFile{Path: path, SHA256: hash, Index: index[path], Executable: executable})
+		files = append(files, PortableFile{Path: path, SHA256: hash, Index: index[path], IndexExecutable: index[path] != "removed" && index[path] != "" && modes[path], Executable: executable})
 	}
 	lastHead, headErr := portableGit(root, "rev-parse", "--verify", "HEAD^{commit}")
 	lastPaths, lastUnknown, pathsErr := portableInputPaths(root)

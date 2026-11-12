@@ -278,6 +278,27 @@ func (p *portableStore) submitRunner(principal standalonePrincipal, runnerID str
 		if check.Kind == "ux" && input.Result.Status != "blocked" && len(input.Result.Artifacts) == 0 {
 			return nil, errors.New("ARTIFACT_REQUIRED")
 		}
+		if input.Result.Status != "blocked" {
+			item, ok := byPath["runtime:report.json"]
+			var report struct {
+				Candidate          string   `json:"candidate"`
+				Check              string   `json:"check"`
+				DefinitionRevision int      `json:"definition_revision"`
+				PlanRevision       int      `json:"plan_revision"`
+				Method             string   `json:"method"`
+				Source             string   `json:"source"`
+				Observations       string   `json:"observations"`
+				Covers             []string `json:"covers"`
+			}
+			if !ok || !slices.Contains(input.Result.Artifacts, item.ID) || json.Unmarshal(content[item.ID], &report) != nil || report.Candidate != input.CandidateID || report.Check != check.ID || report.DefinitionRevision != task.Definition.Revision || report.PlanRevision != task.Plan.Revision || report.Method != input.Method || report.Source != "external-"+input.Method+":"+runnerID || strings.TrimSpace(report.Observations) == "" {
+				return nil, errors.New("ASSESSMENT_EVIDENCE_REQUIRED")
+			}
+			for _, cover := range check.Covers {
+				if !slices.Contains(report.Covers, cover) {
+					return nil, errors.New("ASSESSMENT_EVIDENCE_REQUIRED")
+				}
+			}
+		}
 		config, _ := json.Marshal(check)
 		source := "remote-command:" + runnerID
 		if input.Method != "command" {

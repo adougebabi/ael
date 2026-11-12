@@ -14,10 +14,6 @@ import (
 	"time"
 )
 
-// No supported process-tree and credential isolation provider has yet been
-// verified. Do not expose remote execution until one is implemented and tested.
-func remoteRunnerIsolationVerified() bool { return false }
-
 type remoteRunnerInput struct {
 	ID               string   `json:"id"`
 	WorkspaceID      string   `json:"workspace_id"`

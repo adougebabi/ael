@@ -94,3 +94,7 @@ ael context record-check --context CONTEXT_ID --task TASK_ID --check CHECK_ID --
 报告须在对应上下文创建后由同一操作者按上述来源上传；不能把其他上下文的旧附件直接挂到新候选。该记录由已认证客户端报告，绑定候选、检查配置哈希和报告哈希，但不能单凭上传时间证明检查何时执行。Server 不执行命令，也不把报告自动转成门禁通过或可复用证据。网络中断时用相同操作键重试以查询原回执，不重复运行检查。上下文规范原件受清理保护并计入项目容量；检查报告按普通附件的保留规则处理。
 
 `python3 scripts/remote_tasks_acceptance.py --bundle /path/to/dist --out /tmp/ael-remote-fixture-NEW` 在全新临时目录启动一个仅监听本机的 Server 与两个独立 CLI 配置，验证父子任务、版本冲突、操作重放、计划、撤销及断网恢复。夹具不运行真实开发执行器，不代表外部机器部署。
+
+## AD-AGENT-DRIVEN-01 执行者接入
+
+正式执行链路见 [远程 Agent 协议](../assets/skills/ael-work/references/remote-agent.md)。Agent 自行执行，runner API 标识兼容保留；不要求客户端 Docker。托管执行及其恢复入口已退出，当前验收从外部驱动主动调用 CLI 开始。

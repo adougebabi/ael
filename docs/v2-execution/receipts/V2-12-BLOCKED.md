@@ -1,3 +1,5 @@
+> 历史回执：本文件保留旧托管契约下的失败事实。AD-AGENT-DRIVEN-01 新验收与当前结论见 [V2-12.md](V2-12.md)；本文件中的旧恢复步骤已退出当前依据。
+
 # V2-12 · 阻塞现场与恢复依据
 
 本文件记录当前任务的证据和恢复动作；状态仍以 `../WORKLOG.md` 为准。**本项没有 PASS，也没有进入 V2-13。**
@@ -87,3 +89,7 @@ with tempfile.TemporaryDirectory(prefix="ael-v212-overlay-") as directory:
                                       "-run", "^TestV212ApprovedCheckCannotLaunchIndirectPublish$", "-count=1"], env=env))
 PY
 ```
+
+## AD-AGENT-DRIVEN-01 重新归属
+
+上述 BLOCKED 是旧托管契约的历史结论，保留不改写。2026-11-12 从 7f88a84 按外部 Agent → CLI → Server 恢复；上方要求研究宿主隔离、间接发布拦截及自动回写的恢复步骤停止生效。当前状态以 WORKLOG 末尾修订及新回执为准；不追认旧诊断 PASS。

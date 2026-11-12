@@ -29,66 +29,10 @@ func runnerCall(config, project string, binding remote.Binding, method, path str
 	return remote.Call(config, project, binding, method, path, body, nil)
 }
 
-// Deliberately no configuration override: an isolation provider must first
-// prove process-tree lifecycle and credential separation on the host.
-func remoteRunnerClientIsolationVerified() bool { return false }
-
+// Remote managed execution is retired. The runner protocol now describes an
+// externally operated Agent client; it never enters the historical loop.
 func remoteRunnerCommand(cmd string, a args, config, project string, binding remote.Binding) (any, error) {
-	if os.Getenv("AEL_MANAGED_CHILD") == "1" {
-		return nil, core.Error("RECURSIVE_LOOP", "managed child cannot start a remote runner")
-	}
-	cfg, err := loadRemoteRunnerConfig(a.get("file", ""), project, binding)
-	if err != nil {
-		return nil, err
-	}
-	switch cmd {
-	case "runner register":
-		op, key := a.get("operation-id", ""), a.get("idempotency-key", "")
-		if op == "" || key == "" {
-			return nil, core.Error("REMOTE_OPERATION_REQUIRED", "provide operation and idempotency keys")
-		}
-		payload := map[string]any{"id": cfg.RunnerID, "workspace_id": cfg.WorkspaceID, "checkout_id": cfg.CheckoutID, "repository": cfg.Repository, "version": bootstrap.Version, "capabilities": cfg.Capabilities, "expected_revision": "absent", "operation_id": op, "idempotency_key": key}
-		result, err := runnerCall(config, project, binding, http.MethodPost, "/runners", payload)
-		return remoteOutput(result), err
-	case "runner run":
-		if !remoteRunnerClientIsolationVerified() {
-			return nil, core.Error("RUNNER_ISOLATION_REQUIRED", "remote execution is disabled until process-tree and credential isolation are verified")
-		}
-		taskID, parentID := a.get("task", ""), a.get("parent", "")
-		if (taskID == "") == (parentID == "") {
-			return nil, core.Error("RUNNER_CONFIG_INVALID", "provide exactly one of --task or --parent")
-		}
-		if err = verifyRegisteredRunner(cfg, config, project, binding); err != nil {
-			return nil, err
-		}
-		unlock, err := runnerLockRuntime(cfg)
-		if err != nil {
-			return nil, err
-		}
-		defer unlock()
-		return runRemoteLoop(cfg, config, project, binding, taskID, parentID)
-	case "runner resume-result":
-		if err = verifyRegisteredRunner(cfg, config, project, binding); err != nil {
-			return nil, err
-		}
-		unlock, err := runnerLockRuntime(cfg)
-		if err != nil {
-			return nil, err
-		}
-		defer unlock()
-		return resumeRunnerResult(cfg, config, project, binding, a.get("pending", ""))
-	case "runner recover-claim":
-		if err = verifyRegisteredRunner(cfg, config, project, binding); err != nil {
-			return nil, err
-		}
-		unlock, err := runnerLockRuntime(cfg)
-		if err != nil {
-			return nil, err
-		}
-		defer unlock()
-		return recoverRunnerClaim(cfg, config, project, binding, a.get("claim", ""))
-	}
-	return nil, core.Error("REMOTE_COMMAND_UNSUPPORTED", cmd)
+	return remoteAgentCommand(cmd, a, config, project, binding)
 }
 
 func verifyRegisteredRunner(cfg remoteRunnerConfig, config, project string, binding remote.Binding) error {

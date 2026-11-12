@@ -4,6 +4,7 @@
 > 状态仅允许 PENDING、ACTIVE、VERIFYING、DONE、BLOCKED。
 
 当前任务: V2-12
+暂停于: V2-12
 
 | ID | 任务 | 状态 | 回执 |
 |---|---|---|---|
@@ -19,7 +20,7 @@
 | V2-09 | 远程任务与 CLI：唯一权威的第一条路径 | DONE | receipts/V2-09.md |
 | V2-10 | 中心证据存储与授权上传下载 | DONE | receipts/V2-10.md |
 | V2-11 | 跨设备候选、规范快照与执行上下文 | DONE | receipts/V2-11.md |
-| V2-12 | 远程 Runner 的真实单任务闭环 | BLOCKED | receipts/V2-12-BLOCKED.md |
+| V2-12 | 外部 Agent 主导的远程工程闭环 | DONE | receipts/V2-12.md |
 | V2-13 | 双执行者协作、断网与恢复 | PENDING | — |
 | V2-14 | 统一远程 Dashboard 与节点可观测性 | PENDING | — |
 | V2-15 | 结构化验收发现与问题归并 | PENDING | — |
@@ -32,7 +33,11 @@
 | V2-22 | 打包后的全链路验收与交付核对 | PENDING | — |
 | V2-23 | 授权后的 Oracle 部署与实际双机验收 | PENDING | — |
 
-## 当前现场
+## 当前现场（AD-AGENT-DRIVEN-01）
+
+V2-12 已 DONE，正式回执 `receipts/V2-12.md`，证据 `evidence/V2-12-agent-driven/`。本轮暂停于 V2-12；V2-13—23 仍 PENDING、没有开始。下面保留的是旧托管实施历史，旧隔离/间接发布/自动回写恢复要求已由本次明确产品边界替代，不作为当前执行入口。
+
+## 历史现场（修订前原文保留，不作当前恢复指令）
 
 - 本地工作目录：/Users/vinson/Documents/project/个人/ael
 - 当前分支 / 基线提交：main / c3f3da2e264c3a0cb99d28c3fa6c04e9cd7d8bf4；开工工作区干净。
@@ -71,3 +76,15 @@
 - V2-09 完成：远程单权威任务、计划和双客户端验收见 receipts/V2-09.md。
 - V2-10 完成：中心附件、受权预览、清理恢复与双客户端验收见 receipts/V2-10.md。
 - V2-11 完成：可移植候选、规范快照、检查报告与跨端验收见 receipts/V2-11.md。
+
+## AD-AGENT-DRIVEN-01 当前恢复（取代上方历史恢复指令）
+
+- 2026-11-12：基线 7f88a84，工作区干净；完整包存入 docs/v2-agent-driven-revision。旧隔离/托管失败仍为历史事实，不再是通信前置。
+- R12.1：归档原契约、全部任务正文和账本；V2-00—11 保留 DONE，V2-12—23 采用修订正文。唯一当前项 V2-12，结束即暂停。
+- 依次完成 R12.2 薄客户端、R12.3 Skill、R12.4 正式验收、R12.5 回执检查点；未经最终验收不标 DONE。
+
+- R12.2 已通过：独立外部驱动正式 CLI 完成 define → execute → verify fail → repair execute → verify pass；结果 /private/tmp/ael-v212-agent-r12-2/summary.json。旧托管三个入口明确不支持。
+- R12.3：分发 Skill、workflow、commands、CLI help、README 和当前验收入口统一为外部 Agent；结构化报告保留方法、来源、候选、版本、覆盖与实际观察。
+
+- R12.4 最终通过：正式外部驱动失败修复/后继/越权/降权/报告负例/实际响应丢失、V2-11 候选/规范/浏览器、V2-09/10、稳定 Local 回归通过；最终 Go 全量、相关 race、vet 通过。NB-010 候选执行位漏洞已修复；NB-011 仍为断电级持久性未验证限制。证据 evidence/V2-12-agent-driven/。
+- R12.5：V2-12 DONE，正式新回执 receipts/V2-12.md，旧 BLOCKED 和失败不覆盖。检查点为包含此记录的本地 Git 提交（以 git log 核对）；不 push/tag/发布。当前任务保留 V2-12 并显式暂停，V2-13—23 PENDING，未开始。

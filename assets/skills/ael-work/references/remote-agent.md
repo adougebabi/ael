@@ -1,0 +1,16 @@
+# 外部 Agent → AEL Client → Server
+
+现有 Agent 负责宿主执行，所有命令带 `--project PATH --json`。先 profile add/token-stdin、project connect，再 repository register、knowledge index。中间文件放项目外私有目录，不进 Git。每个写请求使用稳定 operation_id/idempotency_key，修改请求必须换键；网络结果未知先查原回执，不回退本地。
+
+1. `runner register --file PRIVATE_JSON --operation-id OP --idempotency-key KEY`：文件含 id、workspace_id、checkout_id、repository、version、capabilities（例如 development、model、scenario）、expected_revision:"absent"。这是身份/能力声明，不是 OS 隔离证明。
+2. `task show --task ID` / `next --task ID` 取得 revision、next_action、current_step；父范围先 `runner next --runner ID --parent EPIC` 查询合法后继，再 claim，不凭查询直接工作。人工责任保持 wait_human；父级叶子与集成条件继续生效。
+3. `candidate capture --task ID --repository REPO --checkout CHECKOUT --workspace WORKSPACE --runner ID --expected-revision REV --operation-id OP --idempotency-key KEY`，然后 context publish/show，核对实际原文、版本、workspace_matches、validity。
+4. `runner claim --runner ID --file PRIVATE_JSON --out NEW_PRIVATE_FILE`：请求含 task_id、可选 parent_id、context_id、expected_revision、operation_id、idempotency_key。请求文件必须私有（0600），返回的 attempt/token 仅保存到新私有文件，可读及 JSON 输出均不打印 token。保存领取请求用于响应丢失时原键重试到新文件；这只读取原领取结果，不重新授权。
+5. 由 Agent 从私有 claim 文件取 attempt.id/token/fence，以私有 JSON 请求调用 `runner heartbeat` / `runner progress` / `runner interrupt`。共有 task_id、attempt_id、token、fence、operation_id、idempotency_key；progress 另含 summary/next/stage，interrupt 另含 reason。续租按当前租约期限进行，无常驻助手也可工作。撤权/过期停止提交有效结果；停工是 Agent 的责任，AEL 不杀宿主进程。失联展示最后上报/未知。
+6. 自行使用宿主工具完成本责任。只验收任务不得修改源码。结果产生后 `runner observe --runner ID --repository REPO --file PRIVATE_JSON` 读取本项目候选并提交已有 Attempt observe；文件含共有租约字段及领取时 expected_revision。也可在文件中提供 candidate，此时不传 repository。observe 不启动检查或复制工作区。
+7. `artifact upload --task ID --attempt AT --candidate HASH --file LOCAL --lease-file PRIVATE_JSON --expected-revision CLAIM_REV --operation-id OP --idempotency-key KEY`。lease-file 含 runner_id、task_id、attempt_id、token、fence、expected_revision、lease_until（RFC3339；续租后更新）。上传后原件固定。只选任务所需依据、报告、日志与截图；不默认上传所有源码、HOME、聊天或密钥。
+8. `runner submit --runner ID --file PRIVATE_JSON`：共有租约字段及 expected_revision（领取时版本）、candidate_id、result、bindings、method、exit_code、inputs。result 含 status(pass|fail|blocked)、summary、artifacts（已 finalized 的 ID）；execute pass 必须有候选中的真实交付文件及 knowledge:{status:unchanged|updated,reason,artifacts:[]}。bindings 为 [{path:"app.txt"或"runtime:report.json",artifact_id:"ID"}]。非 verify 阶段 method 留空，不传 exit_code/inputs；verify 使用声明的 method 和实际 inputs。command 的 exit_code 必须符合 pass/fail。
+9. verify 非 blocked 必须上传并绑定 `runtime:report.json`，内容为 {candidate,check,definition_revision,plan_revision,method,source,observations,covers}。source 为 `external-command:RUNNER` / `external-model:RUNNER` / `external-scenario:RUNNER`，observations 是实际观察，covers 完整覆盖本检查的验收项。UI 仍需真实图片。哈希只证明字节一致，不能证明命令真实运行；Agent 不得冒充独立人工审批。必需报告/产物、旧候选、旧验收或权限不符继续被拒绝。
+10. 提交后消费 `next.next_action`：repair 留在同一叶子修复；continue 领取下一个当前责任；completed 后读取父范围后继，能力授权满足则继续。交接结束当前角色，由已有外部 Bot 自行领取。等待环境/人工时记录恢复条件，不循环伪进展。`runner receipt --runner ID --idempotency-key KEY` 查原提交回执；重复同一 submit 返回相同结果，不重复推进。旧回执不是新写授权。达到重复失败预算按既有复核规则停止，不改类别规避。
+
+`runner run`、`runner resume-result`、`runner recover-claim` 明确不支持；不要用它们恢复新模式。稳定本地 Managed/Attached 仍是显式本地功能，不作为远程前置。合并/发布交给外部 Git/CI/部署工具与用户授权，AEL 保存目标与回执，不能将 verified 偷换为 merged/released。没有活跃外部 Agent 就等待接手，不声称后台自动编码。

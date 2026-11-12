@@ -1,0 +1,38 @@
+{
+  "scan_path": "/Users/vinson/Documents/project/个人/ael/cmd/ael",
+  "files_scanned": 39,
+  "passed": false,
+  "counts": {
+    "critical": 1,
+    "high": 2
+  },
+  "findings": [
+    {
+      "severity": "critical",
+      "category": "敏感信息",
+      "message": "发现私钥",
+      "file_path": "/Users/vinson/Documents/project/个人/ael/cmd/ael/remote_runner_submit.go",
+      "line_number": 55,
+      "line_content": "if !bytes.Equal(data, redactRunnerText(data, secrets...)) || bytes.Contains(data, []byte(\"-----BEGIN",
+      "recommendation": "私钥不应提交到代码库"
+    },
+    {
+      "severity": "high",
+      "category": "敏感信息",
+      "message": "可能存在硬编码密钥/密码",
+      "file_path": "/Users/vinson/Documents/project/个人/ael/cmd/ael/remote_runner_plan_test.go",
+      "line_number": 117,
+      "line_content": "if err = os.WriteFile(filepath.Join(paths.IO, \"report.txt\"), []byte(\"token=\"+profileToken+\" lease=\"+",
+      "recommendation": "使用环境变量或密钥管理服务"
+    },
+    {
+      "severity": "high",
+      "category": "敏感信息",
+      "message": "可能存在硬编码密钥/密码",
+      "file_path": "/Users/vinson/Documents/project/个人/ael/cmd/ael/remote_runner_process_test.go",
+      "line_number": 126,
+      "line_content": "data := []byte(\"token=\" + secret + \"\\n\")",
+      "recommendation": "使用环境变量或密钥管理服务"
+    }
+  ]
+}

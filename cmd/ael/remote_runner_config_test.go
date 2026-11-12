@@ -45,7 +45,7 @@ func TestRemoteRunnerRequiresExplicitPrivateWorkspaceAndCommandAuthorization(t *
 	}
 }
 
-func TestRemoteRunnerFailsClosedWithoutVerifiedIsolation(t *testing.T) {
+func TestRetiredRemoteManagedEntryRejected(t *testing.T) {
 	root := t.TempDir()
 	workspace := filepath.Join(root, "checkout")
 	if err := os.Mkdir(workspace, 0700); err != nil {
@@ -59,7 +59,7 @@ func TestRemoteRunnerFailsClosedWithoutVerifiedIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := remoteRunnerCommand("runner run", args{Flags: map[string]string{"file": configPath, "task": "task"}}, filepath.Join(root, "config"), workspace, remote.Binding{Schema: 1, Profile: "central", ProjectID: "shared"})
-	if err == nil || !strings.Contains(err.Error(), "RUNNER_ISOLATION_REQUIRED") {
+	if err == nil || !strings.Contains(err.Error(), "REMOTE_MANAGED_UNSUPPORTED") {
 		t.Fatalf("unverified execution was not refused: %v", err)
 	}
 }

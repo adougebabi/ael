@@ -260,13 +260,7 @@ func (h *standaloneHandler) remotePortable(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if kind == "runners" && r.Method == http.MethodPost {
-		// Process groups and same-user file permissions do not provide the
-		// required writer/credential isolation. Keep remote execution closed
-		// until a supported, independently verified isolation boundary exists.
-		if !remoteRunnerIsolationVerified() && len(parts) == 2 && (parts[1] == "claim" || parts[1] == "observe" || parts[1] == "submit") {
-			standaloneFail(w, http.StatusServiceUnavailable, "RUNNER_ISOLATION_REQUIRED")
-			return
-		}
+		// Communication only; ownership, role, lease and version checks remain below.
 		if len(parts) == 0 {
 			var input remoteRunnerInput
 			if decode(r, &input) != nil {

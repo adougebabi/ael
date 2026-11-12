@@ -159,7 +159,21 @@ try:
     test = subprocess.run([str(repo / "web/node_modules/.bin/playwright"), "test", "--config=playwright.context.config.ts"], cwd=repo / "web", env=ui_env, timeout=180)
     if test.returncode:
         raise RuntimeError("packaged browser acceptance failed")
-    revision = client("a", "task", "show", "--task", "task")["revision"]
+    after_browser = client("a", "task", "show", "--task", "task")
+    assert after_browser["task"]["paused"] is True
+    resumed = client("a", "resume", "--task", "task", "--ack-stopped", "--expected-revision", after_browser["revision"], "--operation-id", "resume-after-browser", "--idempotency-key", "resume-after-browser")
+    revision = resumed["revision"]
+
+    # A resumed responsibility has a new operation revision. Publish its current
+    # context before testing the independent local-candidate gate.
+    resumed_obs = capture("a", "task", revision, "candidate-resumed")
+    resumed_context = client("a", "context", "publish", "--task", "task", "--observation", resumed_obs["id"], "--expected-revision", revision, "--operation-id", "context-resumed", "--idempotency-key", "context-resumed")
+    # Exercise local candidate mismatch while the server context is still current.
+    original_app = (projects["b"] / "app.txt").read_text()
+    (projects["b"] / "app.txt").write_text("local mismatch before observation\n")
+    client("b", "context", "record-check", "--context", resumed_context["id"], "--task", "task", "--check", "unit", "--artifact", report["id"], "--expected-revision", revision, "--operation-id", "local-mismatch", "--idempotency-key", "local-mismatch", expect_ok=False)
+    assert "CANDIDATE_MISMATCH" in commands[-1]["stderr"]
+    (projects["b"] / "app.txt").write_text(original_app)
 
     (projects["b"] / ".ael" / "outcomes").mkdir()
     (projects["b"] / ".ael" / "outcomes" / "report.txt").write_text("runtime log\n")
@@ -186,7 +200,10 @@ try:
     expanded_context = client("a", "context", "publish", "--task", "task", "--observation", expanded_obs["id"], "--expected-revision", revision, "--operation-id", "expanded-context", "--idempotency-key", "expanded-context")
     assert {item["id"] for item in expanded_context["sources"]} == {"source:spec/project.md", "extra-rule"}
     client("b", "context", "record-check", "--context", expanded_context["id"], "--task", "task", "--check", "unit", "--artifact", report["id"], "--expected-revision", revision, "--operation-id", "wrong-version-check", "--idempotency-key", "wrong-version-check", expect_ok=False)
-    assert "CANDIDATE_MISMATCH" in commands[-1]["stderr"]
+    # Scope expansion awaits an accurate-version decision; that earlier gate
+    # rejects this report before the client reaches its local candidate check.
+    assert "CONTEXT_STALE" in commands[-1]["stderr"]
+    assert client("a", "task", "show", "--task", "task")["task"]["confirmation"] is not None
 
     old_file = projects["a"] / "docs" / "old.md"
     old_content = old_file.read_text()

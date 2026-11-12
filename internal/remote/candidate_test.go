@@ -323,3 +323,32 @@ func TestPortableCandidateMarksIgnoredNonMarkdownKnowledgeUnknown(t *testing.T) 
 		t.Fatal("ignored non-Markdown knowledge was treated as known input")
 	}
 }
+
+// A staged mode-only change must invalidate evidence even when worktree bytes
+// and permissions have not changed. Old manifests remain readable history.
+func TestPortableCandidateTracksStagedExecutableMode(t *testing.T) {
+	source, _ := candidateRepos(t)
+	first, err := CapturePortableCandidate(source, "fixture-repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixtureGit(t, source, "update-index", "--chmod=+x", "--", "app.txt")
+	second, err := CapturePortableCandidate(source, "fixture-repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.ID == second.ID {
+		t.Fatal("staged executable bit reused an old candidate ID")
+	}
+	if diff := ComparePortableCandidates(first, second); diff.ExactlyEqual || len(diff.Paths) != 1 || diff.Paths[0] != "app.txt" {
+		t.Fatalf("missing index mode difference: %+v", diff)
+	}
+	if err := ValidatePortableCandidate(second); err != nil {
+		t.Fatal(err)
+	}
+	fixtureGit(t, source, "update-index", "--chmod=-x", "--", "app.txt")
+	restored, err := CapturePortableCandidate(source, "fixture-repo")
+	if err != nil || restored.ID != first.ID {
+		t.Fatalf("restored index did not restore identity: %v", err)
+	}
+}
