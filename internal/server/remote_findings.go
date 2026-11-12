@@ -124,6 +124,10 @@ func (p *portableStore) recordFindings(tx *store.Tx, principal standalonePrincip
 				return nil, err
 			}
 			entity = core.Finding{ID: id, TaskID: task.Definition.ID, CheckID: check.ID, Candidate: input.CandidateID, DefinitionRevision: task.Definition.Revision, PlanRevision: task.Plan.Revision, Config: configHash, Fingerprint: fingerprint, Rule: findingInput.Rule, Title: findingInput.Title, Kind: findingInput.Kind, Severity: findingInput.Severity, Route: findingInput.Route, Location: findingInput.Location, Status: "open", FirstSeen: created}
+			entity.RecurrenceOf, entity.LineageID, err = findingPredecessor(tx, task, check, configHash, input.CandidateID, findingInput)
+			if err != nil {
+				return nil, err
+			}
 		} else {
 			return nil, err
 		}
@@ -244,20 +248,34 @@ func (p *portableStore) findingView(id string, artifacts *artifactStore, detail 
 		return nil, err
 	}
 	validity := "current"
-	var latest string
-	observedErr := p.service.Store.DB.QueryRow("SELECT candidate_id FROM portable_observations WHERE task_id=? ORDER BY rowid DESC LIMIT 1", entity.TaskID).Scan(&latest)
+	var latest, observedAt string
+	observedErr := p.service.Store.DB.QueryRow("SELECT candidate_id,created FROM portable_observations WHERE task_id=? ORDER BY rowid DESC LIMIT 1", entity.TaskID).Scan(&latest, &observedAt)
 	if observedErr != nil && observedErr != sql.ErrNoRows {
 		return nil, observedErr
 	}
-	if task.Definition.Revision != entity.DefinitionRevision || task.Plan.Revision != entity.PlanRevision || (observedErr == nil && latest != entity.Candidate) {
+	if task.Candidate != "" && reviewObservationMatches(task, latest, observedAt) {
+		latest, observedErr = task.Candidate, nil
+	}
+	configMatches := false
+	for _, check := range task.Definition.Checks {
+		raw, _ := json.Marshal(check)
+		if check.ID == entity.CheckID && store.Hash(raw) == entity.Config {
+			configMatches = true
+		}
+	}
+	if !configMatches || task.Definition.Revision != entity.DefinitionRevision || task.Plan.Revision != entity.PlanRevision || (observedErr == nil && latest != entity.Candidate) {
 		validity = "historical"
 	} else if observedErr == sql.ErrNoRows {
 		validity = "unknown"
 	}
 	view["task_status"] = task.Status
+	view["revision"], view["source_task_revision"] = core.FindingRevision(entity), core.RemoteRevision(task)
 	view["occurrence_count"], view["current_completeness"], view["validity"], view["gate_effect"] = len(occurrences), current, validity, "none"
 	if detail {
 		view["occurrences"] = rendered
+	}
+	if err = p.findingLifecycleView(entity, view, artifacts, detail, available); err != nil {
+		return nil, err
 	}
 	return view, nil
 }
@@ -281,6 +299,10 @@ func (h *standaloneHandler) remoteFindings(w http.ResponseWriter, r *http.Reques
 	artifacts, err := h.server.artifacts(project, service)
 	if err != nil {
 		portableError(w, err)
+		return
+	}
+	if r.Method == http.MethodPost && len(parts) == 2 && slices.Contains([]string{"decisions", "repair", "revalidations"}, parts[1]) {
+		h.mutateFinding(w, r, principal, role, parts[0], parts[1], p, artifacts)
 		return
 	}
 	if r.Method == http.MethodPost && len(parts) == 0 {

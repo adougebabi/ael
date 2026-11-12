@@ -222,3 +222,24 @@ func TestRemoteCheckRevisionRetainsHistoryWithoutOpeningClientWorkspace(t *testi
 		t.Fatal("remote revision lost immutable candidate, unchanged check evidence or history")
 	}
 }
+
+func TestRemoteHumanReviewRespectsRuntimeParentPlanFence(t *testing.T) {
+	f, task, image := reviewFixture(t)
+	service, _ := f.s.projectService("shared")
+	task.EpicMembership = &core.EpicMembership{Parent: "runtime-parent", Required: true}
+	if err := service.ImportTask(task); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Store.DB.Exec("INSERT INTO metadata(key,body) VALUES(?,?)", "remote-plan-parent:"+store.Hash([]byte("runtime-parent")), "active-plan"); err != nil {
+		t.Fatal(err)
+	}
+	body := reviewBody(task, image, "pass")
+	response := standaloneRequest(t, f.h, "POST", "/api/v1/projects/shared/reviews", body, f.admin, f.csrf, "", "http://server.test", "1")
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "PLAN_APPLY_IN_PROGRESS") {
+		t.Fatal(response.Code, response.Body.String())
+	}
+	current, _ := service.Get("task")
+	if len(current.Attempts) != 0 || len(current.Evidence) != 0 {
+		t.Fatal("reserved parent accepted human write")
+	}
+}

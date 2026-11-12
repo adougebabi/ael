@@ -257,3 +257,7 @@ AEL_TEST_URL=http://127.0.0.1:7332 AEL_TEST_PROJECT=/tmp/ael-p7-workspace AEL_MI
 ## 人工验收与图片比较
 
 远程项目 reviewer/admin 可在“检查与验收”明确选择基准和实际图片，核对上传者、候选和来源，使用并排、缩放、叠加及定位查看证据，再记录意见或提交人工检查结论。pass/fail/blocked 绑定准确候选与修订，其他必要检查继续参与任务门禁。版本冲突与提交失败保留输入，原请求可幂等恢复。正式接口与隔离浏览器验收见 [远程任务](docs/remote-tasks.md)。
+
+## 发现到修复与复验
+
+发现详情支持带理由裁定、创建或关联授权修复任务、引用新候选的有效检查并保留复发关系。修复任务由已有外部执行者从队列领取。原截图、失败和复验历史保留，权衡裁定继续受原任务门禁约束。协议与实际命令见 [远程任务](docs/remote-tasks.md)，外部完整验收入口为 `scripts/remote_finding_lifecycle_acceptance.py`。

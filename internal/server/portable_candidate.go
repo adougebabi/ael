@@ -31,6 +31,10 @@ CREATE TABLE IF NOT EXISTS portable_context_sources(context_id TEXT NOT NULL,id 
 CREATE TABLE IF NOT EXISTS findings(id TEXT PRIMARY KEY,task_id TEXT NOT NULL,candidate_id TEXT NOT NULL,check_id TEXT NOT NULL,fingerprint TEXT NOT NULL UNIQUE,body TEXT NOT NULL,first_seen TEXT NOT NULL,last_seen TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS findings_task ON findings(task_id,candidate_id);
 CREATE TABLE IF NOT EXISTS finding_occurrences(id TEXT PRIMARY KEY,finding_id TEXT NOT NULL,check_report_id TEXT NOT NULL,body TEXT NOT NULL,created TEXT NOT NULL,UNIQUE(finding_id,check_report_id));
+CREATE TABLE IF NOT EXISTS finding_history(id TEXT PRIMARY KEY,finding_id TEXT NOT NULL,kind TEXT NOT NULL,body TEXT NOT NULL,created TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS finding_history_entity ON finding_history(finding_id,created);
+CREATE INDEX IF NOT EXISTS finding_repair_task ON findings(json_extract(body,'$.repair.task_id'));
+CREATE INDEX IF NOT EXISTS finding_lineage ON findings(json_extract(body,'$.lineage_id'));
 CREATE TABLE IF NOT EXISTS portable_checks(id TEXT PRIMARY KEY,context_id TEXT NOT NULL,task_id TEXT NOT NULL,candidate_id TEXT NOT NULL,check_id TEXT NOT NULL,artifact_id TEXT NOT NULL,body TEXT NOT NULL,created TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS remote_runners(id TEXT PRIMARY KEY,actor TEXT NOT NULL,workspace_id TEXT NOT NULL,checkout_id TEXT NOT NULL,repository TEXT NOT NULL,version TEXT NOT NULL,capabilities TEXT NOT NULL,created TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS remote_runner_labels(runner_id TEXT PRIMARY KEY,alias TEXT NOT NULL,machine TEXT NOT NULL);

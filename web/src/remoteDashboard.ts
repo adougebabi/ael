@@ -29,7 +29,9 @@ export function connectDashboard(project: Project | null, csrf = "", expired?: (
     let payload = body;
     if (body !== undefined) {
       const input = body as Record<string, any>;
-      if (url.pathname === "/api/action" && ["review_result", "review_pending", "review_confirm", "review_resume"].includes(input.action)) {
+      if (url.pathname === "/api/finding-action" && ["decisions", "repair", "revalidations"].includes(url.searchParams.get("kind") || "")) {
+        endpoint = `/api/v1/projects/${encodeURIComponent(project.id)}/findings/${encodeURIComponent(input.finding_id)}/${url.searchParams.get("kind")}`;
+      } else if (url.pathname === "/api/action" && ["review_result", "review_pending", "review_confirm", "review_resume"].includes(input.action)) {
         endpoint = `/api/v1/projects/${encodeURIComponent(project.id)}/reviews`;
       } else {
         if (url.pathname !== "/api/action" || !["pause", "cancel"].includes(input.action)) throw new ApiError("REMOTE_ACTION_UNAVAILABLE", "此操作需要对应执行者权限与责任。");

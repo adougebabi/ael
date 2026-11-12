@@ -116,3 +116,25 @@ POST `/api/v1/projects/ID/findings` 复用 context 检查报告事务和当前�
 会话 API 为 POST `/api/v1/projects/ID/reviews`。请求字段为 action（review_result、review_pending、review_confirm、review_resume）、id、unit、reason、recovery、result、artifacts、candidate、revision、plan_revision、request_key，可附 review_note_id 和 comparison（baseline、actual 中央附件 ID）。executor 兼容旧表单字段，服务端始终使用实际会话身份。相同请求和 request_key 可恢复同一回执，修改内容须用新键。原始图片与比较来源在正式证据中保存。读取和上传未完成状态分别由 Dashboard 的 review-evidence 与原附件接口投影。
 
 隔离正式验收入口为 `python3 scripts/remote_review_acceptance.py --bundle dist --out /tmp/ael-review-NEW`，包括两个客户端正式 CLI 上传、真实浏览器图像、三种结论和打包界面操作。
+
+## 发现裁定、修复关联与复验
+
+`finding show --finding ID --json` 返回发现 revision、source_task_revision、历史、修复状态和当前有效检查。写操作使用项目外私有 JSON，并沿用持久待提交记录与 `runner retry --pending FILE`。
+
+```sh
+ael finding decide --finding ID --file PRIVATE_JSON --json
+ael finding repair --finding ID --file PRIVATE_JSON --json
+ael finding revalidate --finding ID --file PRIVATE_JSON --json
+```
+
+共同字段为 finding_id、expected_revision（发现 revision）、expected_task_revision（source_task_revision）、reason、operation_id 和 idempotency_key。相同键只能重放相同内容。
+
+裁定 action 可为 fix、non_issue、accepted_tradeoff、more_evidence。executor/reviewer/admin 可提出需修复与补证，非问题与接受权衡由 reviewer/admin 登录 Dashboard 记录。普通令牌保持客户端报告分类。所有裁定保留理由和操作者，必需验收及范围/政策变更继续走原任务流程。
+
+修复操作需要 executor/admin。可提供 occurrence_id 选择原始出现记录，默认使用最近一次。省略 repair_task_id 时创建新修复叶子；关联已有任务需 repair_task_id、expected_repair_revision 和 repair_check_id。已有任务须覆盖来源范围，并以相同验收含义的必需检查承载复验。新任务继承原始任务与父范围、验收、规范、非目标和复现材料。原父仍开放时加入为必需叶子，已结束父的后续修复保留反馈来源。重复创建返回同一关联任务。
+
+复验请求还需 repair_task_id、expected_repair_revision、candidate_id 和 evidence_sha256。它们来自 show 返回的 repair_task.revision、repair_task.candidate_id 与 repair_evidence_sha256。服务端选择原映射检查的 CurrentEvidence，要求有效 pass、新候选、同一仓库和可读取的固定证据。客户端不提交自选通过状态。其他必要检查和父级集成仍可能未完成。
+
+POST 路径依次为 `/api/v1/projects/PROJECT/findings/ID/decisions`、`/repair`、`/revalidations`。Dashboard 提供裁定、创建/关联、精确复验、历史及版本发现往返。复验表单冻结审阅版本，错误或响应丢失保留原请求和输入。
+
+正式隔离验收使用 `python3 scripts/remote_finding_lifecycle_acceptance.py --bundle dist --out NEW_PRIVATE_DIR`。实际修改、Git 提交、命令、浏览器、截图由外部测试宿主执行。源码字节可由宿主保存为租约保护的 .bin 附件，binding 仍使用原候选路径；Server 下载按固定内容处理。

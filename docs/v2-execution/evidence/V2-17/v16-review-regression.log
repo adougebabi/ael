@@ -1,0 +1,18 @@
+
+Running 8 tests using 1 worker
+
+(node:7438) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:7438) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 tests/review.spec.ts:33:1 › 明确基准、键盘比较、丢失响应和幂等人工回执 (1.2s)
+  ✓  2 tests/review.spec.ts:84:1 › 新候选拒绝旧表单且保留输入及图片选择 (2.2s)
+  ✓  3 tests/review.spec.ts:111:1 › 缺失、清理及未完成上传分别显示并阻止错误验收 (762ms)
+  ✓  4 tests/review.spec.ts:129:1 › 只读会话可读图片并受到人工裁定权限保护 (295ms)
+  ✓  5 tests/review.spec.ts:138:1 › 人工 blocked 后可精确恢复且保留原阻塞证据 (453ms)
+  ✓  6 tests/review.spec.ts:151:1 › 已提交回执之后版本再次变化时提示重新审阅 (651ms)
+  ✓  7 tests/review.spec.ts:169:1 › 慢于轮询周期的原件读取仍能显示比较图片 (11.3s)
+  ✓  8 tests/review.spec.ts:182:1 › 读取项目身份失败时不使用空命名空间保存草稿 (505ms)
+
+  8 passed (18.0s)
+{"result": "PASS", "out": "/private/tmp/ael-v217-review", "actions": ["real-http-pass-and-idempotent-receipt", "real-http-fail-and-idempotent-receipt", "real-http-blocked-and-idempotent-receipt", "provisional-opinion-non-gating-and-explicit-application", "candidate-updated-through-external-repair", "definition-changed-after-committed-review", "external-command-after-human-completes-required-gates"]}

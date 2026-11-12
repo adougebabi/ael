@@ -184,6 +184,33 @@ func (s *Service) linkEpic(parent, child string, required bool, milestone, expec
 		return Next{}, Error("TASK_MISSING", child)
 	}
 	err := s.Store.Write(func(tx *store.Tx) error {
+		_, err := s.linkEpicTx(tx, parent, child, required, milestone, expectedPolicy, expectedHash, planKey, expectedState)
+		return err
+	})
+	if err != nil {
+		return Next{}, err
+	}
+	if err = s.Store.Flush(); err != nil {
+		return Next{}, err
+	}
+	return s.Next(child)
+}
+
+// LinkRemoteEpicTx retains the existing membership, writer and scope guards
+// while letting a finding association share the same central transaction.
+func (s *Service) LinkRemoteEpicTx(tx *store.Tx, parent, child string, required bool, milestone string) (Task, error) {
+	if !s.RemoteAuthority || s.remoteOperation == nil || s.remoteOperation.TaskID != child || s.remoteOperation.Expected == "" || s.remoteOperation.Expected == "absent" {
+		return Task{}, Error("REMOTE_OPERATION_REQUIRED", "authorized association operation must name the existing leaf")
+	}
+	if err := s.active(); err != nil {
+		return Task{}, err
+	}
+	return s.linkEpicTx(tx, parent, child, required, milestone, "", "", "", "")
+}
+
+func (s *Service) linkEpicTx(tx *store.Tx, parent, child string, required bool, milestone, expectedPolicy, expectedHash, planKey, expectedState string) (Task, error) {
+	var t Task
+	err := func() error {
 		if err := checkPlanActive(tx, parent, planKey); err != nil {
 			return err
 		}
@@ -196,7 +223,8 @@ func (s *Service) linkEpic(parent, child string, required bool, milestone, expec
 		if err := validateEpicParent(tx, parent, child); err != nil {
 			return err
 		}
-		t, err := load(tx, child)
+		var err error
+		t, err = load(tx, child)
 		if err != nil {
 			return Error("TASK_MISSING", child)
 		}
@@ -230,14 +258,8 @@ func (s *Service) linkEpic(parent, child string, required bool, milestone, expec
 			return err
 		}
 		return tx.Event(child, "epic_linked", t.EpicMembership)
-	})
-	if err != nil {
-		return Next{}, err
-	}
-	if err = s.Store.Flush(); err != nil {
-		return Next{}, err
-	}
-	return s.Next(child)
+	}()
+	return t, err
 }
 
 func (s *Service) epicMembers(parent string) ([]Task, error) {

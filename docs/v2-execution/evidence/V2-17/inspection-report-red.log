@@ -1,0 +1,15 @@
+Traceback (most recent call last):
+  File "/Users/vinson/Documents/project/个人/ael/scripts/remote_finding_lifecycle_acceptance.py", line 205, in <module>
+    submit(work, [(inspection_report, 'runtime:inspection.md')])
+  File "/Users/vinson/Documents/project/个人/ael/scripts/remote_finding_lifecycle_acceptance.py", line 153, in submit
+    return operation('a', 'submit', dict(work['lease'], expected_revision=work['revision'], candidate_id=observed['candidate_id'], result=result, bindings=bindings, **extra))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/vinson/Documents/project/个人/ael/scripts/remote_finding_lifecycle_acceptance.py", line 110, in operation
+    return cli(name, *argv)
+           ^^^^^^^^^^^^^^^^
+  File "/Users/vinson/Documents/project/个人/ael/scripts/remote_finding_lifecycle_acceptance.py", line 102, in cli
+    return run([binary, *argv, '--project', projects[name], '--config-dir', configs[name], '--json'], projects[name])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/vinson/Documents/project/个人/ael/scripts/remote_finding_lifecycle_acceptance.py", line 42, in run
+    raise RuntimeError(f'{argv[:3]} failed: {result.stderr}')
+RuntimeError: [PosixPath('/Users/vinson/Documents/project/个人/ael/dist/ael-darwin-arm64'), 'runner', 'submit'] failed: {"code":"ARTIFACT_REQUIRED","error":"ARTIFACT_REQUIRED: remote server rejected the request; retained operation /private/tmp/ael-v217-lifecycle-01/config-a/agent-operations/9ee98d0736ce4de44fe82481f87bf47d18815d6d77b6cacef80504d3664fcca6.json"}

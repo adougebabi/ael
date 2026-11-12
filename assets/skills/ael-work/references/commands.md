@@ -31,3 +31,5 @@
 外部发现通过 `finding report --file PRIVATE_JSON` 接入。`finding list` 支持任务、候选、严重性、完整性和文本筛选，`finding show --finding ID` 给出所有出现及原件。完整请求见 remote-agent.md。
 
 远程 human 检查使用中央 Dashboard 的会话人工验收入口。截图、基准和报告仍由外部客户端调用 artifact upload 上传，页面明确选择比较来源。reviewer/admin 的结论绑定准确版本与中央证据，普通 Agent 令牌无法调用人工裁定。详见 remote-agent.md 的人工裁定交接。
+
+发现闭环新增 `finding decide`、`finding repair`、`finding revalidate`，均接收 `--finding ID --file PRIVATE_JSON`。发现版本和来源任务版本、理由及操作键必填；修复创建需要 executor/admin，非问题/权衡需要授权人工会话。复验从关联任务当前有效证据读取 pass，并核对新候选、仓库和字节/hash。完整字段和宿主执行顺序见 remote-agent.md。

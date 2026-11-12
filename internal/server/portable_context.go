@@ -203,7 +203,7 @@ func (p *portableStore) context(principal standalonePrincipal, input portableCon
 		}
 		created := time.Now().UTC().Format(time.RFC3339Nano)
 		inventoryBytes, _ := json.Marshal(input.Inventory)
-		result := map[string]any{"id": id, "task_id": taskID, "task_revision": taskRevision, "definition_revision": task.Definition.Revision, "plan_revision": task.Plan.Revision, "policy_hash": task.PolicyHash, "candidate_id": candidateID, "repository": candidate.Repository, "commit": candidate.Commit, "observation_id": input.ObservationID, "checkout_id": checkoutID, "workspace_id": workspaceID, "runner_id": runnerID, "inputs_known": inputsKnown, "capture_stability_proven": false, "actor": principal.Username, "created_at": created, "sources": sources, "inventory_count": len(input.Inventory), "inventory_hash": store.Hash(inventoryBytes), "inventory_origin": "client_attested", "inventory_unverified": inventoryUnverified, "check_status": "not_recorded", "operation_id": input.OperationID}
+		result := map[string]any{"id": id, "task_id": taskID, "task_revision": taskRevision, "definition_revision": task.Definition.Revision, "task_definition": task.Definition, "plan_revision": task.Plan.Revision, "policy_hash": task.PolicyHash, "candidate_id": candidateID, "repository": candidate.Repository, "commit": candidate.Commit, "observation_id": input.ObservationID, "checkout_id": checkoutID, "workspace_id": workspaceID, "runner_id": runnerID, "inputs_known": inputsKnown, "capture_stability_proven": false, "actor": principal.Username, "created_at": created, "sources": sources, "inventory_count": len(input.Inventory), "inventory_hash": store.Hash(inventoryBytes), "inventory_origin": "client_attested", "inventory_unverified": inventoryUnverified, "check_status": "not_recorded", "operation_id": input.OperationID}
 		body, err := json.Marshal(result)
 		if err != nil {
 			return nil, err
@@ -354,6 +354,11 @@ func (p *portableStore) getContext(id string, artifacts *artifactStore) (map[str
 			}
 		}
 	}
+	findingSources, err := p.findingContextSources(taskID)
+	if err != nil {
+		return nil, err
+	}
+	result["finding_sources"] = findingSources
 	result["checks"] = checks
 	if len(checks) > 0 {
 		result["check_status"] = "client_reported"

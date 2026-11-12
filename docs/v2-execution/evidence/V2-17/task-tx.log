@@ -1,0 +1,6 @@
+=== RUN   TestRemoteTaskCreationCanRollbackWithItsAssociation
+--- PASS: TestRemoteTaskCreationCanRollbackWithItsAssociation (0.10s)
+=== RUN   TestRemoteEpicLinkCanRollbackAndRetainsRevisionFence
+--- PASS: TestRemoteEpicLinkCanRollbackAndRetainsRevisionFence (0.09s)
+PASS
+ok  	ael/internal/core	0.572s

@@ -9,9 +9,10 @@ import (
 )
 
 type ChangeReference struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
-	Kind  string `json:"kind"`
+	TaskID string `json:"task_id,omitempty"`
+	ID     string `json:"id"`
+	Title  string `json:"title"`
+	Kind   string `json:"kind"`
 }
 type Change struct {
 	ID           string            `json:"id"`
@@ -31,6 +32,8 @@ type Change struct {
 	Facts        []ChangeFact      `json:"delivery_facts"`
 }
 type ChangeFact struct {
+	Candidate string     `json:"candidate_id,omitempty"`
+	Finding   string     `json:"finding_id,omitempty"`
 	Task      string     `json:"task"`
 	Title     string     `json:"title"`
 	Result    string     `json:"result"`
@@ -114,7 +117,7 @@ func ChangesWithRecords(s *core.Service, all []Record, q BrowseQuery, kind, from
 		if t.Historical && (t.Result == "历史完成 · 导入未复验" || strings.HasPrefix(t.Result, "historical")) {
 			continue
 		}
-		c := &Change{ID: "task:" + id, Title: t.Definition.Title, Kind: "delivery", Reason: t.Definition.OriginalRequest, Scopes: t.Definition.Scope, References: []ChangeReference{{id, t.Definition.Title, "task"}}, Artifacts: []string{}, Historical: t.Historical}
+		c := &Change{ID: "task:" + id, Title: t.Definition.Title, Kind: "delivery", Reason: t.Definition.OriginalRequest, Scopes: t.Definition.Scope, References: []ChangeReference{{ID: id, Title: t.Definition.Title, Kind: "task"}}, Artifacts: []string{}, Historical: t.Historical}
 		var execution *core.Attempt
 		for i := len(t.Attempts) - 1; i >= 0; i-- {
 			a := &t.Attempts[i]
@@ -152,6 +155,9 @@ func ChangesWithRecords(s *core.Service, all []Record, q BrowseQuery, kind, from
 		}
 		changes[c.ID] = c
 	}
+	if err := findingChangeFacts(s, tasks, changes); err != nil {
+		return p, err
+	}
 	consumed := map[string]string{}
 	// An explicit, described record that lists several tasks defines a single
 	// change. Merely sharing a common spec, path or date never merges tasks.
@@ -161,7 +167,7 @@ func ChangesWithRecords(s *core.Service, all []Record, q BrowseQuery, kind, from
 			continue
 		}
 		result := map[string]string{"current": "effective", "accepted": "decided", "proposed": "proposed", "rejected": "rejected", "superseded": "superseded", "historical": "historical", "conflict": "conflict"}[r.Status]
-		c := &Change{ID: "knowledge:" + r.ID, Title: Title(r), Kind: r.Kind, Reason: r.Rationale, Content: r.Summary, Result: result, Scopes: r.Paths, References: []ChangeReference{{r.ID, Title(r), r.Kind}}, Artifacts: []string{}, SupersededBy: r.SupersededBy, Historical: r.Status == "historical"}
+		c := &Change{ID: "knowledge:" + r.ID, Title: Title(r), Kind: r.Kind, Reason: r.Rationale, Content: r.Summary, Result: result, Scopes: r.Paths, References: []ChangeReference{{ID: r.ID, Title: Title(r), Kind: r.Kind}}, Artifacts: []string{}, SupersededBy: r.SupersededBy, Historical: r.Status == "historical"}
 		if c.Reason == "" {
 			c.Reason = "未记录原因"
 		}
@@ -176,7 +182,7 @@ func ChangesWithRecords(s *core.Service, all []Record, q BrowseQuery, kind, from
 		if len(r.Tasks) > 1 && r.Summary != "" {
 			for _, id := range r.Tasks {
 				if t, ok := tasks[id]; ok {
-					c.References = append(c.References, ChangeReference{id, t.Definition.Title, "task"})
+					c.References = append(c.References, ChangeReference{ID: id, Title: t.Definition.Title, Kind: "task"})
 					if changes["task:"+id] != nil && consumed[id] == "" {
 						consumed[id] = c.ID
 					}
@@ -191,6 +197,12 @@ func ChangesWithRecords(s *core.Service, all []Record, q BrowseQuery, kind, from
 			parent := changes[owner]
 			parent.Artifacts = append(parent.Artifacts, child.Artifacts...)
 			parent.Facts = append(parent.Facts, ChangeFact{Task: id, Title: child.Title, Result: child.Result, At: child.At, Content: child.Content, Artifacts: child.Artifacts})
+			parent.Facts = append(parent.Facts, child.Facts...)
+			for _, reference := range child.References {
+				if !slices.ContainsFunc(parent.References, func(item ChangeReference) bool { return item.ID == reference.ID && item.Kind == reference.Kind }) {
+					parent.References = append(parent.References, reference)
+				}
+			}
 			for _, scope := range child.Scopes {
 				if !slices.Contains(parent.Scopes, scope) {
 					parent.Scopes = append(parent.Scopes, scope)
@@ -222,7 +234,7 @@ func ChangesWithRecords(s *core.Service, all []Record, q BrowseQuery, kind, from
 					}
 				}
 				if !found {
-					c.References = append(c.References, ChangeReference{id, t.Definition.Title, "task"})
+					c.References = append(c.References, ChangeReference{ID: id, Title: t.Definition.Title, Kind: "task"})
 				}
 			}
 			key := "task:" + id
@@ -237,7 +249,7 @@ func ChangesWithRecords(s *core.Service, all []Record, q BrowseQuery, kind, from
 					}
 				}
 				if !found {
-					c.References = append(c.References, ChangeReference{r.ID, Title(r), r.Kind})
+					c.References = append(c.References, ChangeReference{ID: r.ID, Title: Title(r), Kind: r.Kind})
 				}
 			}
 		}

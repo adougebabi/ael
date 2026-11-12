@@ -60,23 +60,28 @@ type FindingEvidence struct {
 }
 
 type Finding struct {
-	ID                 string          `json:"id"`
-	TaskID             string          `json:"task_id"`
-	CheckID            string          `json:"check_id"`
-	Candidate          string          `json:"candidate_id"`
-	DefinitionRevision int             `json:"definition_revision"`
-	PlanRevision       int             `json:"plan_revision"`
-	Config             string          `json:"config_sha256"`
-	Fingerprint        string          `json:"fingerprint"`
-	Rule               string          `json:"rule"`
-	Title              string          `json:"title"`
-	Kind               string          `json:"kind"`
-	Severity           string          `json:"severity"`
-	Route              string          `json:"route"`
-	Location           FindingLocation `json:"location"`
-	Status             string          `json:"status"`
-	FirstSeen          string          `json:"first_seen"`
-	LastSeen           string          `json:"last_seen"`
+	ID                 string             `json:"id"`
+	TaskID             string             `json:"task_id"`
+	CheckID            string             `json:"check_id"`
+	Candidate          string             `json:"candidate_id"`
+	DefinitionRevision int                `json:"definition_revision"`
+	PlanRevision       int                `json:"plan_revision"`
+	Config             string             `json:"config_sha256"`
+	Fingerprint        string             `json:"fingerprint"`
+	Rule               string             `json:"rule"`
+	Title              string             `json:"title"`
+	Kind               string             `json:"kind"`
+	Severity           string             `json:"severity"`
+	Route              string             `json:"route"`
+	Location           FindingLocation    `json:"location"`
+	Status             string             `json:"status"`
+	FirstSeen          string             `json:"first_seen"`
+	LastSeen           string             `json:"last_seen"`
+	Decision           *FindingDecision   `json:"decision,omitempty"`
+	Repair             *FindingRepair     `json:"repair,omitempty"`
+	Resolution         *FindingResolution `json:"resolution,omitempty"`
+	RecurrenceOf       string             `json:"recurrence_of,omitempty"`
+	LineageID          string             `json:"lineage_id,omitempty"`
 }
 
 type FindingOccurrence struct {

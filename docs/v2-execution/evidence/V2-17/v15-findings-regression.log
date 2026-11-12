@@ -1,0 +1,11 @@
+
+Running 1 test using 1 worker
+
+(node:87284) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:87284) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 tests/findings.spec.ts:5:1 › 发现归并、来源、证据与受检版本可追溯 (1.1s)
+
+  1 passed (1.8s)
+{"result": "PASS", "out": "/private/tmp/ael-v217-findings", "finding": "finding_LsOaH5nU4zD1gNIbngP-6Ib7XHCB0bJxHBV2gDF6KLY"}

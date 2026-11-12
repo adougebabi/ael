@@ -38,7 +38,11 @@ func (p *portableStore) reviewEnvironment(expected core.ReviewExpectation) *core
 			if task.Candidate != expected.Candidate || task.Definition.Revision != expected.DefinitionRevision || task.Plan.Revision != expected.PlanRevision {
 				return core.Error("REVIEW_VERSION_MISMATCH", "review the current candidate and revisions")
 			}
-			for _, key := range []string{"remote-plan-task:" + store.Hash([]byte(task.Definition.ID)), "remote-plan-parent:" + store.Hash([]byte(task.Definition.ID)), "remote-plan-parent:" + store.Hash([]byte(task.Definition.Parent))} {
+			keys := []string{"remote-plan-task:" + store.Hash([]byte(task.Definition.ID)), "remote-plan-parent:" + store.Hash([]byte(task.Definition.ID)), "remote-plan-parent:" + store.Hash([]byte(task.Definition.Parent))}
+			if task.EpicMembership != nil {
+				keys = append(keys, "remote-plan-parent:"+store.Hash([]byte(task.EpicMembership.Parent)))
+			}
+			for _, key := range keys {
 				var active string
 				err := tx.Row("SELECT body FROM metadata WHERE key=?", key).Scan(&active)
 				if err != nil && err != sql.ErrNoRows {

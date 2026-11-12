@@ -80,8 +80,36 @@ func (s *Service) Create(d Definition) (Next, error) {
 }
 
 func (s *Service) create(d Definition, membership *EpicMembership, expectedPolicy, planKey string) (Next, error) {
+	if err := s.active(); err != nil {
+		return Next{}, err
+	}
+	var task Task
+	err := s.Store.Write(func(tx *store.Tx) error {
+		var err error
+		task, err = s.createTaskTx(tx, d, membership, expectedPolicy, planKey)
+		return err
+	})
+	if err != nil {
+		return Next{}, err
+	}
+	if err = s.Store.Flush(); err != nil {
+		return Next{}, err
+	}
+	return s.Next(task.Definition.ID)
+}
+
+// CreateRemoteTaskTx composes the existing creation rules with a central
+// operation. The caller owns the write transaction, receipt and outbox flush.
+func (s *Service) CreateRemoteTaskTx(tx *store.Tx, d Definition) (Task, error) {
+	if !s.RemoteAuthority || s.remoteOperation == nil || s.remoteOperation.TaskID != d.ID || s.remoteOperation.Expected != "absent" {
+		return Task{}, Error("REMOTE_OPERATION_REQUIRED", "authorized creation operation must name the new task")
+	}
+	return s.createTaskTx(tx, d, nil, "", "")
+}
+
+func (s *Service) createTaskTx(tx *store.Tx, d Definition, membership *EpicMembership, expectedPolicy, planKey string) (Task, error) {
 	if e := s.active(); e != nil {
-		return Next{}, e
+		return Task{}, e
 	}
 	if d.ID == "" {
 		d.ID = ID("WI-")
@@ -90,7 +118,7 @@ func (s *Service) create(d Definition, membership *EpicMembership, expectedPolic
 		d.Type = "feature"
 	}
 	if d.Type == "epic" && d.Parent != "" {
-		return Next{}, Error("EPIC_PARENT_INVALID", "epics cannot be child tasks")
+		return Task{}, Error("EPIC_PARENT_INVALID", "epics cannot be child tasks")
 	}
 	if d.Intent == "" && (d.Type == "qa" || d.Type == "verify") && (d.Goal == "" || d.Goal == "report" || d.Goal == "analysis") {
 		d.Intent = "inspect"
@@ -105,44 +133,44 @@ func (s *Service) create(d Definition, membership *EpicMembership, expectedPolic
 		d.Revision = 1
 	}
 	if d.Preset != "" && !slices.Contains([]string{"fast", "standard", "strict", "research"}, d.Preset) {
-		return Next{}, Error("INVALID_PRESET", d.Preset)
+		return Task{}, Error("INVALID_PRESET", d.Preset)
 	}
 	policyHash, e := s.policyHash()
 	if e != nil {
-		return Next{}, e
+		return Task{}, e
 	}
 	if expectedPolicy != "" && expectedPolicy != policyHash {
-		return Next{}, Error("PLAN_STALE_POLICY", "project policy changed since preview")
+		return Task{}, Error("PLAN_STALE_POLICY", "project policy changed since preview")
 	}
 	if e := s.normalize(&d); e != nil {
-		return Next{}, e
+		return Task{}, e
 	}
 	if after, e := s.policyHash(); e != nil || after != policyHash {
-		return Next{}, Error("POLICY_CHANGED_DURING_PLAN", "retry with stable policy")
+		return Task{}, Error("POLICY_CHANGED_DURING_PLAN", "retry with stable policy")
 	}
 
 	plan := MakePlan(&d)
 	if e := Validate(d); e != nil {
-		return Next{}, e
+		return Task{}, e
 	}
 	path, e := s.taskPath(d.ID)
 	if e != nil {
-		return Next{}, e
+		return Task{}, e
 	}
 	if p, e := store.SafePath(s.Root, ".ael/deleted/"+d.ID+".json"); e != nil {
-		return Next{}, e
+		return Task{}, e
 	} else if _, e = os.Lstat(p); e == nil {
-		return Next{}, Error("TASK_ID_DELETED", "use a new stable ID")
+		return Task{}, Error("TASK_ID_DELETED", "use a new stable ID")
 	} else if !os.IsNotExist(e) {
-		return Next{}, e
+		return Task{}, e
 	}
 	if _, e = os.Lstat(path); e == nil {
-		return Next{}, Error("TASK_EXISTS", d.ID)
+		return Task{}, Error("TASK_EXISTS", d.ID)
 	}
 	b := definitionBytes(d)
 	now := time.Now().UTC()
 	t := Task{PolicyHash: policyHash, Definition: d, DefinitionHash: store.Hash(b), Plan: plan, Step: "define", Status: "open", Created: now, Updated: now, Attempts: []Attempt{}, Evidence: []Evidence{}, Approvals: []Approval{}, Feedback: []string{}}
-	e = s.Store.Write(func(tx *store.Tx) error {
+	e = func() error {
 		if err := checkPlanActive(tx, d.Parent, planKey); err != nil {
 			return err
 		}
@@ -210,15 +238,10 @@ func (s *Service) create(d Definition, membership *EpicMembership, expectedPolic
 			return e
 		}
 		return tx.Event(d.ID, "created", d)
-	})
-	if e != nil {
-		return Next{}, e
-	}
-	if e = s.Store.Flush(); e != nil {
-		return Next{}, e
-	}
-	return s.Next(d.ID)
+	}()
+	return t, e
 }
+
 func (s *Service) Get(id string) (Task, error) {
 	var t Task
 	var b string

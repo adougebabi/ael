@@ -156,6 +156,9 @@ func agentOperationEndpoint(record agentOperationRecord) string {
 	if record.Action == "finding-report" {
 		return "/findings"
 	}
+	if action, ok := map[string]string{"finding-decide": "decisions", "finding-repair": "repair", "finding-revalidate": "revalidations"}[record.Action]; ok {
+		return "/findings/" + url.PathEscape(record.Runner) + "/" + action
+	}
 	if record.Action == "register" {
 		return "/runners"
 	}

@@ -1,0 +1,436 @@
+{
+  "added": 3887,
+  "deleted": 109,
+  "files": [
+    {
+      "path": "README.md",
+      "added": 4,
+      "deleted": 0
+    },
+    {
+      "path": "assets/skills/ael-work/references/commands.md",
+      "added": 2,
+      "deleted": 0
+    },
+    {
+      "path": "assets/skills/ael-work/references/remote-agent.md",
+      "added": 13,
+      "deleted": 0
+    },
+    {
+      "path": "cmd/ael/main.go",
+      "added": 1,
+      "deleted": 1
+    },
+    {
+      "path": "cmd/ael/remote.go",
+      "added": 7,
+      "deleted": 4
+    },
+    {
+      "path": "cmd/ael/remote_agent_operation.go",
+      "added": 3,
+      "deleted": 0
+    },
+    {
+      "path": "cmd/ael/remote_finding.go",
+      "added": 23,
+      "deleted": 0
+    },
+    {
+      "path": "docs/architecture.md",
+      "added": 12,
+      "deleted": 0
+    },
+    {
+      "path": "docs/remote-tasks.md",
+      "added": 22,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/WORKLOG.md",
+      "added": 12,
+      "deleted": 2
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/README.md",
+      "added": 11,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/agent-regression.log",
+      "added": 1,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/artifact-regression.log",
+      "added": 11,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/binary-sha256.json",
+      "added": 41,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/change-analysis.json",
+      "added": 451,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/context-regression.log",
+      "added": 11,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/core-seams.log",
+      "added": 1,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/followup-tests.log",
+      "added": 2,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/formal.log",
+      "added": 14,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/frozen-review-input-red.log",
+      "added": 65,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/go-full.log",
+      "added": 14,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/inspection-report-red.log",
+      "added": 15,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/lifecycle-tests.log",
+      "added": 10,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/local-ui.log",
+      "added": 114,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/local-workflow.log",
+      "added": 250,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/package.log",
+      "added": 20,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/race.log",
+      "added": 5,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/recurrence-linked-to-old-evidence.png",
+      "added": null,
+      "deleted": null
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/repair-and-revalidation-history.png",
+      "added": null,
+      "deleted": null
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/revalidated-b-with-remaining-gate.png",
+      "added": null,
+      "deleted": null
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/reviewed-fixes.log",
+      "added": 2,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/security-core.json",
+      "added": 7,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/security-knowledge.json",
+      "added": 7,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/security-server.json",
+      "added": 29,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/security-web.json",
+      "added": 7,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/source-upload-red.log",
+      "added": 57,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/summary.json",
+      "added": 31,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/task-tx.log",
+      "added": 6,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/v13-collaboration-regression.log",
+      "added": 1,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/v14-dashboard-regression.log",
+      "added": 11,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/v15-findings-regression.log",
+      "added": 11,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/v16-review-regression.log",
+      "added": 18,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/vet.log",
+      "added": 0,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-17/worklog-tests.log",
+      "added": 5,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/receipts/V2-09.md",
+      "added": 4,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/receipts/V2-10.md",
+      "added": 4,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/receipts/V2-11.md",
+      "added": 4,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/receipts/V2-12.md",
+      "added": 4,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/receipts/V2-13.md",
+      "added": 4,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/receipts/V2-14.md",
+      "added": 4,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/receipts/V2-15.md",
+      "added": 4,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/receipts/V2-16.md",
+      "added": 4,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/receipts/V2-17.md",
+      "added": 55,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/tasks/V2-17.md",
+      "added": 4,
+      "deleted": 4
+    },
+    {
+      "path": "internal/core/epic.go",
+      "added": 31,
+      "deleted": 9
+    },
+    {
+      "path": "internal/core/finding_lifecycle.go",
+      "added": 82,
+      "deleted": 0
+    },
+    {
+      "path": "internal/core/findings.go",
+      "added": 22,
+      "deleted": 17
+    },
+    {
+      "path": "internal/core/remote_task_evidence.go",
+      "added": 59,
+      "deleted": 0
+    },
+    {
+      "path": "internal/core/remote_task_tx_test.go",
+      "added": 120,
+      "deleted": 0
+    },
+    {
+      "path": "internal/core/service.go",
+      "added": 45,
+      "deleted": 22
+    },
+    {
+      "path": "internal/knowledge/changes.go",
+      "added": 20,
+      "deleted": 8
+    },
+    {
+      "path": "internal/knowledge/finding_changes.go",
+      "added": 78,
+      "deleted": 0
+    },
+    {
+      "path": "internal/knowledge/finding_changes_test.go",
+      "added": 73,
+      "deleted": 0
+    },
+    {
+      "path": "internal/server/finding_lifecycle.go",
+      "added": 540,
+      "deleted": 0
+    },
+    {
+      "path": "internal/server/finding_lifecycle_test.go",
+      "added": 300,
+      "deleted": 0
+    },
+    {
+      "path": "internal/server/finding_views.go",
+      "added": 200,
+      "deleted": 0
+    },
+    {
+      "path": "internal/server/portable_candidate.go",
+      "added": 4,
+      "deleted": 0
+    },
+    {
+      "path": "internal/server/portable_context.go",
+      "added": 6,
+      "deleted": 1
+    },
+    {
+      "path": "internal/server/remote_findings.go",
+      "added": 25,
+      "deleted": 3
+    },
+    {
+      "path": "internal/server/remote_review.go",
+      "added": 5,
+      "deleted": 1
+    },
+    {
+      "path": "internal/server/remote_review_test.go",
+      "added": 21,
+      "deleted": 0
+    },
+    {
+      "path": "internal/server/remote_runner_submit.go",
+      "added": 15,
+      "deleted": 7
+    },
+    {
+      "path": "internal/server/ui/assets/{StandaloneApp-CU3nu0xf.js => StandaloneApp-BS_-mWJ1.js}",
+      "added": 1,
+      "deleted": 1
+    },
+    {
+      "path": "internal/server/ui/assets/index-C9mo1a7s.css",
+      "added": 0,
+      "deleted": 1
+    },
+    {
+      "path": "internal/server/ui/assets/index-CWTa2Mg3.js",
+      "added": 0,
+      "deleted": 20
+    },
+    {
+      "path": "internal/server/ui/assets/index-DpoyKcOS.css",
+      "added": 1,
+      "deleted": 0
+    },
+    {
+      "path": "internal/server/ui/assets/index-DwbteA6p.js",
+      "added": 20,
+      "deleted": 0
+    },
+    {
+      "path": "internal/server/ui/index.html",
+      "added": 2,
+      "deleted": 2
+    },
+    {
+      "path": "scripts/remote_finding_lifecycle_acceptance.py",
+      "added": 392,
+      "deleted": 0
+    },
+    {
+      "path": "web/playwright.finding-lifecycle.config.ts",
+      "added": 7,
+      "deleted": 0
+    },
+    {
+      "path": "web/src/components/FindingActions.vue",
+      "added": 187,
+      "deleted": 0
+    },
+    {
+      "path": "web/src/components/FindingPanel.vue",
+      "added": 16,
+      "deleted": 3
+    },
+    {
+      "path": "web/src/display.ts",
+      "added": 1,
+      "deleted": 0
+    },
+    {
+      "path": "web/src/pages/EvolutionPage.vue",
+      "added": 4,
+      "deleted": 2
+    },
+    {
+      "path": "web/src/remoteDashboard.ts",
+      "added": 3,
+      "deleted": 1
+    },
+    {
+      "path": "web/tests/finding-lifecycle.spec.ts",
+      "added": 189,
+      "deleted": 0
+    }
+  ]
+}

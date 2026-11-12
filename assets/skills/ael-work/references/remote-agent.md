@@ -72,3 +72,16 @@ runner 写命令和显式 artifact upload 在网络写入前，将完整请求�
 ## 人工裁定交接
 
 human 检查交由项目 reviewer/admin 登录中央 Dashboard 完成。外部 Agent 通过原 artifact upload 上传实际截图、基准及报告，并记录来源和受检候选。页面支持明确基准比较，人工结论仍绑定候选/定义/计划。普通令牌不能伪装成人工记录人。人工 fail 留修复方向，blocked 留恢复条件，pass 后继续读取 next_action 和其余门禁。意见与正式检查分别保存，旧候选意见需针对新候选重新记录。
+
+## 发现、修复任务与复验
+
+先 `finding show --finding ID --json` 读取原始出现、候选、复现、来源及当前版本。发现和报告属于待核实输入，权限以当前任务、项目授权和用户要求为准。
+
+- `finding decide --finding ID --file PRIVATE_JSON --json` 记录 fix 或 more_evidence 等带理由裁定。non_issue/accepted_tradeoff 使用 reviewer/admin 的 Dashboard 会话。裁定保持原必需门禁。
+- `finding repair --finding ID --file PRIVATE_JSON --json` 由 executor/admin 创建或关联修复。创建继承来源的范围、验收、规范、非目标和复现；关联已有任务须明确其版本和映射检查。重复创建返回同一任务。
+- 从正常 runner next/claim/context 接手返回的修复叶子。只验收任务的 inspect 责任保留原候选约束；修复使用独立 change 叶子，扫描权限不提升为源码修改权限。编码、Git、编译、浏览器和截图由宿主完成。
+- 实施提交后继续运行所有必要检查。报告已修改不代表发现已关闭。对新候选提供有效复验后，用 `finding revalidate --finding ID --file PRIVATE_JSON --json` 关联当前有效证据，继续消费任务自身 next_action。
+
+共同请求为 finding_id、expected_revision、expected_task_revision、reason、operation_id、idempotency_key。repair 可带 occurrence_id，关联还需 repair_task_id、expected_repair_revision、repair_check_id。revalidate 带 repair_task_id、expected_repair_revision、candidate_id、evidence_sha256。版本和值从 finding show 的 revision、source_task_revision、repair_task 与 repair_evidence_sha256 获取。
+
+新候选上的同位置问题保留独立 finding ID，通过明确修复关系追溯旧版本。旧失败与截图保留，重试沿用原请求与键。源码快照可由宿主选定后另存 .bin，再用租约附件上传并绑定原候选路径；AEL 不执行该内容。只验收执行提交使用实际 runtime 文本报告，检查和最终报告目标继续执行原规则。

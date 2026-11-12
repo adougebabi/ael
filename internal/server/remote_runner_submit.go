@@ -179,17 +179,25 @@ func (p *portableStore) submitRunner(principal standalonePrincipal, runnerID str
 			}
 		}
 		if task.Step == "execute" && input.Result.Status == "pass" {
-			matched := false
+			matched, report := false, false
 			for name, item := range byPath {
-				if !strings.HasPrefix(name, "runtime:") {
-					if file, ok := env.Files[name]; ok && file.Hash == item.SHA256 && slices.Contains(input.Result.Artifacts, item.ID) {
-						matched = true
-					} else {
-						return nil, errors.New("CANDIDATE_CHANGED")
+				if strings.HasPrefix(name, "runtime:") {
+					if item.MIME == "text/plain" && slices.Contains(input.Result.Artifacts, item.ID) {
+						report = true
 					}
+					continue
+				}
+				if file, ok := env.Files[name]; ok && file.Hash == item.SHA256 && slices.Contains(input.Result.Artifacts, item.ID) {
+					matched = true
+				} else {
+					return nil, errors.New("CANDIDATE_CHANGED")
 				}
 			}
-			if !matched {
+			if task.Definition.Intent == "inspect" {
+				if !report {
+					return nil, errors.New("ARTIFACT_REQUIRED")
+				}
+			} else if !matched {
 				return nil, errors.New("ARTIFACT_REQUIRED")
 			}
 		}

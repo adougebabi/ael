@@ -62,7 +62,7 @@ function localBoundary(value: string | null, end = false) {
     : "";
 }
 const referenceLink = (ref: any) =>
-  ref.kind === "task" ? taskHref(ref.id) : knowledgeHref(ref.id);
+  ref.kind === "finding" && ref.task_id ? href("/tasks/" + encodeURIComponent(ref.task_id), { section: "findings", finding: ref.id }) : ref.kind === "task" ? taskHref(ref.id) : knowledgeHref(ref.id);
 const changeKinds = [["", "全部变化"], ["delivery", "交付结果"], ["decision", "决策与取舍"], ["spec", "规范变化"]];
 function day(value: string | null) {
   return value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleDateString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit" }) : "日期未确认";
@@ -187,7 +187,9 @@ function day(value: string | null) {
         <p v-if="!data.references.some((ref: any) => ref.kind === 'task')" class="secondary">未记录关联工作。</p>
         <article v-for="ref in data.references.filter((ref: any) => ref.kind === 'task')" :key="ref.id" class="record-row">
           <a :href="taskHref(ref.id)">{{ ref.title }}</a><small>{{ ref.id }}</small>
-          <template v-if="data.delivery_facts?.find((f: any) => f.task === ref.id)"><p><span class="status">{{ label(data.delivery_facts.find((f: any) => f.task === ref.id).result) }}</span> · {{ stamp(data.delivery_facts.find((f: any) => f.task === ref.id).occurred_at) }}</p><p>{{ data.delivery_facts.find((f: any) => f.task === ref.id).content }}</p></template>
+          <section v-for="fact in (data.delivery_facts || []).filter((f: any) => f.task === ref.id)" :key="fact.task + ':' + (fact.finding_id || '') + ':' + (fact.candidate_id || '') + ':' + fact.occurred_at">
+            <p><strong v-if="fact.finding_id">{{ fact.title }}</strong> <span class="status">{{ label(fact.result) }}</span> · {{ stamp(fact.occurred_at) }}</p><p>{{ fact.content }}</p><p v-if="fact.candidate_id" class="secondary">复验候选 {{ fact.candidate_id }}</p>
+          </section>
         </article>
         <p>影响范围：{{ data.scopes?.join("、") || "未记录具体范围" }}</p>
         <p v-if="data.historical" class="secondary">

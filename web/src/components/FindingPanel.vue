@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { api, params, refreshRevision, remoteProject } from "../api";
-import { route, setQuery, taskHref } from "../router";
+import { route, setQuery, taskHref, href } from "../router";
 import { useResource } from "../resource";
 import { stamp } from "../display";
+import FindingActions from "./FindingActions.vue";
 import EvidenceComparison from "./EvidenceComparison.vue";
 import LoadState from "./LoadState.vue";
 import Pagination from "./Pagination.vue";
@@ -30,14 +31,23 @@ async function load(quiet = false) {
       return value;
     }, quiet);
   } else {
-    const query = { task: props.taskId, severity: route.value.query.get("finding_severity") || "", completeness: route.value.query.get("finding_completeness") || "", candidate: route.value.query.get("finding_candidate") || "", query: route.value.query.get("finding_query") || "", offset: offset.value, limit: 20 };
+    const query = { task: props.taskId, severity: route.value.query.get("finding_severity") || "", completeness: route.value.query.get("finding_completeness") || "", status: route.value.query.get("finding_status") || "", candidate: route.value.query.get("finding_candidate") || "", query: route.value.query.get("finding_query") || "", offset: offset.value, limit: 20 };
     await list.load(() => api("/api/findings?" + params(query)), quiet);
   }
 }
 watch(() => [props.taskId, route.value.key], () => { record.data.value = null; void load(); });
+watch(() => [props.taskId, selected.value], () => { comparing.value = false; comparison.value = { baseline: "", actual: "" }; });
 watch(refreshRevision, () => void load(true));
 let timer: ReturnType<typeof setInterval>;
-onMounted(() => { void load(); timer = setInterval(() => void load(true), 4000); });
+let polling = false;
+onMounted(() => {
+  void load();
+  timer = setInterval(async () => {
+    if (polling) return;
+    polling = true;
+    try { await load(true); } finally { polling = false; }
+  }, 4000);
+});
 onUnmounted(() => clearInterval(timer));
 </script>
 
@@ -49,6 +59,7 @@ onUnmounted(() => clearInterval(timer));
       <div class="toolbar">
         <label>搜索发现<input type="search" :value="route.query.get('finding_query') || ''" @change="filter({ finding_query: ($event.target as HTMLInputElement).value })" /></label>
         <label>严重性<select aria-label="严重性" :value="route.query.get('finding_severity') || ''" @change="filter({ finding_severity: ($event.target as HTMLSelectElement).value })"><option value="">全部</option><option v-for="(name,key) in severityNames" :key="key" :value="key">{{ name }}</option></select></label>
+        <label>处理状态<select aria-label="处理状态" :value="route.query.get('finding_status') || ''" @change="filter({ finding_status: ($event.target as HTMLSelectElement).value })"><option value="">全部</option><option value="open">待处理</option><option value="needs_evidence">待补证</option><option value="dismissed">非问题</option><option value="accepted_tradeoff">已记录权衡</option><option value="resolved">已复验通过</option></select></label>
         <label>证据完整性<select aria-label="证据完整性" :value="route.query.get('finding_completeness') || ''" @change="filter({ finding_completeness: ($event.target as HTMLSelectElement).value })"><option value="">全部</option><option value="complete">证据已齐</option><option value="incomplete">待补证</option></select></label>
         <label>受检候选<input :value="route.query.get('finding_candidate') || ''" @change="filter({ finding_candidate: ($event.target as HTMLInputElement).value })" /></label>
       </div>
@@ -67,6 +78,8 @@ onUnmounted(() => clearInterval(timer));
         <p>受检候选 <code>{{ record.data.value.candidate_id }}</code> · 定义 {{ record.data.value.definition_revision }} · 计划 {{ record.data.value.plan_revision }}</p>
         <p>路由 {{ record.data.value.route || '未声明' }} · 定位 {{ record.data.value.location.selector || record.data.value.location.path || '页面整体' }}<span v-if="record.data.value.location.line"> · 行 {{ record.data.value.location.line }}</span></p>
         <p><a :href="taskHref(record.data.value.task_id)">查看关联任务 {{ record.data.value.task_id }}</a></p>
+        <FindingActions v-if="remoteProject" :key="record.data.value.id" :finding="record.data.value" @changed="load(true)" />
+        <section v-if="record.data.value.related_findings?.length" aria-label="关联版本发现"><h3>关联版本发现</h3><p v-for="item in record.data.value.related_findings" :key="item.id"><a :href="href('/tasks/' + encodeURIComponent(item.task_id), { section: 'findings', finding: item.id })">{{ item.title }}</a> · {{ item.status }} · 候选 {{ item.candidate_id }}</p></section>
         <button v-if="remoteProject" type="button" @click="comparing = !comparing">{{ comparing ? '收起图片比较' : '比较证据图片' }}</button>
         <EvidenceComparison v-if="remoteProject && comparing" v-model="comparison" :task-id="taskId" :candidate="record.data.value.candidate_id" />
         <article v-for="appearance in record.data.value.occurrences" :key="appearance.id" class="content-section" aria-label="发现出现记录">

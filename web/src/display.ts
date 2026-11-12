@@ -53,6 +53,7 @@ const labels: Record<string, string> = {
   running: "执行中",
   interrupted: "已中断",
   abandoned: "已释放",
+  finding: "发现",
   verified: "已验证",
   implemented: "已实现 · 尚无发布依据",
   merged: "已合并 · 尚无发布依据",
