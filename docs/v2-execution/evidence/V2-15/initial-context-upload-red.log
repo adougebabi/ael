@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/Users/vinson/Documents/project/个人/ael/scripts/remote_findings_acceptance.py", line 118, in <module>
+    image=upload(out/'actual.png','external-fixture-screenshot')
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/vinson/Documents/project/个人/ael/scripts/remote_findings_acceptance.py", line 117, in upload
+    return cli('a','artifact','upload','--task','scan','--candidate',candidate,'--file',file,'--source',source,'--expected-revision',revision,'--operation-id',key,'--idempotency-key',key)['id']
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/vinson/Documents/project/个人/ael/scripts/remote_findings_acceptance.py", line 84, in cli
+    def cli(name,*argv):return run([binary,*argv,'--project',projects[name],'--config-dir',configs[name],'--json'],projects[name])
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/vinson/Documents/project/个人/ael/scripts/remote_findings_acceptance.py", line 41, in run
+    if result.returncode:raise RuntimeError(f'{argv[:3]} failed: {result.stderr}')
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: [PosixPath('/private/tmp/ael-v215-bundle/ael-darwin-arm64'), 'artifact', 'upload'] failed: {"code":"REVISION_CONFLICT","error":"REVISION_CONFLICT: remote server rejected the request; retained upload /private/tmp/ael-v215-first/config-a/agent-operations/4ae33afe4226e3ec9f11815e010415190d310ea3f0748e8657b6c802e63bd717.json"}

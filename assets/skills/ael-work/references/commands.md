@@ -27,3 +27,5 @@
 - 交付：analysis/report/verified 无发布。merged/released 只在原任务有目标及授权时交付，准确候选审批与真实回执缺一不可。`./ael task create` 的 feedback_of 关联新反馈；先去重，不篡改旧结果。
 
 双客户端恢复使用 `runner retry --pending PRIVATE_OPERATION_FILE`，领取回执追加 `--out NEW_PRIVATE_FILE`。显式工作区交接使用 `runner recover --runner RECEIVER --file PRIVATE_JSON`。请求字段、权限、原责任和有界重试规则见 [远程 Agent 协议](remote-agent.md)。
+
+外部发现通过 `finding report --file PRIVATE_JSON` 接入。`finding list` 支持任务、候选、严重性、完整性和文本筛选，`finding show --finding ID` 给出所有出现及原件。完整请求见 remote-agent.md。

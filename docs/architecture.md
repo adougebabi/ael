@@ -76,3 +76,11 @@ StandaloneApp 保留登录、项目和账户管理，将项目工作区接入既
 远程 Dashboard 读取逐次执行项目授权，任务投影使用 RemoteTaskView，角色控制继续沿用原 mutation 入口。责任有效性、最后上报与未知宿主状态分别投影，心跳不会制造工程成果。可选客户端标签使用 remote_runner_labels 保存，旧登记回执和旧客户端结构继续可用。
 
 中央知识读取仅使用已 finalize 且哈希匹配的 context 来源，复用现有资料分页、Markdown 阅读和演进投影。多个当前任务版本冲突时提供选择。正文相对链接沿同一 context 解析并携带目标版本，无法接入的链接明确失败。Server 不从客户端路径读取规范或证据。
+
+## V2-15 结构化发现
+
+Finding 使用既有 portable check report 作为接入点，存储于同一中央项目数据库的 findings/finding_occurrences。p.mutate 将检查报告、发现、出现记录、幂等回执和事件置于同一事务。领域规则只规范字段、构造身份和计算证据缺项。Task/Next/CurrentEvidence 保持原有验收职责。
+
+归并键包含任务、检查、配置、定义/计划版本、候选、规则、种类、路由和精确定位。出现不可覆盖，保留真实鉴权 actor 与声明 method/tool/run。最新 portable observation 决定诊断候选是否仍为当前，版本变化不套用旧结果。证据读取核对 finalized、任务/候选或合法引用、实际字节及 hash，页面区分报告时完整性与当前可用性。
+
+资料可通过明确 context 绑定上传，校验当前修订与候选，未改变任务已接受候选或执行责任。结构化发现为非门禁记录，模型建议不改任务状态。中心 SQLite 备份包含发现表，Git TaskRecord 沿用既有边界。

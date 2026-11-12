@@ -1,0 +1,14 @@
+?   	ael/assets	[no test files]
+ok  	ael/cmd/ael	103.928s
+?   	ael/cmd/aelbench	[no test files]
+ok  	ael/internal/bootstrap	9.936s
+ok  	ael/internal/core	68.953s
+ok  	ael/internal/execution	12.608s
+ok  	ael/internal/knowledge	2.980s
+ok  	ael/internal/migration	14.026s
+?   	ael/internal/process	[no test files]
+?   	ael/internal/projectmode	[no test files]
+ok  	ael/internal/remote	14.190s
+?   	ael/internal/securityfs	[no test files]
+ok  	ael/internal/server	22.139s
+ok  	ael/internal/store	1.331s

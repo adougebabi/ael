@@ -11,18 +11,21 @@ import (
 // A client-reported check links an existing report to the candidate and
 // configuration observed by that client. It is not an acceptance gate pass.
 type portableCheckInput struct {
-	TaskID           string `json:"task_id"`
-	ExpectedRevision string `json:"expected_revision"`
-	CandidateID      string `json:"candidate_id"`
-	CheckID          string `json:"check_id"`
-	ArtifactID       string `json:"artifact_id"`
-	InputsKnown      bool   `json:"inputs_known"`
-	OperationID      string `json:"operation_id"`
-	IdempotencyKey   string `json:"idempotency_key"`
+	TaskID           string                    `json:"task_id"`
+	ExpectedRevision string                    `json:"expected_revision"`
+	CandidateID      string                    `json:"candidate_id"`
+	CheckID          string                    `json:"check_id"`
+	ArtifactID       string                    `json:"artifact_id"`
+	InputsKnown      bool                      `json:"inputs_known"`
+	OperationID      string                    `json:"operation_id"`
+	IdempotencyKey   string                    `json:"idempotency_key"`
+	ContextID        string                    `json:"context_id,omitempty"`
+	Source           *core.FindingReportSource `json:"source,omitempty"`
+	Findings         []core.FindingInput       `json:"findings,omitempty"`
 }
 
-func (p *portableStore) reportCheck(principal standalonePrincipal, contextID string, input portableCheckInput, artifacts *artifactStore) (map[string]any, error) {
-	if !standaloneID.MatchString(contextID) || !standaloneID.MatchString(input.TaskID) || !standaloneID.MatchString(input.CheckID) || !standaloneID.MatchString(input.ArtifactID) || !portableDigestID(input.CandidateID) || input.ExpectedRevision == "" {
+func (p *portableStore) reportCheck(principal standalonePrincipal, contextID string, input portableCheckInput, artifacts *artifactStore, trustedHuman bool) (map[string]any, error) {
+	if !standaloneID.MatchString(contextID) || !standaloneID.MatchString(input.TaskID) || !standaloneID.MatchString(input.CheckID) || (input.ArtifactID != "" && !standaloneID.MatchString(input.ArtifactID)) || (input.ArtifactID == "" && len(input.Findings) == 0) || (input.ContextID != "" && input.ContextID != contextID) || len(input.Findings) > 100 || !portableDigestID(input.CandidateID) || input.ExpectedRevision == "" {
 		return nil, errors.New("CANDIDATE_INVALID")
 	}
 	return p.mutate(principal, "report-check:"+contextID, input.OperationID, input.IdempotencyKey, input, func(tx *store.Tx) (map[string]any, error) {
@@ -62,18 +65,22 @@ func (p *portableStore) reportCheck(principal standalonePrincipal, contextID str
 		if err != nil {
 			return nil, err
 		}
-		artifact, err := scanArtifact(tx.Row("SELECT "+artifactColumns+" FROM artifact_objects WHERE id=?", input.ArtifactID))
-		if err != nil || artifact.Status != "finalized" || artifact.TaskID != taskID || artifact.Uploader != principal.Username || artifact.Source != "context-check:"+contextID+":"+input.CheckID {
-			return nil, errors.New("CONTEXT_SOURCE_MISMATCH")
-		}
-		contextCreated, ok := context["created_at"].(string)
-		contextTime, contextErr := time.Parse(time.RFC3339Nano, contextCreated)
-		artifactTime, artifactErr := time.Parse(time.RFC3339Nano, artifact.Created)
-		if !ok || contextErr != nil || artifactErr != nil || artifactTime.Before(contextTime) {
-			return nil, errors.New("CONTEXT_SOURCE_MISMATCH")
-		}
-		if _, err = artifacts.read(artifact); err != nil {
-			return nil, errors.New("CONTEXT_SOURCE_UNAVAILABLE")
+		var artifact artifactObject
+		if input.ArtifactID != "" {
+			var err error
+			artifact, err = scanArtifact(tx.Row("SELECT "+artifactColumns+" FROM artifact_objects WHERE id=?", input.ArtifactID))
+			if err != nil || artifact.Status != "finalized" || artifact.TaskID != taskID || artifact.Uploader != principal.Username || artifact.Source != "context-check:"+contextID+":"+input.CheckID {
+				return nil, errors.New("CONTEXT_SOURCE_MISMATCH")
+			}
+			contextCreated, ok := context["created_at"].(string)
+			contextTime, contextErr := time.Parse(time.RFC3339Nano, contextCreated)
+			artifactTime, artifactErr := time.Parse(time.RFC3339Nano, artifact.Created)
+			if !ok || contextErr != nil || artifactErr != nil || artifactTime.Before(contextTime) {
+				return nil, errors.New("CONTEXT_SOURCE_MISMATCH")
+			}
+			if _, err = artifacts.read(artifact); err != nil {
+				return nil, errors.New("CONTEXT_SOURCE_UNAVAILABLE")
+			}
 		}
 		id, err := standaloneRandom("check_")
 		if err != nil {
@@ -87,6 +94,24 @@ func (p *portableStore) reportCheck(principal standalonePrincipal, contextID str
 		}
 		if _, err = tx.Exec("INSERT INTO portable_checks(id,context_id,task_id,candidate_id,check_id,artifact_id,body,created) VALUES(?,?,?,?,?,?,?,?)", id, contextID, taskID, candidateID, input.CheckID, artifact.ID, string(raw), created); err != nil {
 			return nil, err
+		}
+		if len(input.Findings) > 0 {
+			findings, err := p.recordFindings(tx, principal, task, *check, contextID, id, input, artifact, artifacts, trustedHuman, created)
+			if err != nil {
+				return nil, err
+			}
+			result["findings"] = findings
+			result["source"] = findingsSource(input, *check, principal)
+			enriched, err := json.Marshal(result)
+			if err != nil {
+				return nil, err
+			}
+			if _, err = tx.Exec("UPDATE portable_checks SET body=? WHERE id=?", string(enriched), id); err != nil {
+				return nil, err
+			}
+			if err = tx.Event(taskID, "findings_reported", map[string]any{"check_report": id, "candidate": candidateID, "count": len(findings), "actor": principal.Username, "gate_effect": "none"}); err != nil {
+				return nil, err
+			}
 		}
 		return result, nil
 	})

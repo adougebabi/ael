@@ -30,6 +30,7 @@ import AppIcon from "../components/AppIcon.vue";
 import ScopeSummary from "../components/ScopeSummary.vue";
 import CopyButton from "../components/CopyButton.vue";
 import EpicOverview from "../components/EpicOverview.vue";
+import FindingPanel from "../components/FindingPanel.vue";
 import { pendingReviewForTask, preservePriorWork } from "../reviewDraft";
 const props = defineProps<{ id: string }>();
 const responsibilityNames: Record<string,string> = { active:"责任有效", paused:"责任已暂停", cancelled:"任务已取消", superseded:"责任版本已失效", expired:"责任已到期", interrupted:"责任已中断", ended:"责任已结束" };
@@ -38,12 +39,13 @@ const r = useResource<any>(null),
 const t = computed(() => n.value?.task),
   rawSection = computed(() => route.value.query.get("section") || "overview"),
   section = computed(() => rawSection.value === "technical" ? "execution" : rawSection.value);
-const sections = [
+const sections = computed(() => [
   ["overview", "概览"],
   ["checks", "检查与验收"],
   ["execution", "执行过程"],
   ["basis", "规范与决策"],
-];
+  ...(remoteProject.value ? [["findings","发现"]] : []),
+]);
 const basis = ref<any>(null),
   events = ref<any[]>([]),
   eventsLoaded = ref(false),
@@ -717,6 +719,8 @@ function checkReason(c: any) {
         </button>
       </nav>
       <div class="task-detail-layout"><div class="task-detail-main">
+        <FindingPanel v-if="remoteProject && section === 'findings'" :task-id="id" @artifact="openArtifact" />
+
       <section v-if="section === 'overview'" class="overview">
         <div class="conclusion result-banner" :class="{ amber: t.blocker || t.paused || t.confirmation, success: t.status === 'completed' }">
           <span class="banner-icon"><AppIcon :name="t.blocker || t.paused ? 'warning' : t.status === 'completed' ? 'check' : t.confirmation ? 'shield' : availableHumanChecks.length ? 'user' : 'play'" /></span><div>

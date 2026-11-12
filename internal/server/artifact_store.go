@@ -50,6 +50,7 @@ type artifactStartInput struct {
 	RunnerID         string `json:"runner_id,omitempty"`
 	LeaseToken       string `json:"lease_token,omitempty"`
 	Fence            int    `json:"fence,omitempty"`
+	ContextID        string `json:"context_id,omitempty"`
 }
 
 type artifactLeaseInput struct {
@@ -274,8 +275,29 @@ func (a *artifactStore) begin(principal standalonePrincipal, in artifactStartInp
 			if revision != in.ExpectedRevision || output == "" || output != in.Candidate {
 				return errors.New("REVISION_CONFLICT")
 			}
-		} else if core.RemoteRevision(task) != in.ExpectedRevision || task.Candidate != in.Candidate {
-			return errors.New("REVISION_CONFLICT")
+		} else {
+			if core.RemoteRevision(task) != in.ExpectedRevision {
+				return errors.New("REVISION_CONFLICT")
+			}
+			if in.ContextID != "" {
+				if !standaloneID.MatchString(in.ContextID) || in.AttemptID != "" || !portableDigestID(in.Candidate) {
+					return errors.New("ARTIFACT_INVALID")
+				}
+				var body, contextTask, contextCandidate string
+				if err := tx.Row("SELECT body,task_id,candidate_id FROM portable_contexts WHERE id=?", in.ContextID).Scan(&body, &contextTask, &contextCandidate); err != nil {
+					return errors.New("CONTEXT_SOURCE_MISMATCH")
+				}
+				var context map[string]any
+				if json.Unmarshal([]byte(body), &context) != nil || contextTask != in.TaskID || contextCandidate != in.Candidate || context["task_revision"] != in.ExpectedRevision {
+					return errors.New("REVISION_CONFLICT")
+				}
+				var latest string
+				if err := tx.Row("SELECT candidate_id FROM portable_observations WHERE task_id=? ORDER BY rowid DESC LIMIT 1", in.TaskID).Scan(&latest); err != nil || latest != in.Candidate {
+					return errors.New("ARTIFACT_CANDIDATE_MISMATCH")
+				}
+			} else if task.Candidate != in.Candidate {
+				return errors.New("REVISION_CONFLICT")
+			}
 		}
 		if in.AttemptID != "" && !runnerUpload {
 			found := false

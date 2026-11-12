@@ -173,6 +173,9 @@ func remoteUploadBytes(a args, config, project string, binding remote.Binding, f
 		return agentCommunicationCall(config, project, binding, method, path, body)
 	}
 	start := map[string]any{"operation_id": op, "idempotency_key": key, "expected_revision": revision, "task_id": task, "attempt_id": a.get("attempt", ""), "candidate": a.get("candidate", ""), "filename": filename, "mime": mimeType, "size": len(data), "sha256": store.Hash(data), "source": a.get("source", "CLI")}
+	if a.get("context", "") != "" {
+		start["context_id"] = a.get("context", "")
+	}
 	if lease != nil {
 		start["runner_id"], start["lease_token"], start["fence"] = lease.RunnerID, lease.Token, lease.Fence
 	}

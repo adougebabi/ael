@@ -249,3 +249,7 @@ AEL_TEST_URL=http://127.0.0.1:7332 AEL_TEST_PROJECT=/tmp/ael-p7-workspace AEL_MI
 独立 Server 登录并选择项目后，可使用共用工作台查看父子任务、最近结果、检查证据、规范快照和项目演进。任务详情分别显示责任是否有效、最后联系、客户端上报阶段及未知宿主状态。暂停和取消通过中央权限与当前版本校验。
 
 断线显示最后成功数据与过期提示，重连按项目游标恢复。筛选、详情分区、往返位置按项目与会话隔离。`执行依据与附件` 提供原始中心快照读取，`项目与账户` 返回服务管理。实际浏览器验收可运行 `python3 scripts/remote_dashboard_acceptance.py --bundle dist --out /tmp/ael-dashboard-NEW`。
+
+## 结构化发现
+
+外部 UI/UX 工具可用正式 `finding report` 上报规则、定位、期望/实际、复现、影响及固定证据。相同版本和位置归并，每次报告保留来源及出现记录，缺截图或交互材料标待补证。任务详情的“发现”支持筛选、原始报告、截图和候选追溯。`python3 scripts/remote_findings_acceptance.py --bundle dist --out /tmp/ael-findings-NEW` 使用外部真实浏览器观察及正式 CLI 验证。

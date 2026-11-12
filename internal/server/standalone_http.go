@@ -198,7 +198,7 @@ func (h *standaloneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.URL.Path == "/api/v1/meta" && r.Method == http.MethodGet {
-		standaloneReply(w, http.StatusOK, map[string]any{"mode": "server", "protocol": 1, "capabilities": []string{"login", "projects", "project_roles", "revocable_tokens", "remote_tasks", "remote_plans", "operation_receipts", "artifacts", "portable_candidates", "portable_contexts", "remote_runners"}})
+		standaloneReply(w, http.StatusOK, map[string]any{"mode": "server", "protocol": 1, "capabilities": []string{"login", "projects", "project_roles", "revocable_tokens", "remote_tasks", "remote_plans", "operation_receipts", "artifacts", "portable_candidates", "portable_contexts", "remote_runners", "findings"}})
 		return
 	}
 	if !strings.HasPrefix(r.URL.Path, "/api/") {
@@ -351,6 +351,10 @@ func (h *standaloneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.HasPrefix(r.URL.Path, "/api/v1/projects/") {
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v1/projects/"), "/")
+		if len(parts) >= 2 && parts[1] == "findings" {
+			h.remoteFindings(w, r, p, parts[0], parts[2:])
+			return
+		}
 		if len(parts) == 3 && parts[1] == "dashboard" {
 			h.remoteDashboard(w, r, p, parts[0], parts[2])
 			return

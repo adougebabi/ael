@@ -49,6 +49,9 @@ func Call(config, project string, binding Binding, method, suffix string, payloa
 		if strings.Contains(suffix, "/plan/") {
 			capability = "remote_plans"
 		}
+		if strings.HasPrefix(suffix, "/findings") {
+			capability = "findings"
+		}
 		if strings.HasPrefix(suffix, "/artifacts") {
 			capability = "artifacts"
 		}
@@ -102,7 +105,7 @@ func Call(config, project string, binding Binding, method, suffix string, payloa
 }
 
 func cacheableRemoteRead(suffix string) bool {
-	return !strings.Contains(suffix, "/artifacts") && !strings.HasPrefix(suffix, "/repositories") && !strings.HasPrefix(suffix, "/candidates") && !strings.HasPrefix(suffix, "/observations") && !strings.HasPrefix(suffix, "/portable-operations") && !strings.HasPrefix(suffix, "/runners") && !strings.Contains(suffix, "/context")
+	return !strings.HasPrefix(suffix, "/findings") && !strings.Contains(suffix, "/artifacts") && !strings.HasPrefix(suffix, "/repositories") && !strings.HasPrefix(suffix, "/candidates") && !strings.HasPrefix(suffix, "/observations") && !strings.HasPrefix(suffix, "/portable-operations") && !strings.HasPrefix(suffix, "/runners") && !strings.Contains(suffix, "/context")
 }
 
 // Artifact content is always fetched live: cached bytes cannot prove that the

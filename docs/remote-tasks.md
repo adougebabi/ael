@@ -100,3 +100,9 @@ ael context record-check --context CONTEXT_ID --task TASK_ID --check CHECK_ID --
 正式执行链路见 [远程 Agent 协议](../assets/skills/ael-work/references/remote-agent.md)。Agent 自行执行，runner API 标识兼容保留；不要求客户端 Docker。托管执行及其恢复入口已退出，当前验收从外部驱动主动调用 CLI 开始。
 
 V2-13 的双客户端领取、持久待提交记录、固定字节恢复与显式工作区交接已接入正式 CLI。具体请求和恢复条件见 [远程 Agent 协议](../assets/skills/ael-work/references/remote-agent.md)。
+
+## 外部发现接口
+
+POST `/api/v1/projects/ID/findings` 复用 context 检查报告事务和当前修订/候选校验。GET 同路径提供任务、候选、严重性和完整性筛选，GET `/findings/FINDING_ID` 返回不可覆盖的出现记录、报告来源、证据 hash 及当前可用性。项目角色按每次请求重新校验。
+
+观察阶段附件可显式带 context_id，它必须属于当前任务修订和最新观察候选。此绑定用于诊断资料接入，执行结果提交仍校验原 Attempt、fence、租约及 finalized 关联。

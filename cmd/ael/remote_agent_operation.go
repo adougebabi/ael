@@ -153,6 +153,9 @@ func agentTransient(err error) bool {
 }
 
 func agentOperationEndpoint(record agentOperationRecord) string {
+	if record.Action == "finding-report" {
+		return "/findings"
+	}
 	if record.Action == "register" {
 		return "/runners"
 	}

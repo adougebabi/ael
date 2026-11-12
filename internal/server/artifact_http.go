@@ -18,7 +18,7 @@ func artifactError(w http.ResponseWriter, err error) {
 		standaloneFail(w, http.StatusGone, "ARTIFACT_UNAVAILABLE")
 	case err.Error() == "QUOTA_EXCEEDED":
 		standaloneFail(w, http.StatusRequestEntityTooLarge, "QUOTA_EXCEEDED")
-	case err.Error() == "UPLOAD_INCOMPLETE", err.Error() == "UPLOAD_CONFLICT", err.Error() == "IDEMPOTENCY_CONFLICT", err.Error() == "REVISION_CONFLICT", err.Error() == "PRUNE_STALE", err.Error() == "QUOTA_TOO_SMALL", err.Error() == "ARTIFACT_CANDIDATE_MISMATCH", err.Error() == "ARTIFACT_CONFLICT", strings.HasPrefix(err.Error(), "STALE_TOKEN"), strings.HasPrefix(err.Error(), "STALE_EXECUTION_UNIT"):
+	case err.Error() == "CONTEXT_SOURCE_MISMATCH", err.Error() == "UPLOAD_INCOMPLETE", err.Error() == "UPLOAD_CONFLICT", err.Error() == "IDEMPOTENCY_CONFLICT", err.Error() == "REVISION_CONFLICT", err.Error() == "PRUNE_STALE", err.Error() == "QUOTA_TOO_SMALL", err.Error() == "ARTIFACT_CANDIDATE_MISMATCH", err.Error() == "ARTIFACT_CONFLICT", strings.HasPrefix(err.Error(), "STALE_TOKEN"), strings.HasPrefix(err.Error(), "STALE_EXECUTION_UNIT"):
 		standaloneFail(w, http.StatusConflict, err.Error())
 	case err.Error() == "ARTIFACT_INVALID", err.Error() == "ARTIFACT_MIME_INVALID", err.Error() == "ARTIFACT_CONTENT_MISMATCH", err.Error() == "ATTEMPT_NOT_FOUND":
 		standaloneFail(w, http.StatusBadRequest, err.Error())

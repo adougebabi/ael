@@ -79,10 +79,13 @@ func remoteControl(cmd string, a args) (any, error) {
 
 func remoteCommand(cmd string, a args, binding remote.Binding) (any, error) {
 	flags := map[string][]string{
-		"doctor": {}, "task list": {"parent", "limit", "offset", "days", "query", "board"},
+		"finding report": {"file", "task", "context", "expected-revision", "operation-id", "idempotency-key"},
+		"finding list":   {"task", "candidate", "severity", "status", "completeness", "query", "limit", "offset"},
+		"finding show":   {"finding"},
+		"doctor":         {}, "task list": {"parent", "limit", "offset", "days", "query", "board"},
 		"task show": {"task"}, "task plan": {"task"}, "next": {"task"}, "task tree": {"task"}, "task progress": {"task"},
 		"operation show":  {"idempotency-key"},
-		"artifact upload": {"lease-file", "task", "file", "mime", "source", "attempt", "candidate", "operation-id", "idempotency-key", "expected-revision"},
+		"artifact upload": {"context", "lease-file", "task", "file", "mime", "source", "attempt", "candidate", "operation-id", "idempotency-key", "expected-revision"},
 		"artifact list":   {"task"}, "artifact show": {"artifact"}, "artifact download": {"artifact", "out"},
 		"artifact cancel":        {"upload", "operation-id", "idempotency-key"},
 		"artifact upload-status": {"idempotency-key"},
@@ -138,6 +141,9 @@ func remoteCommand(cmd string, a args, binding remote.Binding) (any, error) {
 		return nil, err
 	}
 	project, id := a.get("project", "."), a.get("task", "")
+	if strings.HasPrefix(cmd, "finding ") {
+		return remoteFindingCommand(cmd, a, config, project, binding)
+	}
 	if strings.HasPrefix(cmd, "artifact ") {
 		return remoteArtifactCommand(cmd, a, config, project, binding)
 	}

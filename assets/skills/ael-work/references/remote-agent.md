@@ -56,3 +56,15 @@ runner 写命令和显式 artifact upload 在网络写入前，将完整请求�
 任务详情将协作责任、最后联系、上报阶段和未知宿主状态分别呈现。别名和 machine 是客户端声明，实际会话对应 Attempt。暂停/取消使用当前责任版本和真实权限，结果是撤销有效协作提交并请求外部执行者停工。执行依据与附件入口继续提供原始快照和上传对象的读取。
 
 规范正文来自任务已接收的固定快照。任务提供版本的正文及其相对链接绑定到同一 context 和目标 hash。多个任务引用不同版本时，资料库显示冲突并提供准确快照选择，任务依据仍使用本任务实际提供的版本。
+
+## 外部 UI/UX 发现
+
+先为当前任务修订采集候选并 publish/show context。扫描工具由外部 Agent 在其宿主选择。诊断附件可用 `artifact upload --context CONTEXT --candidate HASH` 上传，服务端核对任务、当前修订、context 与最新观察候选。正式执行结果继续使用责任租约和 fence。
+
+`finding report --file PRIVATE_JSON` 复用 context 检查报告入口。文件含 context_id、task_id、candidate_id、check_id、expected_revision、operation_id、idempotency_key、source 和 findings。source 包含 method(command|scenario|model|human)、tool、version、run_id，实际 actor 来自鉴权。human 来源要求具有验收/管理权限的已登录会话。普通 Agent token 可以报告模型或外部执行观察。
+
+可提供 artifact_id 作为原始报告，其上传 source 必须为 `context-check:CONTEXT:CHECK`，报告在 context 发布后上传。finding 的字段为 rule、title、kind(ui|ux|functional)、severity、route、location(path/selector/line/column)、expected、actual、reproduction 步骤数组、impact、artifacts 数组、trace_artifacts 数组、可选 environment 和 viewport(width/height)。原件必须 finalized 且属于任务/候选，合法已有引用可复用。缺报告或必要截图/交互证据时，可先保留结构化发现并标待补证。
+
+同任务、检查配置、验收/计划版本、候选、规则及精确定位归并。标题不参与身份。新报告增加出现记录，原键重放返回原回执。不同位置与候选保持独立。每个报告最多 100 项，单批唯一证据最多 64 MiB，沿用附件单文件和配额限制。
+
+用 `finding list --task ID --severity high --completeness incomplete` 筛选，`finding show --finding ID` 读取出现记录和来源。`runner retry --pending FILE` 继续恢复原 finding 报告。接收发现保持 gate_effect=none，任务的正式验收继续按原规则提交。图片哈希与完整性标签说明已接收的证据，实际结论由具备能力和权限的验收者判断。

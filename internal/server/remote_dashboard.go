@@ -168,7 +168,7 @@ func (h *standaloneHandler) remoteDashboard(w http.ResponseWriter, r *http.Reque
 	}
 	q := r.URL.Query()
 	id := q.Get("id")
-	if id == "" && view == "artifact" {
+	if id == "" && (view == "artifact" || view == "artifact-status") {
 		id = q.Get("task")
 	}
 	limit, offset := bounds(r)
@@ -235,14 +235,29 @@ func (h *standaloneHandler) remoteDashboard(w http.ResponseWriter, r *http.Reque
 		result, err = service.Attention()
 	case "events":
 		result, err = service.Events(id)
-	case "artifact":
+	case "artifact", "artifact-status":
 		artifacts, e := h.server.artifacts(project, service)
 		err = e
 		if err == nil {
 			item, e := artifacts.get(q.Get("ref"))
 			err = e
 			if err == nil && item.TaskID != id {
-				err = errors.New("ARTIFACT_NOT_FOUND")
+				var references int
+				if queryErr := service.Store.DB.QueryRow("SELECT count(*) FROM artifact_references WHERE artifact_id=? AND task_id=?", item.ID, id).Scan(&references); queryErr != nil {
+					err = queryErr
+				} else if references == 0 {
+					err = errors.New("ARTIFACT_NOT_FOUND")
+				}
+			}
+			if err == nil && view == "artifact-status" {
+				status := item.Status
+				if status == "finalized" {
+					if _, readErr := artifacts.read(item); readErr != nil {
+						status = "unavailable"
+					}
+				}
+				result = map[string]any{"task_id": id, "status": status, "sha256": item.SHA256}
+				break
 			}
 			if err == nil {
 				data, e := artifacts.read(item)
