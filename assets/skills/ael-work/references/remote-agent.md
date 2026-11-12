@@ -14,3 +14,37 @@
 10. 提交后消费 `next.next_action`：repair 留在同一叶子修复；continue 领取下一个当前责任；completed 后读取父范围后继，能力授权满足则继续。交接结束当前角色，由已有外部 Bot 自行领取。等待环境/人工时记录恢复条件，不循环伪进展。`runner receipt --runner ID --idempotency-key KEY` 查原提交回执；重复同一 submit 返回相同结果，不重复推进。旧回执不是新写授权。达到重复失败预算按既有复核规则停止，不改类别规避。
 
 `runner run`、`runner resume-result`、`runner recover-claim` 明确不支持；不要用它们恢复新模式。稳定本地 Managed/Attached 仍是显式本地功能，不作为远程前置。合并/发布交给外部 Git/CI/部署工具与用户授权，AEL 保存目标与回执，不能将 verified 偷换为 merged/released。没有活跃外部 Agent 就等待接手，不声称后台自动编码。
+
+## 双客户端、断网与恢复
+
+两个客户端使用各自 profile、令牌、runner 和 workspace 标识，连接同一 Server。独立任务可以同时持有责任，同一单元的并发 claim 由服务端事务去重。父计划继续执行既有顺序与 WIP 规则。
+
+runner 写命令和显式 artifact upload 在网络写入前，将完整请求及选定上传字节存入配置目录的 agent-operations。记录绑定服务地址、project、profile、原 checkout 和凭据摘要，权限为 0600，所在目录为 0700。CLI 返回 operation_file。记录含原责任租约，必须保存在项目外私有配置目录。保留的上传字节和候选在重试时固定，原请求文件或工程文件随后改变时，使用 runner retry 读取已保存记录。
+
+通信每轮最多尝试三次，每次 HTTP 请求设置五秒超时，尝试间隔为 100/200 毫秒。每次写入还包含能力查询或恢复查询，单次命令可能包含多个请求。预算耗尽返回 AGENT_OPERATION_PENDING 并保留操作文件。重复失败后由 Agent 读取具体条件并处理，停止无证据重复调用。
+
+```sh
+./ael runner retry --pending /private/config/agent-operations/OP.json --project PATH --json
+# claim 的恢复仍需指定新的私有租约输出文件
+./ael runner retry --pending /private/config/agent-operations/CLAIM.json --out /private/claim-receipt.json --project PATH --json
+```
+
+恢复先向服务端查原操作。已接受的结果核对服务端保存的原始请求摘要，再读取原回执。早期回执没有摘要时，通过原接口原键重放完成服务端幂等内容校验。未受理的结果先用原 attempt/token/fence 续租核对，再提交固定的原始请求。撤权、到期、取消或修订变化导致拒绝时，保留本地操作与诊断材料，读取当前 task/next 并按权限显式恢复。旧结果继续绑定原 Attempt。令牌或服务配置变化时，自动恢复会拒绝凭据摘要或作用域不匹配，需核对原身份与服务端回执后处理。
+
+上传恢复先查 upload-status，使用原 start 请求核验完整元数据与幂等键，再续传或读取 finalized 原件。相同字节、不同任务/候选/来源也会产生幂等冲突。记录的校验摘要可检测意外改写。完成的操作记录可在核对服务端回执后由操作者从私有配置目录清理，待确认记录继续保留。
+
+## 显式工作区交接
+
+接收者先注册自己的 runner/workspace，再从自己的 checkout 为当前任务版本准备 candidate/context。源代码同步由宿主工程工具处理。调用下列命令提交私有 JSON 请求。
+
+```sh
+./ael runner recover --runner RECEIVER --file /private/recovery.json --project PATH --json
+```
+
+请求包含 task_id、attempt_id（原责任）、context_id（接收方当前上下文）、expected_revision、mode、reason、operation_id、idempotency_key。mode 为 confirmed-stopped 或 independent-workspace。前者表示操作者明确核实旧执行者停工，后者表示接收者明确选择独立工作区。独立工作区必须使用不同 workspace_id，并由宿主提供实际隔离。
+
+未知工作区的旧责任不能直接重新领取。独立交接会撤销旧接口责任，记录旧工作区未知状态，并把下一次领取限定到接收方。接收方随后重新获取当前 revision、candidate/context 并 claim。接收方在领取前失联时，可基于当前 revision 针对同一原 attempt 显式更换接收方，每次决定持久记录。存在活跃责任时，恢复必须针对该责任。确认旧执行者已停止后，可针对保留的旧 attempt 提交 confirmed-stopped 释放旧工作区限制，此操作保持其他正在执行的责任。
+
+实施完成后可以把相同候选交给另一身份验收。接收方提供相同候选，服务端保留实施 PASS 历史并要求接收方重新报告必需检查。存在活跃检查时，交接必须明确针对当前检查责任。
+
+活动远程任务的 task cancel 立即撤销有效提交权，并保留宿主状态未知的旧责任。runner show 的 connection_state 表达最后上报或失联，host_execution_state 为 unknown。操作者确认停工后，可通过 confirmed-stopped 清理该责任。发布结果未知时仍按既有外部运行标识核查，交付责任不会通过恢复入口自动重做。

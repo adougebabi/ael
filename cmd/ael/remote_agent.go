@@ -51,6 +51,9 @@ func remoteAgentCommand(cmd string, a args, config, project string, binding remo
 	case "run", "resume-result", "recover-claim":
 		return nil, core.Error("REMOTE_MANAGED_UNSUPPORTED", "remote process hosting is retired; use Agent-owned tools and runner communication commands")
 	}
+	if action == "retry" {
+		return retryAgentOperation(a, config, project, binding)
+	}
 	runner := a.get("runner", "")
 	if action != "register" && (runner == "" || strings.ContainsAny(runner, "/\\?#\r\n")) {
 		return nil, core.Error("AGENT_REQUEST_INVALID", "provide --runner ID")
@@ -71,7 +74,7 @@ func remoteAgentCommand(cmd string, a args, config, project string, binding remo
 			return nil, core.Error("AGENT_REQUEST_INVALID", "provide --idempotency-key")
 		}
 		method, path = http.MethodGet, path+"/operations/"+url.PathEscape(a.get("idempotency-key", ""))
-	case "register", "claim", "heartbeat", "progress", "observe", "submit", "interrupt":
+	case "register", "claim", "heartbeat", "progress", "observe", "submit", "interrupt", "recover":
 		if action == "claim" && a.get("out", "") == "" {
 			return nil, core.Error("AGENT_REQUEST_INVALID", "claim requires --out NEW_PRIVATE_FILE for the lease; response output omits credentials")
 		}
@@ -92,49 +95,24 @@ func remoteAgentCommand(cmd string, a args, config, project string, binding remo
 		} else {
 			path += "/" + action
 		}
-		if action == "observe" && a.get("repository", "") != "" {
-			if _, exists := body["candidate"]; exists {
-				return nil, core.Error("AGENT_REQUEST_INVALID", "choose supplied candidate or --repository capture")
-			}
-			candidate, err := remote.CapturePortableCandidate(project, a.get("repository", ""))
-			if err != nil {
-				return nil, err
-			}
-			body["candidate"] = candidate
-		}
 		payload = body
 	default:
 		return nil, core.Error("REMOTE_COMMAND_UNSUPPORTED", cmd)
 	}
-	// Reserve the private claim destination before any mutating network call.
-	var output *os.File
-	if action == "claim" {
-		var err error
-		output, err = os.OpenFile(a.get("out", ""), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
-		if err != nil {
-			return nil, core.Error("AGENT_OUTPUT_UNAVAILABLE", "choose a new private claim output file")
-		}
-		defer output.Close()
-	}
-	response, err := remote.Call(config, project, binding, method, path, payload, nil)
+	output, err := reserveAgentClaimOutput(action, a.get("out", ""))
 	if err != nil {
-		if output != nil {
-			os.Remove(a.get("out", ""))
-		}
 		return nil, err
 	}
 	if output != nil {
-		if err = json.NewEncoder(output).Encode(response); err == nil {
-			err = output.Sync()
-		}
-		if err != nil {
-			return nil, core.Error("AGENT_OUTPUT_FAILED", "claim may be accepted; retry the same request keys to a new file")
-		}
-		response["lease_file"] = a.get("out", "")
+		defer output.Close()
 	}
-	// Claim replay can contain a lease. Persist it privately but never display it.
-	redactAgentSecrets(response)
-	return remoteOutput(response), nil
+	var response map[string]any
+	if method == http.MethodPost {
+		response, err = runAgentOperation(a, config, project, binding, action, runner, payload.(map[string]any))
+	} else {
+		response, err = agentCommunicationCall(config, project, binding, method, path, nil)
+	}
+	return finishAgentOutput(response, err, output, a.get("out", ""))
 }
 
 func redactAgentSecrets(value any) {

@@ -1,0 +1,16 @@
+Traceback (most recent call last):
+  File "/Users/vinson/Documents/project/个人/ael/scripts/remote_collaboration_acceptance.py", line 351, in <module>
+    create(case);work=claim("a",case);observe(work)
+                      ^^^^^^^^^^^^^^^
+  File "/Users/vinson/Documents/project/个人/ael/scripts/remote_collaboration_acceptance.py", line 223, in claim
+    result, request = mutation(name,"claim",{"task_id":task,"context_id":context["id"],"expected_revision":state["revision"]},out=destination)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/vinson/Documents/project/个人/ael/scripts/remote_collaboration_acceptance.py", line 201, in mutation
+    result = client(name, *argv, expect_ok=ok)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/vinson/Documents/project/个人/ael/scripts/remote_collaboration_acceptance.py", line 84, in client
+    return run([binary, *argv, "--project", projects[name], "--json"], projects[name], client_env, input_text, expect_ok)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/vinson/Documents/project/个人/ael/scripts/remote_collaboration_acceptance.py", line 58, in run
+    raise RuntimeError(f"unexpected command result: {argv}; {process.stderr}")
+RuntimeError: unexpected command result: [PosixPath('/private/tmp/ael-v213'), 'runner', 'claim', '--runner', 'agent-a', '--file', PosixPath('/private/tmp/ael-v213-first/op-50.json'), '--out', '/private/tmp/ael-v213-first/claim-49.json', '--project', PosixPath('/private/tmp/ael-v213-first/checkout-a'), '--json']; {"code":"RUNNER_WIP","error":"RUNNER_WIP: remote server rejected the request; retained operation /private/tmp/ael-v213-first/config-a/agent-operations/828e2f97007bae8ea7bd2f0f68f5b511a37426d9c938adb3172833c36cfa6b5e.json"}

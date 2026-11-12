@@ -202,6 +202,11 @@ func (p *portableStore) submitRunner(principal standalonePrincipal, runnerID str
 				}
 			}
 		}
+		if p.requestDigest != "" {
+			if _, err = tx.Exec("INSERT INTO remote_submission_digests(submission_key,digest) VALUES(?,?)", key, p.requestDigest); err != nil {
+				return nil, err
+			}
+		}
 		if _, err = tx.Exec("INSERT INTO remote_runner_result_ops(submission_key,actor,runner_id,operation_id) VALUES(?,?,?,?)", key, principal.UserID, runnerID, input.OperationID); err != nil {
 			return nil, err
 		}
@@ -322,7 +327,11 @@ func (p *portableStore) submitRunner(principal standalonePrincipal, runnerID str
 		next.Task = &safe
 	}
 	next.Attempt = nil
-	return map[string]any{"next": next, "operation_id": input.OperationID}, nil
+	result := map[string]any{"next": next, "operation_id": input.OperationID}
+	if p.requestDigest != "" {
+		result["request_digest"] = p.requestDigest
+	}
+	return result, nil
 }
 
 func (p *portableStore) runnerResultReceipt(principal standalonePrincipal, runnerID, key string) (map[string]any, error) {
@@ -351,5 +360,12 @@ func (p *portableStore) runnerResultReceipt(principal standalonePrincipal, runne
 		next.Task = &safe
 	}
 	next.Attempt = nil
-	return map[string]any{"found": true, "operation_id": operation, "next": next}, nil
+	result := map[string]any{"found": true, "operation_id": operation, "next": next}
+	var digest string
+	if err := p.service.Store.DB.QueryRow("SELECT digest FROM remote_submission_digests WHERE submission_key=?", submissionKey).Scan(&digest); err == nil {
+		result["request_digest"] = digest
+	} else if err != sql.ErrNoRows {
+		return nil, err
+	}
+	return result, nil
 }

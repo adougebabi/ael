@@ -1658,9 +1658,15 @@ func (s *Service) Cancel(id, reason string) (Next, error) {
 		if t.Status != "open" || reason == "" {
 			return Error("INVALID_CANCEL", id)
 		}
-		for _, a := range t.Attempts {
+		for i := range t.Attempts {
+			a := &t.Attempts[i]
 			if a.Status == "running" || a.Status == "interrupted" {
-				return Error("RUNNING_ATTEMPT", "stop and resume --ack-stopped first")
+				if !s.RemoteAuthority || !strings.HasPrefix(a.Workspace, "remote:") {
+					return Error("RUNNING_ATTEMPT", "stop and resume --ack-stopped first")
+				}
+				// Preserve the unknown host writer while revoking API acceptance.
+				a.Status = "interrupted"
+				a.Reason = "task cancelled; host execution state unknown"
 			}
 		}
 		t.Status = "cancelled"

@@ -25,3 +25,5 @@
 - 恢复：`./ael next --task ID`；旧 writer 核实停止后 `./ael resume --task ID --ack-stopped`，正常失败修复无需 ack。重复失败达到阈值时先用 `./ael task review-failure --task ID --file /tmp/review.json --json` 记录 `actor,tried,excluded,hypothesis,next,recovery,evidence`，引用真实可读取的证据；再 resume。复核后仍失败会停止，再次复核须有新的证据内容，不清零失败次数。候选变动需 `--return-to execute` 后重新提交与验证。不可对存活旧 writer 强行复活。
 - 并发：不同任务可以在同一工作区领取和执行；同任务重复领取仍受租约约束。共享文件或外部资源由执行者协调；整个工作区指纹变化可能使验证结果失效。需要文件隔离时绑定独立 worktree。
 - 交付：analysis/report/verified 无发布。merged/released 只在原任务有目标及授权时交付，准确候选审批与真实回执缺一不可。`./ael task create` 的 feedback_of 关联新反馈；先去重，不篡改旧结果。
+
+双客户端恢复使用 `runner retry --pending PRIVATE_OPERATION_FILE`，领取回执追加 `--out NEW_PRIVATE_FILE`。显式工作区交接使用 `runner recover --runner RECEIVER --file PRIVATE_JSON`。请求字段、权限、原责任和有界重试规则见 [远程 Agent 协议](remote-agent.md)。

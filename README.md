@@ -99,6 +99,8 @@ ael update --project /path/to/project
 
 接入、私有请求 schema、失败修复及恢复见 [远程 Agent 协议](assets/skills/ael-work/references/remote-agent.md)。旧远程 runner run/resume-result/recover-claim 已明确停用。正式独立验收入口为 `scripts/remote_agent_acceptance.py`；`scripts/remote_runner_acceptance.py` 转发至该入口，旧托管脚本保存在 scripts/history，仅供历史研究。
 
+远程双客户端支持独立任务并行、同单元原子领取、私有待提交记录与有界通信恢复。通过 `runner retry --pending FILE` 查原回执并重试原责任，通过 `runner recover --runner ID --file FILE` 明确工作区交接。验收可运行 `python3 scripts/remote_collaboration_acceptance.py --bundle dist --out /tmp/ael-collaboration-NEW`。该外部驱动会启动独立测试 Server、两个身份的 CLI 和浏览器，并保存实际分支截图。
+
 ## 最小本地真实闭环
 
 创建 definition.json（放项目外可避免把协议中间文件计入代码候选）：

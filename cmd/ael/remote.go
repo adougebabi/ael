@@ -93,6 +93,8 @@ func remoteCommand(cmd string, a args, binding remote.Binding) (any, error) {
 		"knowledge index": {}, "context publish": {"task", "observation", "expected-revision", "operation-id", "idempotency-key"},
 		"context show":         {"context", "task"},
 		"context record-check": {"context", "task", "check", "artifact", "expected-revision", "operation-id", "idempotency-key"},
+		"runner retry":         {"pending", "out"},
+		"runner recover":       {"runner", "file"},
 		"runner register":      {"file", "operation-id", "idempotency-key"},
 		"runner claim":         {"runner", "file", "out"},
 		"runner heartbeat":     {"runner", "file"}, "runner progress": {"runner", "file"},

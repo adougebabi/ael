@@ -98,3 +98,5 @@ ael context record-check --context CONTEXT_ID --task TASK_ID --check CHECK_ID --
 ## AD-AGENT-DRIVEN-01 执行者接入
 
 正式执行链路见 [远程 Agent 协议](../assets/skills/ael-work/references/remote-agent.md)。Agent 自行执行，runner API 标识兼容保留；不要求客户端 Docker。托管执行及其恢复入口已退出，当前验收从外部驱动主动调用 CLI 开始。
+
+V2-13 的双客户端领取、持久待提交记录、固定字节恢复与显式工作区交接已接入正式 CLI。具体请求和恢复条件见 [远程 Agent 协议](../assets/skills/ael-work/references/remote-agent.md)。

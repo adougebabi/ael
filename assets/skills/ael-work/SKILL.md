@@ -15,7 +15,7 @@ description: 在已初始化的 AEL 工程执行已授权的项目迭代、修�
 
 实际命令：[命令与恢复](references/commands.md)，机器数据结构以 `./ael help --json` 为准。需要读取字段、调用脚本或保存结果时，命令明确追加 `--json`；默认输出供人阅读。
 
-远程 authority 使用 [外部 Agent 通信协议](references/remote-agent.md)：已有 Agent 自行编辑、测试、截图和管理宿主；AEL 只接收并校验。先登记客户端，准备候选/context，再 runner claim；每次 submit 消费 next_action。远程不使用下述本地 claim/verify/loop 命令；不需要客户端 Docker，不启动其他 Agent。run/resume-result/recover-claim 已退出，不能用于恢复新模式。默认只上传选定依据与证据，不上传整个代码库、HOME、聊天或凭据。
+远程 authority 使用 [外部 Agent 通信协议](references/remote-agent.md)：已有 Agent 自行编辑、测试、截图和管理宿主；AEL 只接收并校验。先登记客户端，准备候选/context，再 runner claim；每次 submit 消费 next_action。断网按 operation_file 调用 runner retry，未知工作区使用 runner recover 明确接收方与停工/独立工作区决定。远程不使用下述本地 claim/verify/loop 命令；不需要客户端 Docker，不启动其他 Agent。run/resume-result/recover-claim 已退出，不能用于恢复新模式。默认只上传选定依据与证据，不上传整个代码库、HOME、聊天或凭据。
 
 以下命令流程描述稳定 Local/Attached 功能；远程责任与证据语义相同，具体调用以远程协议为准。
 

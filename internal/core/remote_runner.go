@@ -3,6 +3,7 @@ package core
 import (
 	"ael/internal/store"
 	"database/sql"
+	"encoding/json"
 	"slices"
 	"strings"
 	"time"
@@ -55,6 +56,17 @@ func (s *Service) RemoteClaimTx(tx *store.Tx, input RemoteClaimInput) (Task, Att
 	}
 	if RemoteRevision(task) != input.ExpectedRevision {
 		return task, attempt, Error("REVISION_CONFLICT", "task changed before claim")
+	}
+	var reservation string
+	err = tx.Row("SELECT body FROM metadata WHERE key=?", "remote-recovery-target:"+input.TaskID).Scan(&reservation)
+	if err != nil && err != sql.ErrNoRows {
+		return task, attempt, err
+	}
+	if reservation != "" {
+		var target map[string]string
+		if json.Unmarshal([]byte(reservation), &target) != nil || target["runner"] != input.Runner || target["workspace"] != input.Workspace {
+			return task, attempt, Error("REMOTE_HANDOFF_TARGET", "claim from the explicitly selected receiving workspace")
+		}
 	}
 	if task.Definition.Type == "epic" {
 		return task, attempt, Error("PARENT_WRITE_FORBIDDEN", "claim an executable leaf")
@@ -156,6 +168,9 @@ func (s *Service) RemoteClaimTx(tx *store.Tx, input RemoteClaimInput) (Task, Att
 	}
 	now := time.Now().UTC()
 	attempt = Attempt{DefinitionRevision: task.Definition.Revision, PlanRevision: task.Plan.Revision, ID: ID("AT-"), Unit: unit, Executor: input.Runner, Workspace: "remote:" + input.Runner + "/" + input.Workspace, Input: input.Candidate, Started: now, LastContact: &now, Lease: now.Add(duration), Token: input.Token, Fence: len(task.Attempts) + 1, Status: "running"}
+	if _, err = tx.Exec("DELETE FROM metadata WHERE key=?", "remote-recovery-target:"+input.TaskID); err != nil {
+		return task, Attempt{}, err
+	}
 	task.Basis = slices.Clone(input.Basis)
 	task.ContextAttempt = attempt.ID
 	task.Attempts = append(task.Attempts, attempt)
@@ -259,4 +274,104 @@ func (s *Service) RemoteInterruptTx(tx *store.Tx, taskID, runner, attemptID, tok
 		return task, err
 	}
 	return task, nil
+}
+
+// RemoteRecovery records the executor's explicit workspace decision. The host
+// owns workspace isolation; this transition only revokes API responsibility.
+type RemoteRecovery struct {
+	TaskID, AttemptID, ExpectedRevision, Runner, Workspace, Candidate, Mode, Reason string
+}
+
+func (s *Service) RemoteRecoverTx(tx *store.Tx, input RemoteRecovery) (Task, error) {
+	task, err := load(tx, input.TaskID)
+	if err != nil {
+		return task, err
+	}
+	if !s.RemoteAuthority || RemoteRevision(task) != input.ExpectedRevision {
+		return task, Error("REVISION_CONFLICT", "read the current task before recovery")
+	}
+	var previous *Attempt
+	for i := range task.Attempts {
+		if task.Attempts[i].ID == input.AttemptID {
+			previous = &task.Attempts[i]
+			break
+		}
+	}
+	if previous == nil || !strings.HasPrefix(previous.Workspace, "remote:") || strings.TrimSpace(input.Reason) == "" || (input.Mode != "confirmed-stopped" && input.Mode != "independent-workspace") {
+		return task, Error("REMOTE_RECOVERY_INVALID", "name the previous responsibility and an explicit workspace decision")
+	}
+	// Completed implementation may hand its exact candidate to another verifier.
+	active := previous.Status == "running" || previous.Status == "interrupted"
+	if !active && input.Mode == "confirmed-stopped" {
+		return task, tx.Event(input.TaskID, "remote_workspace_confirmed_stopped", map[string]string{"attempt": input.AttemptID, "reason": input.Reason})
+	}
+	if !active && input.Mode == "independent-workspace" {
+		for _, attempt := range task.Attempts {
+			if attempt.Status == "running" || attempt.Status == "interrupted" {
+				return task, Error("CLAIM_CONFLICT", "explicitly recover the current responsibility before handing off its candidate")
+			}
+		}
+	}
+	pendingHandoff := false
+	if !active && previous.Status == "abandoned" {
+		var raw string
+		err := tx.Row("SELECT body FROM metadata WHERE key=?", "remote-recovery-target:"+input.TaskID).Scan(&raw)
+		if err != nil && err != sql.ErrNoRows {
+			return task, err
+		}
+		var reserved map[string]string
+		if raw != "" && json.Unmarshal([]byte(raw), &reserved) != nil {
+			return task, Error("REMOTE_RECOVERY_INVALID", "invalid pending handoff")
+		}
+		pendingHandoff = reserved["attempt"] == input.AttemptID
+	}
+	if !active && !pendingHandoff && (task.Step != "verify" || previous.Status != "pass" || previous.Candidate != task.Candidate) {
+		return task, Error("REMOTE_RECOVERY_INVALID", "only the completed implementation candidate can be handed to verification")
+	}
+	if input.Mode == "confirmed-stopped" && (task.Status != "open" || task.Confirmation != nil || pendingFailureKey(&task) != "") {
+		now := time.Now().UTC()
+		previous.Status, previous.Ended, previous.Reason = "abandoned", &now, "executor explicitly confirmed stopped"
+		if err := s.save(tx, &task); err != nil {
+			return task, err
+		}
+		return task, tx.Event(input.TaskID, "remote_workspace_confirmed_stopped", map[string]string{"attempt": input.AttemptID, "reason": input.Reason})
+	}
+	if task.Status != "open" || task.Confirmation != nil || pendingFailureKey(&task) != "" {
+		return task, Error("NOT_RUNNABLE", "resolve the task decision or failure review before handoff")
+	}
+	target := "remote:" + input.Runner + "/" + input.Workspace
+	if input.Mode == "independent-workspace" && target == previous.Workspace {
+		return task, Error("WORKSPACE_CONFIRMATION_REQUIRED", "choose a distinct declared workspace or confirm the old executor stopped")
+	}
+	if task.Step == "delivery" {
+		return task, Error("DELIVERY_MANUAL_REQUIRED", "reconcile the external delivery before resuming")
+	}
+	if task.Step == "verify" && task.Candidate != input.Candidate {
+		return task, Error("CANDIDATE_CHANGED", "the handoff must retain the exact candidate being checked")
+	}
+	oldWorkspace := previous.Workspace
+	now := time.Now().UTC()
+	if active {
+		previous.Status, previous.Ended = "abandoned", &now
+		previous.Reason = "API responsibility revoked; host execution state unknown"
+		if input.Mode == "confirmed-stopped" {
+			previous.Reason = "executor explicitly confirmed stopped"
+		}
+	}
+	task.Paused, task.Blocker, task.ContextAttempt = false, nil, ""
+	// Every check in the receiving workspace must be reported again.
+	if task.Step == "verify" {
+		task.EvidenceHistory = append(task.EvidenceHistory, task.Evidence...)
+		task.Evidence = nil
+		task.CandidateWorkspace = target
+	}
+	reservation, _ := json.Marshal(map[string]string{"runner": input.Runner, "workspace": input.Workspace, "attempt": input.AttemptID})
+	if _, err = tx.Exec("INSERT INTO metadata(key,body) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET body=excluded.body", "remote-recovery-target:"+input.TaskID, string(reservation)); err != nil {
+		return task, err
+	}
+	if err = s.save(tx, &task); err != nil {
+		return task, err
+	}
+	err = tx.Event(input.TaskID, "remote_responsibility_recovered", map[string]string{"attempt": input.AttemptID, "from_workspace": oldWorkspace, "to_workspace": target, "mode": input.Mode, "reason": input.Reason, "host_execution_state": "unknown"})
+	return task, err
 }

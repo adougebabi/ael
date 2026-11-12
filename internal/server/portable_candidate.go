@@ -4,17 +4,20 @@ import (
 	"ael/internal/core"
 	"ael/internal/remote"
 	"ael/internal/store"
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"time"
 )
 
 type portableStore struct {
-	service *core.Service
-	project string
+	service       *core.Service
+	project       string
+	requestDigest string
 }
 
 func (s *Standalone) portable(project string, service *core.Service) (*portableStore, error) {
@@ -29,6 +32,8 @@ CREATE TABLE IF NOT EXISTS portable_checks(id TEXT PRIMARY KEY,context_id TEXT N
 CREATE TABLE IF NOT EXISTS remote_runners(id TEXT PRIMARY KEY,actor TEXT NOT NULL,workspace_id TEXT NOT NULL,checkout_id TEXT NOT NULL,repository TEXT NOT NULL,version TEXT NOT NULL,capabilities TEXT NOT NULL,created TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS remote_runner_attempts(attempt_id TEXT PRIMARY KEY,task_id TEXT NOT NULL,runner_id TEXT NOT NULL,actor TEXT NOT NULL,context_id TEXT NOT NULL,candidate_id TEXT NOT NULL,claim_revision TEXT NOT NULL,output_candidate TEXT NOT NULL DEFAULT '',state TEXT NOT NULL DEFAULT 'running',fence INTEGER NOT NULL,token_hash TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS remote_artifact_leases(upload_id TEXT PRIMARY KEY,runner_id TEXT NOT NULL,attempt_id TEXT NOT NULL,fence INTEGER NOT NULL,token_hash TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS remote_submission_digests(submission_key TEXT PRIMARY KEY,digest TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS remote_workspace_holds(repository TEXT NOT NULL,workspace_id TEXT NOT NULL,attempt_id TEXT NOT NULL,task_id TEXT NOT NULL,state TEXT NOT NULL,PRIMARY KEY(repository,workspace_id,attempt_id));
 CREATE TABLE IF NOT EXISTS remote_runner_result_ops(submission_key TEXT PRIMARY KEY,actor TEXT NOT NULL,runner_id TEXT NOT NULL,operation_id TEXT NOT NULL);`)
 	if err != nil {
 		return nil, err
@@ -83,6 +88,9 @@ func (p *portableStore) mutate(principal standalonePrincipal, action, op, key st
 		result, err = apply(tx)
 		if err != nil {
 			return err
+		}
+		if p.requestDigest != "" {
+			result["request_digest"] = p.requestDigest
 		}
 		body, err := json.Marshal(result)
 		if err != nil {
@@ -170,11 +178,11 @@ func portableError(w http.ResponseWriter, err error) {
 	switch code {
 	case "REPOSITORY_NOT_FOUND", "TASK_NOT_FOUND", "CANDIDATE_NOT_FOUND", "CONTEXT_NOT_FOUND", "OBSERVATION_NOT_FOUND", "CHECK_NOT_FOUND", "RUNNER_NOT_FOUND":
 		status = http.StatusNotFound
-	case "REVISION_CONFLICT", "IDEMPOTENCY_CONFLICT", "CANDIDATE_CONFLICT", "CONTEXT_SOURCE_MISMATCH", "KNOWLEDGE_MISSING", "KNOWLEDGE_CONFLICT", "KNOWLEDGE_UNVERIFIED", "CANDIDATE_CHANGED", "REMOTE_WORKSPACE_MISMATCH", "STALE_TOKEN", "STALE_EXECUTION_UNIT", "CLAIM_CONFLICT", "RUNNER_WIP", "NEXT_WORK_CHANGED", "PARENT_SCOPE_REQUIRED", "NOT_RUNNABLE", "PLAN_APPLY_IN_PROGRESS", "DEPENDENCY_BLOCKED", "DELIVERY_MANUAL_REQUIRED", "PLAN_APPROVAL_REQUIRED", "HUMAN_REVIEW_REQUIRED", "RUNNER_CAPABILITY_MISSING", "CHECK_REQUIRED", "PARENT_WRITE_FORBIDDEN", "ROOT_CAUSE_REVIEW_REQUIRED", "BUDGET_EXHAUSTED", "POLICY_CHANGED", "INSPECTION_WRITE_DETECTED", "ARTIFACT_REQUIRED", "ARTIFACT_MISSING", "CHECK_METHOD_MISMATCH", "CHECK_RESULT_INVALID", "ASSESSMENT_EVIDENCE_REQUIRED", "SCREENSHOT_REQUIRED", "TASK_CONTEXT_REQUIRED", "KNOWLEDGE_OUTCOME_REQUIRED", "KNOWLEDGE_ARTIFACT_REQUIRED", "TRUSTED_CHECK_REQUIRED", "TERMINAL_TASK", "WRONG_UNIT":
+	case "REMOTE_HANDOFF_TARGET", "WORKSPACE_CONFIRMATION_REQUIRED", "REVISION_CONFLICT", "IDEMPOTENCY_CONFLICT", "CANDIDATE_CONFLICT", "CONTEXT_SOURCE_MISMATCH", "KNOWLEDGE_MISSING", "KNOWLEDGE_CONFLICT", "KNOWLEDGE_UNVERIFIED", "CANDIDATE_CHANGED", "REMOTE_WORKSPACE_MISMATCH", "STALE_TOKEN", "STALE_EXECUTION_UNIT", "CLAIM_CONFLICT", "RUNNER_WIP", "NEXT_WORK_CHANGED", "PARENT_SCOPE_REQUIRED", "NOT_RUNNABLE", "PLAN_APPLY_IN_PROGRESS", "DEPENDENCY_BLOCKED", "DELIVERY_MANUAL_REQUIRED", "PLAN_APPROVAL_REQUIRED", "HUMAN_REVIEW_REQUIRED", "RUNNER_CAPABILITY_MISSING", "CHECK_REQUIRED", "PARENT_WRITE_FORBIDDEN", "ROOT_CAUSE_REVIEW_REQUIRED", "BUDGET_EXHAUSTED", "POLICY_CHANGED", "INSPECTION_WRITE_DETECTED", "ARTIFACT_REQUIRED", "ARTIFACT_MISSING", "CHECK_METHOD_MISMATCH", "CHECK_RESULT_INVALID", "ASSESSMENT_EVIDENCE_REQUIRED", "SCREENSHOT_REQUIRED", "TASK_CONTEXT_REQUIRED", "KNOWLEDGE_OUTCOME_REQUIRED", "KNOWLEDGE_ARTIFACT_REQUIRED", "TRUSTED_CHECK_REQUIRED", "TERMINAL_TASK", "WRONG_UNIT":
 		status = http.StatusConflict
 	case "CONTEXT_SOURCE_UNAVAILABLE":
 		status = http.StatusGone
-	case "REMOTE_OPERATION_REQUIRED", "CANDIDATE_INVALID", "RUNNER_INVALID", "PROGRESS_REQUIRED", "INVALID_WORK_STAGE", "RESULT_REQUIRED", "INVALID_RESULT", "INVALID_FAILURE_CLASS":
+	case "REMOTE_RECOVERY_INVALID", "REMOTE_OPERATION_REQUIRED", "CANDIDATE_INVALID", "RUNNER_INVALID", "PROGRESS_REQUIRED", "INVALID_WORK_STAGE", "RESULT_REQUIRED", "INVALID_RESULT", "INVALID_FAILURE_CLASS":
 		status = http.StatusBadRequest
 	case "FORBIDDEN":
 		status = http.StatusForbidden
@@ -263,7 +271,7 @@ func (h *standaloneHandler) remotePortable(w http.ResponseWriter, r *http.Reques
 		// Communication only; ownership, role, lease and version checks remain below.
 		if len(parts) == 0 {
 			var input remoteRunnerInput
-			if decode(r, &input) != nil {
+			if decodePortable(r, &input, p) != nil {
 				portableError(w, errors.New("RUNNER_INVALID"))
 				return
 			}
@@ -273,6 +281,28 @@ func (h *standaloneHandler) remotePortable(w http.ResponseWriter, r *http.Reques
 				return
 			}
 			standaloneReply(w, http.StatusCreated, result)
+			return
+		}
+		if len(parts) == 2 && parts[1] == "recover" {
+			if role != "admin" && role != "executor" {
+				standaloneFail(w, http.StatusForbidden, "FORBIDDEN")
+				return
+			}
+			var input remoteRunnerRecoveryInput
+			if decodePortable(r, &input, p) != nil {
+				portableError(w, errors.New("REMOTE_RECOVERY_INVALID"))
+				return
+			}
+			result, err := p.recoverRunner(principal, parts[0], input)
+			if err != nil {
+				portableError(w, err)
+				return
+			}
+			if service.Store.Flush() != nil {
+				standaloneFail(w, http.StatusServiceUnavailable, "PROJECTION_BLOCKED")
+				return
+			}
+			standaloneReply(w, http.StatusOK, result)
 			return
 		}
 		if len(parts) == 2 && parts[1] == "claim" {
@@ -286,7 +316,7 @@ func (h *standaloneHandler) remotePortable(w http.ResponseWriter, r *http.Reques
 				return
 			}
 			var input remoteRunnerClaimInput
-			if decode(r, &input) != nil {
+			if decodePortable(r, &input, p) != nil {
 				portableError(w, errors.New("RUNNER_INVALID"))
 				return
 			}
@@ -304,7 +334,7 @@ func (h *standaloneHandler) remotePortable(w http.ResponseWriter, r *http.Reques
 		}
 		if len(parts) == 2 && parts[1] == "heartbeat" {
 			var input remoteRunnerHeartbeatInput
-			if decode(r, &input) != nil {
+			if decodePortable(r, &input, p) != nil {
 				portableError(w, errors.New("RUNNER_INVALID"))
 				return
 			}
@@ -322,7 +352,7 @@ func (h *standaloneHandler) remotePortable(w http.ResponseWriter, r *http.Reques
 				return
 			}
 			var input remoteRunnerProgressInput
-			if decode(r, &input) != nil {
+			if decodePortable(r, &input, p) != nil {
 				portableError(w, errors.New("RUNNER_INVALID"))
 				return
 			}
@@ -344,7 +374,7 @@ func (h *standaloneHandler) remotePortable(w http.ResponseWriter, r *http.Reques
 		}
 		if len(parts) == 2 && parts[1] == "observe" {
 			var input remoteRunnerObservationInput
-			if decode(r, &input) != nil {
+			if decodePortable(r, &input, p) != nil {
 				portableError(w, errors.New("RUNNER_INVALID"))
 				return
 			}
@@ -362,7 +392,7 @@ func (h *standaloneHandler) remotePortable(w http.ResponseWriter, r *http.Reques
 				return
 			}
 			var input remoteRunnerInterruptInput
-			if decode(r, &input) != nil {
+			if decodePortable(r, &input, p) != nil {
 				portableError(w, errors.New("RUNNER_INVALID"))
 				return
 			}
@@ -389,7 +419,7 @@ func (h *standaloneHandler) remotePortable(w http.ResponseWriter, r *http.Reques
 				return
 			}
 			var input remoteRunnerSubmitInput
-			if decode(r, &input) != nil {
+			if decodePortable(r, &input, p) != nil {
 				portableError(w, errors.New("RUNNER_INVALID"))
 				return
 			}
@@ -404,7 +434,7 @@ func (h *standaloneHandler) remotePortable(w http.ResponseWriter, r *http.Reques
 	}
 	if kind == "repositories" && len(parts) == 0 && r.Method == http.MethodPost {
 		var input portableRepositoryInput
-		if decode(r, &input) != nil {
+		if decodePortable(r, &input, p) != nil {
 			portableError(w, errors.New("CANDIDATE_INVALID"))
 			return
 		}
@@ -443,7 +473,7 @@ func (h *standaloneHandler) remotePortable(w http.ResponseWriter, r *http.Reques
 	}
 	if kind == "candidates" && len(parts) == 0 && r.Method == http.MethodPost {
 		var input portableObservationInput
-		if decode(r, &input) != nil {
+		if decodePortable(r, &input, p) != nil {
 			portableError(w, errors.New("CANDIDATE_INVALID"))
 			return
 		}
@@ -497,7 +527,7 @@ func (h *standaloneHandler) remotePortable(w http.ResponseWriter, r *http.Reques
 		}
 		if len(parts) == 2 && parts[1] == "checks" && r.Method == http.MethodPost {
 			var input portableCheckInput
-			if decode(r, &input) != nil {
+			if decodePortable(r, &input, p) != nil {
 				portableError(w, errors.New("CANDIDATE_INVALID"))
 				return
 			}
@@ -511,7 +541,7 @@ func (h *standaloneHandler) remotePortable(w http.ResponseWriter, r *http.Reques
 		}
 		if len(parts) == 0 && r.Method == http.MethodPost {
 			var input portableContextInput
-			if decode(r, &input) != nil {
+			if decodePortable(r, &input, p) != nil {
 				portableError(w, errors.New("CANDIDATE_INVALID"))
 				return
 			}
@@ -570,4 +600,27 @@ func portableDigestID(id string) bool {
 		}
 	}
 	return true
+}
+
+func decodePortable(r *http.Request, target any, p *portableStore) error {
+	raw, err := io.ReadAll(io.LimitReader(r.Body, (2<<20)+1))
+	if err != nil || len(raw) > 2<<20 {
+		return errors.New("REMOTE_REQUEST_INVALID")
+	}
+	r.Body = io.NopCloser(bytes.NewReader(raw))
+	if err = decode(r, target); err != nil {
+		return err
+	}
+	var value any
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if err = decoder.Decode(&value); err != nil {
+		return err
+	}
+	digest, err := remote.RequestDigest(value)
+	if err != nil {
+		return err
+	}
+	p.requestDigest = digest
+	return nil
 }

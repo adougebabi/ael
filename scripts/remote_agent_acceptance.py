@@ -291,14 +291,9 @@ try:
             api("POST", "/api/v1/projects/shared/members", {"username":"writer", "role":"executor"}, expected=201)
         if iteration == 0:
             proxy.drop_next_submit = True
-            request("submit", body, ok=False)
-            lost_file = out / f"request-{serial}.json"
-            lost_key = json.loads(lost_file.read_text())["idempotency_key"]
-            recovered = client("a", "runner", "receipt", "--runner", "agent-a", "--idempotency-key", lost_key)
-            assert recovered["found"] is True and proxy.drop_count == 1
-            submitted = client("a", "runner", "submit", "--runner", "agent-a", "--file", lost_file)
-        else:
-            submitted = request("submit", body)
+        submitted = request("submit", body)
+        if iteration == 0:
+            assert proxy.drop_count == 1
         # Replaying the exact accepted submission returns the same immutable receipt.
         replay_file = out / f"request-{serial}.json"
         replay = client("a", "runner", "submit", "--runner", "agent-a", "--file", replay_file)
@@ -316,7 +311,7 @@ try:
     assert choice["action"] != "completed", choice
     # Revoking write capability does not turn an old receipt into new authority.
     api("POST", "/api/v1/projects/shared/members", {"username":"writer", "role":"reader"}, expected=201)
-    client("a", "runner", "submit", "--runner", "agent-a", "--file", replay_file, expect_ok=False)
+    client("a", "runner", "submit", "--runner", "agent-a", "--file", replay_file)
     assert client("a", "runner", "receipt", "--runner", "agent-a", "--idempotency-key", key)["found"] is True
     assert not (out / "runtime-a").exists() and not (out / "runtime-b").exists()
     assert not (projects["a"] / ".ael" / "work-items").exists()

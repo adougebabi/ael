@@ -123,7 +123,34 @@ func (p *portableStore) getRunner(principal standalonePrincipal, runnerID string
 	if json.Unmarshal([]byte(rawCapabilities), &capabilities) != nil {
 		return nil, errors.New("RUNNER_STORAGE_ERROR")
 	}
-	return map[string]any{"id": runnerID, "workspace_id": workspace, "checkout_id": checkout, "repository": repository, "version": version, "capabilities": capabilities, "created_at": created}, nil
+	connection := "no_responsibility"
+	rows, err := p.service.Store.DB.Query("SELECT a.attempt_id,t.body FROM remote_runner_attempts a JOIN tasks t ON t.id=a.task_id WHERE a.runner_id=? AND a.state IN ('running','interrupted')", runnerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, body string
+		if err := rows.Scan(&id, &body); err != nil {
+			return nil, err
+		}
+		var task core.Task
+		if json.Unmarshal([]byte(body), &task) != nil {
+			return nil, errors.New("RUNNER_STORAGE_ERROR")
+		}
+		for _, attempt := range task.Attempts {
+			if attempt.ID == id {
+				connection = "last_reported"
+				if attempt.Status != "running" || !attempt.Lease.After(time.Now()) || task.Status != "open" || task.Paused {
+					connection = "lost"
+				}
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return map[string]any{"id": runnerID, "workspace_id": workspace, "checkout_id": checkout, "repository": repository, "version": version, "capabilities": capabilities, "created_at": created, "connection_state": connection, "host_execution_state": "unknown"}, nil
 }
 
 func (p *portableStore) claimRunner(principal standalonePrincipal, role, runnerID string, input remoteRunnerClaimInput, artifacts *artifactStore) (map[string]any, error) {
@@ -134,6 +161,9 @@ func (p *portableStore) claimRunner(principal standalonePrincipal, role, runnerI
 		var owner, workspace, checkout, repository, rawCapabilities string
 		if err := tx.Row("SELECT actor,workspace_id,checkout_id,repository,capabilities FROM remote_runners WHERE id=?", runnerID).Scan(&owner, &workspace, &checkout, &repository, &rawCapabilities); err != nil || owner != principal.UserID {
 			return nil, errors.New("RUNNER_NOT_FOUND")
+		}
+		if err := remoteWorkspaceAvailable(tx, repository, workspace); err != nil {
+			return nil, err
 		}
 		if err := reconcileRunnerAttempts(tx, runnerID); err != nil {
 			return nil, err

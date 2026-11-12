@@ -130,7 +130,7 @@ func remoteArtifactCommand(cmd string, a args, config, project string, binding r
 			}
 			lease = &runnerUploadLease{RunnerID: in.RunnerID, Token: in.Token, Fence: in.Fence}
 		}
-		return remoteUploadBytes(a, config, project, binding, filepath.Base(path), data, lease)
+		return retainAgentUpload(a, config, project, binding, filepath.Base(path), data, lease)
 	}
 	return nil, core.Error("REMOTE_COMMAND_UNSUPPORTED", cmd)
 }
@@ -170,7 +170,7 @@ func remoteUploadBytes(a args, config, project string, binding remote.Binding, f
 		if lease != nil && lease.guard != nil {
 			return runnerGuardedCall(config, project, binding, lease.guard, method, path, body)
 		}
-		return remote.Call(config, project, binding, method, path, body, nil)
+		return agentCommunicationCall(config, project, binding, method, path, body)
 	}
 	start := map[string]any{"operation_id": op, "idempotency_key": key, "expected_revision": revision, "task_id": task, "attempt_id": a.get("attempt", ""), "candidate": a.get("candidate", ""), "filename": filename, "mime": mimeType, "size": len(data), "sha256": store.Hash(data), "source": a.get("source", "CLI")}
 	if lease != nil {

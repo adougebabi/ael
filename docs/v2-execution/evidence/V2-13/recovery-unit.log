@@ -1,0 +1,12 @@
+=== RUN   TestAgentOperationRejectsChangedRetainedPayload
+--- PASS: TestAgentOperationRejectsChangedRetainedPayload (0.01s)
+=== RUN   TestAgentOperationLockReleasesAfterOwnerExits
+--- PASS: TestAgentOperationLockReleasesAfterOwnerExits (0.00s)
+=== RUN   TestAgentOperationPreservesTypedCandidateAcrossDiskRecovery
+--- PASS: TestAgentOperationPreservesTypedCandidateAcrossDiskRecovery (0.01s)
+PASS
+ok  	ael/cmd/ael	0.438s
+=== RUN   TestRemoteExpiredResponsibilityOverHTTP
+--- PASS: TestRemoteExpiredResponsibilityOverHTTP (0.62s)
+PASS
+ok  	ael/internal/server	1.044s

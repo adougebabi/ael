@@ -60,3 +60,11 @@ Markdown 使用随应用打包的 markdown-it，关闭原始 HTML、图片自动
 verify 结果必须携带 runtime:report.json，绑定 candidate/check/definition/plan/method/source/covers/observations，不能用单独摘要、任意文件或退出码满足门禁。远程证据可用性由授权附件接口查询，不按 Server 的源码目录推断原件丢失。
 
 候选清单增加可选 index_executable 位（纳入现有内容 ID），修复仅暂存执行位变化遗漏；普通非可执行索引的 ID 不变。旧清单继续作为历史读取；含该位的新候选必须由支持它的 Server 与 CLI 配套使用，升级后重采样并复验，不将旧候选 ID 改写。NB-010 的旧失败原文保留，修复测试见 TestPortableCandidateTracksStagedExecutableMode。本项不承诺同 UID 对抗隔离、任意命令拦截或断电级文件系统持久性。
+
+## V2-13 双客户端恢复
+
+正式通信入口将固定请求和上传快照保存到项目外私有配置目录，使用操作文件锁防止同一操作并发改写。最多三次有界通信尝试。重连先查服务端持久回执，命中后校验原请求摘要，未命中则用原 token/fence 续租核对责任，再重放原请求。服务端从严格解码前的规范化 JSON 计算 request_digest，与普通操作回执或提交事务一起持久化。旧回执继续使用原接口完整幂等校验恢复。
+
+新增 remote_workspace_holds 记录已声明工作区的未知旧责任，metadata 保存一次交接的接收方领取约束。runner recover 复用 Store.Write、领域 save、事件、任务版本和 p.mutate。显式确认停工或选择独立工作区后撤销旧接口责任，旧 Attempt 保留历史。实施已完成时可把完全相同候选交给另一身份验收，历史 PASS 保留，接收工作区重新提交检查。对未知声明工作区的后续领取保持拒绝，直至停工确认或独立交接。
+
+远程 cancel 可以撤销活动责任的有效提交权，旧执行保留 interrupted/unknown 状态供后续确认。Local 的原进程恢复规则继续适用于其显式入口。新增状态字段仅描述接口责任和最近上报，宿主隔离由外部执行环境负责。数据迁移为两个 CREATE TABLE IF NOT EXISTS 和可选响应字段，旧回执与任务数据保留。
