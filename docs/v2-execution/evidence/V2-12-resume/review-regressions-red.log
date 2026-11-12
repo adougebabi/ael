@@ -1,0 +1,12 @@
+=== RUN   TestRunnerRefusesAnExistingLegacyAttempt
+    remote_runner_layout_test.go:51: legacy attempt did not stop recovery: <nil>
+--- FAIL: TestRunnerRefusesAnExistingLegacyAttempt (0.01s)
+=== RUN   TestRemoteRunnerDetectsBackgroundChildBeforeItCanWrite
+    remote_runner_process_test.go:109: background child was accepted: {Result:{FailureClass: Knowledge:<nil> Blocker:<nil> Status:pass Summary:parent exited Artifacts:[] ReturnTo: Delivery:<nil>} Method: Inputs:[] ExitCode:<nil>} <nil>
+--- FAIL: TestRemoteRunnerDetectsBackgroundChildBeforeItCanWrite (0.60s)
+=== RUN   TestRemoteRunnerPersistsRedactedCompleteLinesWhileRunning
+    remote_runner_process_test.go:149: live process log was missing or unredacted: ""
+--- FAIL: TestRemoteRunnerPersistsRedactedCompleteLinesWhileRunning (1.65s)
+FAIL
+FAIL	ael/cmd/ael	2.685s
+FAIL

@@ -93,7 +93,7 @@ func sanitizeRunnerResult(result core.StepResult, secrets ...string) core.StepRe
 	return result
 }
 
-func runnerSubmitResult(ctx context.Context, cfg remoteRunnerConfig, config, project string, binding remote.Binding, lease remoteRunnerLease, task core.Task, output remote.PortableCandidate, processResult remoteProcessResult, dir string, profileToken string) error {
+func runnerSubmitResult(ctx context.Context, cfg remoteRunnerConfig, config, project string, binding remote.Binding, lease remoteRunnerLease, task core.Task, output remote.PortableCandidate, processResult remoteProcessResult, paths runnerAttemptPaths, profileToken string) error {
 	if ctx.Err() != nil {
 		return core.Error("LEASE_LOST", "runner lost execution authority")
 	}
@@ -125,7 +125,7 @@ func runnerSubmitResult(ctx context.Context, cfg remoteRunnerConfig, config, pro
 		if ctx.Err() != nil {
 			return core.Error("LEASE_LOST", "runner lost execution authority")
 		}
-		data, filename, mimeType, err := runnerOutputFile(cfg, dir, ref, output, profileToken, lease.Token)
+		data, filename, mimeType, err := runnerOutputFile(cfg, paths.IO, ref, output, profileToken, lease.Token)
 		if err != nil {
 			return runnerProblem(err, "read explicit artifact")
 		}
@@ -161,11 +161,17 @@ func runnerSubmitResult(ctx context.Context, cfg remoteRunnerConfig, config, pro
 	if processResult.ExitCode != nil {
 		payload["exit_code"] = *processResult.ExitCode
 	}
-	pending, err := json.Marshal(payload)
+	pendingPayload := make(map[string]any, len(payload)-1)
+	for name, value := range payload {
+		if name != "token" {
+			pendingPayload[name] = value
+		}
+	}
+	pending, err := json.Marshal(pendingPayload)
 	if err != nil {
 		return err
 	}
-	pendingPath := filepath.Join(dir, "pending-submission.json")
+	pendingPath := filepath.Join(paths.Control, "pending-submission.json")
 	if err = store.Atomic(pendingPath, pending, 0600); err != nil {
 		return err
 	}
@@ -186,13 +192,13 @@ func runnerSubmitResult(ctx context.Context, cfg remoteRunnerConfig, config, pro
 	if err != nil {
 		return err
 	}
-	if err = store.Atomic(filepath.Join(dir, "receipt.json"), receiptBytes, 0600); err != nil {
+	if err = store.Atomic(filepath.Join(paths.Control, "receipt.json"), receiptBytes, 0600); err != nil {
 		return err
 	}
 	if err = os.Remove(pendingPath); err != nil {
 		return err
 	}
-	if err = os.Remove(filepath.Join(dir, "lease.json")); err != nil {
+	if err = os.Remove(filepath.Join(paths.Control, "lease.json")); err != nil {
 		return err
 	}
 	return nil

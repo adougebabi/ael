@@ -170,7 +170,11 @@ func runnerClaim(cfg remoteRunnerConfig, config, project string, binding remote.
 		return task, attempt, "", err
 	}
 	payload := map[string]any{"task_id": taskID, "parent_id": parentID, "context_id": contextID, "expected_revision": revision, "operation_id": key, "idempotency_key": key}
-	claimPath := filepath.Join(cfg.RuntimeDir, "claim-"+key+".json")
+	claimsDir, err := runnerPrivateDir(cfg.RuntimeDir, "control", "claims")
+	if err != nil {
+		return task, attempt, "", err
+	}
+	claimPath := filepath.Join(claimsDir, "claim-"+key+".json")
 	raw, err := json.Marshal(map[string]any{"request": payload})
 	if err != nil {
 		return task, attempt, "", err

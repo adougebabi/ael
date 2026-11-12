@@ -1,0 +1,14 @@
+=== RUN   TestRemoteRunnerRejectsUnauthorizedCheckAndRedactsItsLog
+--- PASS: TestRemoteRunnerRejectsUnauthorizedCheckAndRedactsItsLog (0.13s)
+=== RUN   TestRunnerTruncatedLogDoesNotPersistPartialSecret
+--- PASS: TestRunnerTruncatedLogDoesNotPersistPartialSecret (0.12s)
+=== RUN   TestRunnerLogRedactsCredentialsSplitAcrossLines
+--- PASS: TestRunnerLogRedactsCredentialsSplitAcrossLines (0.00s)
+=== RUN   TestRunnerLogRedactsSecretsSplitAcrossWrites
+--- PASS: TestRunnerLogRedactsSecretsSplitAcrossWrites (0.00s)
+=== RUN   TestRemoteRunnerDetectsBackgroundChildBeforeItCanWrite
+--- PASS: TestRemoteRunnerDetectsBackgroundChildBeforeItCanWrite (0.67s)
+=== RUN   TestRemoteRunnerPersistsRedactedCompleteLinesWhileRunning
+--- PASS: TestRemoteRunnerPersistsRedactedCompleteLinesWhileRunning (1.66s)
+PASS
+ok  	ael/cmd/ael	2.968s

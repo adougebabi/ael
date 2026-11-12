@@ -1,0 +1,32 @@
+{
+  "fixture": "/var/folders/gv/hlfcpzxj63b3813yxlrkqv6r0000gn/T/ael-v212-container-controlled-xbkhmof4",
+  "results": [
+    {
+      "mode": "cooperative-client-kill",
+      "container": "ael-v212-probe-39b48db00189",
+      "armed": true,
+      "writer_pid": 7,
+      "writer_ppid": 1,
+      "writer_pgrp": 7,
+      "writer_sid": 7,
+      "writer_detached": true,
+      "stale_write": false,
+      "inspect": {
+        "exit": 1,
+        "stdout": "",
+        "stderr": "error: no such object: ael-v212-probe-39b48db00189"
+      },
+      "daemon": {
+        "exit": 0,
+        "stdout": "29.8.2",
+        "stderr": ""
+      },
+      "client_present": false,
+      "cleanup": {
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    }
+  ]
+}

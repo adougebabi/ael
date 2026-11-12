@@ -24,3 +24,13 @@
 3. 证明上述隔离后才移除两处 fail-closed 判断，重跑保留的正向 Runner 验收、真实 Codex 条件检查、Local Managed/Attached 和完整 Go 回归；写独立 PASS 回执及最终本地检查点，然后才可进入 V2-13。
 
 保留现场：`/private/tmp/ael-v2-v200.xLJaSd/v2-12-blocked.tar` 及其 `.files` 清单；该路径为临时目录，可能被系统清理。没有 push、tag、发布、真实 Oracle 部署或业务工程切换。
+
+## 继续执行后的现场（仍未 PASS）
+
+- 继续时本地 HEAD 为 `405d33b`，其上保留的未完成控制目录拆分已接通：`control/claims` 与 `control/attempts` 保存领取、租约、待提交内容和回执，`io/attempts` 保存执行器输入输出。新的待提交内容不重复保存租约 token；重放时从保留的 lease 补入。新旧路径可恢复，旧 attempt 已存在时拒绝新建，保留原现场。控制目录拆分仍不能阻止同用户进程读取，不能作为隔离证明。
+- 进程记录包含 PID、可获得时的进程身份、身份状态及 `descendants_unknown`；主进程退出时立即检查原进程组并阻断同组后台子进程。输出按完整行先脱敏再落盘，识别跨写入和跨行凭据，超长输出保留脱敏后的安全前缀。未完成的一行在 Runner 非正常退出时可能丢失；进程组检查不能发现已脱组后代，也不证明失权写者已经停止。
+- 复核先发现三项回归并实际保留失败：旧 attempt 被重复建立、短命后台子进程漏检、运行中日志缺失；另有跨行脱敏与超长单行丢失的失败。相应修复及测试已通过，原始记录分别为 `../evidence/V2-12-resume/review-regressions-red.log`、`stream-red.log` 和 `stream-green.log`。
+- 最新相关回归：`GOCACHE=/private/tmp/ael-v212-go-build go test -race ./cmd/ael ./internal/execution -count=1` 通过，需允许本机回环端口；记录 `../evidence/V2-12-resume/cli-execution-race.log`。本轮较早运行的 `GOCACHE=/private/tmp/ael-v212-go-build go test ./... -count=1` 中，`TestRemoteRunnerClaimIsOwnedFencedAndIdempotent` 与 `TestRemoteRunnerSubmitsFinalizedAttemptThroughTaskStateMachine` 仍因 `RUNNER_ISOLATION_REQUIRED` 失败，其余包通过；原始记录 `../evidence/V2-12-resume/go-full-before-final-fixes.log`。该全量结果发生在上述最终日志修复之前，不能当作最终全量通过。
+- 可选容器限定探针：`../evidence/V2-12-resume/container-controlled-probe.py` 使用本机已有 Alpine 镜像、临时目录、禁网和无额外能力。`container-parent-results.json` 记录对照组和父进程崩溃：写者已确认脱组后，普通容器仍运行并发生旧写入；专门监听 stdin EOF 的 PID 1 退出后未观察到旧写入。`container-client-results.json` 另记录直接终止 Docker 客户端时的同类单次观察。每个测试只清理自己的容器。最早的单次探针因写者启动竞态和状态查询解释不严谨，不能作为证明。
+- 这些容器结果仅覆盖本机受控故障场景。测试镜像没有 Go、Git、Codex 和 Node，禁网也不能直接满足真实 Codex；尚未验证凭据隔离、租约失权、工作区交付、网络授权、正常检查和真实 Codex，不引入 Docker 作为产品强依赖，也未解除客户端或服务端门禁。
+- 保留的实施改动是未验收的本地检查点；不得因上述局部测试通过将 V2-12 标记 DONE，也不得开始 V2-13。恢复仍从 WORKLOG 所列本项动作开始。

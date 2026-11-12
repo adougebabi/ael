@@ -213,7 +213,7 @@ try:
     client("a", "runner", "register", "--file", configFile, "--operation-id", "register", "--idempotency-key", "register")
     outcome = client("a", "runner", "run", "--task", "task", "--file", configFile)
     assert outcome["action"] == "completed" and (projects["a"] / "app.txt").read_text() == "fixed\n"
-    assert proxy.drop_count == 1 and len(list((out / "runner-runtime-primary" / "attempts").iterdir())) == 5
+    assert proxy.drop_count == 1 and len(list((out / "runner-runtime-primary" / "control" / "attempts").iterdir())) == 5
     observed = client("b", "task", "show", "--task", "task")
     history = observed["task"]["attempts"]
     assert observed["task"]["status"] == "completed"
@@ -231,12 +231,12 @@ try:
     proxy.drop_next_lookup = True
     client("a", "runner", "run", "--task", "recovery", "--file", recoveryConfig, expect_ok=False)
     assert "RUNNER_RESULT_PENDING" in commands[-1]["stderr"] and proxy.drop_count == 2
-    pending = list((out / "runner-runtime-recovery" / "attempts").glob("*/pending-submission.json"))
+    pending = list((out / "runner-runtime-recovery" / "control" / "attempts").glob("*/pending-submission.json"))
     assert len(pending) == 1 and pending[0].stat().st_mode & 0o077 == 0
     client("a", "runner", "resume-result", "--file", recoveryConfig, "--pending", pending[0])
     assert not pending[0].exists()
     recoveryOutcome = client("a", "runner", "run", "--task", "recovery", "--file", recoveryConfig)
-    assert recoveryOutcome["action"] == "completed" and len(list((out / "runner-runtime-recovery" / "attempts").iterdir())) == 3
+    assert recoveryOutcome["action"] == "completed" and len(list((out / "runner-runtime-recovery" / "control" / "attempts").iterdir())) == 3
 
     scenarioCode = r'''import json, os
 from pathlib import Path
@@ -363,9 +363,9 @@ with open(os.environ["AEL_RESULT"], "w") as output: json.dump(result, output)
         try:
             codexOutcome = client("a", "runner", "run", "--task", "codex-smoke", "--file", codexConfig)
             codexTask = client("b", "task", "show", "--task", "codex-smoke")["task"]
-            smoke = {"status": "passed" if codexOutcome["action"] == "max_steps" and codexTask["current_step"] != "define" else "blocked", "action": codexOutcome["action"], "task_status": codexTask["status"], "logs": str(out / "runner-runtime-codex" / "attempts")}
+            smoke = {"status": "passed" if codexOutcome["action"] == "max_steps" and codexTask["current_step"] != "define" else "blocked", "action": codexOutcome["action"], "task_status": codexTask["status"], "logs": str(out / "runner-runtime-codex" / "io" / "attempts")}
         except RuntimeError:
-            smoke = {"status": "blocked", "reason": "Codex runner did not complete; inspect its isolated attempt and command logs", "logs": str(out / "runner-runtime-codex" / "attempts")}
+            smoke = {"status": "blocked", "reason": "Codex runner did not complete; inspect its isolated attempt and command logs", "logs": str(out / "runner-runtime-codex" / "io" / "attempts")}
     for name, project in projects.items():
         assert not (project / ".ael" / "work-items").exists()
         assert not (out / f"runtime-{name}").exists()

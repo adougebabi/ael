@@ -46,7 +46,14 @@ func resumeRunnerResult(cfg remoteRunnerConfig, config, project string, binding 
 	}
 	rel, err := filepath.Rel(cfg.RuntimeDir, real)
 	parts := strings.Split(filepath.ToSlash(rel), "/")
-	if err != nil || len(parts) != 3 || parts[0] != "attempts" || !remoteRunnerID.MatchString(parts[1]) || parts[2] != "pending-submission.json" {
+	var attemptID string
+	if len(parts) == 4 && parts[0] == "control" && parts[1] == "attempts" && parts[3] == "pending-submission.json" {
+		attemptID = parts[2]
+	} else if len(parts) == 3 && parts[0] == "attempts" && parts[2] == "pending-submission.json" {
+		// Retained submissions created before the control/I/O split remain recoverable.
+		attemptID = parts[1]
+	}
+	if err != nil || !remoteRunnerID.MatchString(attemptID) {
 		return nil, core.Error("RUNNER_RECOVERY_INVALID", "pending submission is outside this runner runtime")
 	}
 	raw, err := readRunnerPrivateFile(real)
@@ -58,7 +65,7 @@ func resumeRunnerResult(cfg remoteRunnerConfig, config, project string, binding 
 		return nil, err
 	}
 	var lease remoteRunnerLease
-	if json.Unmarshal(leaseBytes, &lease) != nil || lease.RunnerID != cfg.RunnerID || lease.AttemptID != parts[1] {
+	if json.Unmarshal(leaseBytes, &lease) != nil || lease.RunnerID != cfg.RunnerID || lease.AttemptID != attemptID || lease.Token == "" {
 		return nil, core.Error("RUNNER_RECOVERY_INVALID", "lease does not match this runner")
 	}
 	var payload map[string]any
@@ -78,7 +85,8 @@ func resumeRunnerResult(cfg remoteRunnerConfig, config, project string, binding 
 	fenceValue, err := fence.Int64()
 	key, keyOK := payload["idempotency_key"].(string)
 	op, opOK := payload["operation_id"].(string)
-	if err != nil || int(fenceValue) != lease.Fence || !keyOK || !opOK || !remoteRunnerID.MatchString(key) || op != key || payload["task_id"] != lease.TaskID || payload["attempt_id"] != lease.AttemptID || payload["token"] != lease.Token || payload["expected_revision"] != lease.ClaimRevision {
+	retainedToken, hasToken := payload["token"]
+	if err != nil || int64(lease.Fence) != fenceValue || !keyOK || !opOK || !remoteRunnerID.MatchString(key) || op != key || payload["task_id"] != lease.TaskID || payload["attempt_id"] != lease.AttemptID || (hasToken && retainedToken != lease.Token) || payload["expected_revision"] != lease.ClaimRevision {
 		return nil, core.Error("RUNNER_RECOVERY_INVALID", "pending result and retained lease disagree")
 	}
 	lookup, err := runnerCall(config, project, binding, http.MethodGet, "/runners/"+url.PathEscape(cfg.RunnerID)+"/operations/"+url.PathEscape(key), nil)
@@ -91,6 +99,7 @@ func resumeRunnerResult(cfg remoteRunnerConfig, config, project string, binding 
 			return nil, core.Error("IDEMPOTENCY_CONFLICT", "stored operation does not match")
 		}
 	} else {
+		payload["token"] = lease.Token
 		receipt, err = runnerCall(config, project, binding, http.MethodPost, "/runners/"+url.PathEscape(cfg.RunnerID)+"/submit", payload)
 		if err != nil {
 			return nil, core.Error("RUNNER_RESULT_PENDING", "result remains in the private attempt directory; retry the same pending file")
@@ -125,7 +134,14 @@ func recoverRunnerClaim(cfg remoteRunnerConfig, config, project string, binding 
 		return nil, err
 	}
 	rel, err := filepath.Rel(cfg.RuntimeDir, real)
-	if err != nil || strings.Contains(filepath.ToSlash(rel), "/") || !strings.HasPrefix(rel, "claim-claim-") || !strings.HasSuffix(rel, ".json") {
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+	var name string
+	if len(parts) == 3 && parts[0] == "control" && parts[1] == "claims" {
+		name = parts[2]
+	} else if len(parts) == 1 {
+		name = parts[0]
+	}
+	if err != nil || !strings.HasPrefix(name, "claim-claim-") || !strings.HasSuffix(name, ".json") {
 		return nil, core.Error("RUNNER_RECOVERY_INVALID", "claim is outside this runner runtime")
 	}
 	raw, err := readRunnerPrivateFile(real)
@@ -165,12 +181,12 @@ func recoverRunnerClaim(cfg remoteRunnerConfig, config, project string, binding 
 		return nil, core.Error("RUNNER_RECOVERY_INVALID", "claim receipt does not match this runner")
 	}
 	lease := remoteRunnerLease{TaskID: taskID, AttemptID: attempt.ID, Token: attempt.Token, Fence: attempt.Fence, ClaimRevision: revision, ContextID: contextID, RunnerID: cfg.RunnerID}
-	dir, err := runnerAttemptDir(cfg, lease)
+	paths, err := runnerAttemptDirs(cfg, lease)
 	if err != nil {
 		return nil, err
 	}
 	if err = os.Remove(real); err != nil {
 		return nil, err
 	}
-	return map[string]any{"mode": "remote", "action": "claim_recovered", "attempt_id": attempt.ID, "attempt_dir": dir, "detail": "no executor was started by recovery; inspect the retained attempt before continuing"}, nil
+	return map[string]any{"mode": "remote", "action": "claim_recovered", "attempt_id": attempt.ID, "attempt_dir": paths.Control, "io_dir": paths.IO, "detail": "no executor was started by recovery; inspect the retained attempt before continuing"}, nil
 }

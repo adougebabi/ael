@@ -6,6 +6,7 @@ import (
 	"ael/internal/execution"
 	"ael/internal/process"
 	"ael/internal/store"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -16,6 +17,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
+	"time"
 )
 
 type remoteProcessResult struct {
@@ -25,7 +28,106 @@ type remoteProcessResult struct {
 	ExitCode *int
 }
 
+type runnerProcessRecord struct {
+	PID                int    `json:"pid"`
+	Identity           string `json:"identity"`
+	IdentityStatus     string `json:"identity_status"`
+	Phase              string `json:"phase"`
+	DescendantsUnknown bool   `json:"descendants_unknown"`
+}
+
+func writeRunnerProcessRecord(dir string, record runnerProcessRecord) error {
+	raw, err := json.Marshal(record)
+	if err != nil {
+		return err
+	}
+	return store.Atomic(filepath.Join(dir, "process.json"), raw, 0600)
+}
+
+// A complete line is redacted before it is persisted. An unfinished or
+// over-limit line stays in memory, so a partial secret is never written.
+type runnerLogBuffer struct {
+	mu         sync.Mutex
+	data       []byte
+	pending    []byte
+	inputBytes int
+	truncated  bool
+	log        *os.File
+	secrets    []string
+	err        error
+}
+
+func (b *runnerLogBuffer) persist(data []byte) {
+	b.data = append(b.data, data...)
+	if b.log != nil && b.err == nil {
+		_, b.err = b.log.Write(data)
+	}
+}
+
+func (b *runnerLogBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	const limit = 1 << 20
+	n := len(p)
+	for len(p) > 0 && !b.truncated {
+		end := bytes.IndexByte(p, '\n')
+		complete := end >= 0
+		if complete {
+			end++
+		} else {
+			end = len(p)
+		}
+		available := limit - b.inputBytes - len(b.pending)
+		if end > available {
+			b.pending = append(b.pending, p[:available]...)
+			// Keep useful output, but discard enough trailing bytes that a
+			// credential split at the limit cannot be written as a fragment.
+			tail := 1024
+			for _, secret := range b.secrets {
+				if len(secret) > tail {
+					tail = len(secret)
+				}
+			}
+			if safe := len(b.pending) - tail; safe > 0 {
+				prefix := b.pending[:safe]
+				if loc := runnerTruncatedSecretSuffix.FindIndex(prefix); loc != nil {
+					prefix = prefix[:loc[0]]
+				}
+				b.persist(redactRunnerText(prefix, b.secrets...))
+			}
+			b.pending = nil
+			b.truncated = true
+			b.persist([]byte("\n[truncated]\n"))
+			break
+		}
+		b.pending = append(b.pending, p[:end]...)
+		p = p[end:]
+		if complete {
+			if runnerUnfinishedSecretPattern.Match(b.pending) {
+				continue
+			}
+			b.inputBytes += len(b.pending)
+			b.persist(redactRunnerText(b.pending, b.secrets...))
+			b.pending = nil
+		}
+	}
+	return n, nil
+}
+
+func (b *runnerLogBuffer) finish() ([]byte, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if !b.truncated && len(b.pending) > 0 {
+		b.persist(redactRunnerText(b.pending, b.secrets...))
+		b.pending = nil
+	}
+	return append([]byte(nil), b.data...), b.err
+}
+
 var runnerSecretPattern = regexp.MustCompile(`(?i)(api[_-]?key|access[_-]?token|password|secret|authorization)(["'\s:=]+)([^\s"',;]{8,})`)
+var runnerAuthorizationPattern = regexp.MustCompile(`(?i)(authorization["'\s:=]+(bearer|basic)[\s]+)([^\s"',;]+)`)
+var runnerUnfinishedSecretPattern = regexp.MustCompile(`(?i)((api[_-]?key|access[_-]?token|password|secret|authorization)["'\s:=]+|authorization["'\s:=]+(bearer|basic)[\s]+)$`)
+var runnerTruncatedSecretSuffix = regexp.MustCompile(`(?i)(api[_-]?key|access[_-]?token|password|secret|authorization)["'\s:=]+[^\s"',;]{0,7}$`)
 
 func redactRunnerText(data []byte, secrets ...string) []byte {
 	text := string(data)
@@ -34,6 +136,7 @@ func redactRunnerText(data []byte, secrets ...string) []byte {
 			text = strings.ReplaceAll(text, secret, "[REDACTED]")
 		}
 	}
+	text = runnerAuthorizationPattern.ReplaceAllString(text, "${1}[REDACTED]")
 	return []byte(runnerSecretPattern.ReplaceAllString(text, "${1}${2}[REDACTED]"))
 }
 
@@ -61,7 +164,7 @@ func runnerCheck(task core.Task, unit string) (core.Check, bool) {
 	return core.Check{}, false
 }
 
-func runRemoteProcess(ctx context.Context, cfg remoteRunnerConfig, task core.Task, attempt core.Attempt, contextData any, dir string, secrets ...string) (remoteProcessResult, error) {
+func runRemoteProcess(ctx context.Context, cfg remoteRunnerConfig, task core.Task, attempt core.Attempt, contextData any, dir, controlDir string, secrets ...string) (remoteProcessResult, error) {
 	var result remoteProcessResult
 	contextBytes, err := json.Marshal(contextData)
 	if err != nil {
@@ -127,28 +230,89 @@ func runRemoteProcess(ctx context.Context, cfg remoteRunnerConfig, task core.Tas
 	if err != nil {
 		return result, err
 	}
+	defer log.Close()
+	readPipe, writePipe, err := os.Pipe()
+	if err != nil {
+		return result, err
+	}
+	defer readPipe.Close()
+	defer writePipe.Close()
+	record := runnerProcessRecord{Phase: "starting", DescendantsUnknown: true}
+	if err = writeRunnerProcessRecord(controlDir, record); err != nil {
+		return result, err
+	}
 	cmd := process.Command(ctx, command[0], command[1:]...)
 	cmd.Dir = cfg.Workspace
 	cmd.Env = runnerChildEnvironment(contextPath, resultPath, task.Step, attempt.ID)
-	cmd.Stdout, cmd.Stderr = log, log
+	logBuffer := runnerLogBuffer{log: log, secrets: secrets}
+	cmd.Stdout, cmd.Stderr = writePipe, writePipe
 	err = cmd.Start()
 	if err != nil {
-		_ = log.Close()
+		record.Phase = "start_failed"
+		if recordErr := writeRunnerProcessRecord(controlDir, record); recordErr != nil {
+			return result, recordErr
+		}
 		result.Result = core.StepResult{Status: "blocked", Summary: "authorized local process could not start"}
 		return result, nil
 	}
+	_ = writePipe.Close()
+	outputDone := make(chan error, 1)
+	go func() {
+		_, copyErr := io.Copy(&logBuffer, readPipe)
+		outputDone <- copyErr
+	}()
+	record.PID = cmd.Process.Pid
+	record.Identity, err = process.Identity(record.PID)
+	record.IdentityStatus = "recorded"
+	if err != nil {
+		record.IdentityStatus = "unavailable"
+	}
+	record.Phase = "running"
+	if err = writeRunnerProcessRecord(controlDir, record); err != nil {
+		_ = process.StopGroup(record.PID)
+		_ = cmd.Wait()
+		_ = readPipe.Close()
+		<-outputDone
+		_, _ = logBuffer.finish()
+		return result, err
+	}
+	// The pipe belongs to us, not exec.Cmd: Wait returns as soon as the direct
+	// process exits, allowing the group check before a child can finish.
 	runErr := cmd.Wait()
 	background := process.GroupAlive(cmd.Process.Pid)
 	if background {
 		_ = process.StopGroup(cmd.Process.Pid)
 	}
-	_ = log.Close()
+	var outputErr error
+	outputIncomplete := false
+	select {
+	case outputErr = <-outputDone:
+	case <-time.After(time.Second):
+		outputIncomplete = true
+		_ = readPipe.Close()
+		<-outputDone
+	}
+	record.Phase = "exited"
+	if err = writeRunnerProcessRecord(controlDir, record); err != nil {
+		return result, err
+	}
+	redactedLog, err := logBuffer.finish()
+	if err != nil {
+		return result, err
+	}
+	if outputErr != nil {
+		return result, outputErr
+	}
 	if ctx.Err() != nil {
 		result.Result = core.StepResult{Status: "blocked", Summary: "local process was cancelled or timed out"}
 		return result, nil
 	}
 	if background {
-		result.Result = core.StepResult{Status: "blocked", Summary: "local process left background children; group stopped"}
+		result.Result = core.StepResult{Status: "blocked", Summary: "local process left background children; stop requested, verify before recovery"}
+		return result, nil
+	}
+	if outputIncomplete {
+		result.Result = core.StepResult{Status: "blocked", Summary: "local process left its output pipe open; inspect the retained execution"}
 		return result, nil
 	}
 	if isCheck && len(check.Command) > 0 {
@@ -165,19 +329,7 @@ func runRemoteProcess(ctx context.Context, cfg remoteRunnerConfig, task core.Tas
 		if code != 0 {
 			status, summary = "fail", fmt.Sprintf("authorized command failed with exit code %d", code)
 		}
-		f, err := os.Open(logPath)
-		if err != nil {
-			return result, err
-		}
-		raw, err := io.ReadAll(io.LimitReader(f, (1<<20)+1))
-		_ = f.Close()
-		if err != nil {
-			return result, err
-		}
-		if len(raw) > 1<<20 {
-			raw = append(raw[:1<<20], []byte("\n[truncated]\n")...)
-		}
-		report := append([]byte("AEL command check output (redacted)\n"), redactRunnerText(raw, secrets...)...)
+		report := append([]byte("AEL command check output (redacted)\n"), redactedLog...)
 		if err = store.Atomic(filepath.Join(dir, "check.log"), report, 0600); err != nil {
 			return result, err
 		}
