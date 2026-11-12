@@ -1,0 +1,10 @@
+{
+  "result": "PASS",
+  "mode": "packaged Server + external CLI clients + real browser",
+  "actions": [
+    "two-client-progress",
+    "child-completed",
+    "server-restarted",
+    "server-fixture-lease-expired"
+  ]
+}

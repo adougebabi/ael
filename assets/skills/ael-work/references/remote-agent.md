@@ -2,7 +2,7 @@
 
 现有 Agent 负责宿主执行，所有命令带 `--project PATH --json`。先 profile add/token-stdin、project connect，再 repository register、knowledge index。中间文件放项目外私有目录，不进 Git。每个写请求使用稳定 operation_id/idempotency_key，修改请求必须换键；网络结果未知先查原回执，不回退本地。
 
-1. `runner register --file PRIVATE_JSON --operation-id OP --idempotency-key KEY`：文件含 id、workspace_id、checkout_id、repository、version、capabilities（例如 development、model、scenario）、expected_revision:"absent"。这是身份/能力声明，不是 OS 隔离证明。
+1. `runner register --file PRIVATE_JSON --operation-id OP --idempotency-key KEY`：文件含 id、workspace_id、checkout_id、repository、version、capabilities（例如 development、model、scenario）、expected_revision:"absent"。可选 alias 和 machine 提供客户端别名与设备声明，未提供时使用 runner ID 并显示设备未声明。这是身份/能力声明，不是 OS 隔离证明。
 2. `task show --task ID` / `next --task ID` 取得 revision、next_action、current_step；父范围先 `runner next --runner ID --parent EPIC` 查询合法后继，再 claim，不凭查询直接工作。人工责任保持 wait_human；父级叶子与集成条件继续生效。
 3. `candidate capture --task ID --repository REPO --checkout CHECKOUT --workspace WORKSPACE --runner ID --expected-revision REV --operation-id OP --idempotency-key KEY`，然后 context publish/show，核对实际原文、版本、workspace_matches、validity。
 4. `runner claim --runner ID --file PRIVATE_JSON --out NEW_PRIVATE_FILE`：请求含 task_id、可选 parent_id、context_id、expected_revision、operation_id、idempotency_key。请求文件必须私有（0600），返回的 attempt/token 仅保存到新私有文件，可读及 JSON 输出均不打印 token。保存领取请求用于响应丢失时原键重试到新文件；这只读取原领取结果，不重新授权。
@@ -48,3 +48,11 @@ runner 写命令和显式 artifact upload 在网络写入前，将完整请求�
 实施完成后可以把相同候选交给另一身份验收。接收方提供相同候选，服务端保留实施 PASS 历史并要求接收方重新报告必需检查。存在活跃检查时，交接必须明确针对当前检查责任。
 
 活动远程任务的 task cancel 立即撤销有效提交权，并保留宿主状态未知的旧责任。runner show 的 connection_state 表达最后上报或失联，host_execution_state 为 unknown。操作者确认停工后，可通过 confirmed-stopped 清理该责任。发布结果未知时仍按既有外部运行标识核查，交付责任不会通过恢复入口自动重做。
+
+## 统一远程工作台
+
+浏览器登录 Server 后选择项目，进入共用的父子工作台、检查证据、规范/决策和演进页面。中央摘要按项目、Server 实例和事件游标更新，断线时保留最后成功数据并显示过期提示。项目和会话切换会使旧请求失效。
+
+任务详情将协作责任、最后联系、上报阶段和未知宿主状态分别呈现。别名和 machine 是客户端声明，实际会话对应 Attempt。暂停/取消使用当前责任版本和真实权限，结果是撤销有效协作提交并请求外部执行者停工。执行依据与附件入口继续提供原始快照和上传对象的读取。
+
+规范正文来自任务已接收的固定快照。任务提供版本的正文及其相对链接绑定到同一 context 和目标 hash。多个任务引用不同版本时，资料库显示冲突并提供准确快照选择，任务依据仍使用本任务实际提供的版本。

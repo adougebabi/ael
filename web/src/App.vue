@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
-import { api, info, infoError, infoLast, notices, refreshInfo, refreshCurrentView } from "./api";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { api, info, infoError, infoLast, notices, refreshInfo, refreshCurrentView, refreshRevision, remoteProject } from "./api";
+import { pollDashboard, remoteSyncError, remoteSyncAt } from "./remoteDashboard";
 import { route, href } from "./router";
 import TaskList from "./pages/TaskList.vue";
 import TaskPage from "./pages/TaskPage.vue";
@@ -27,7 +28,7 @@ const subtitles: Record<string, string> = {
   evolution: "看清改变了什么、为什么改变，以及结果到了哪一步。",
   settings: "把接入状态、资料来源和运行问题放在清楚的位置。",
 };
-const projectName = computed(() => info.value.project?.split("/").filter(Boolean).pop() || "正在连接");
+const projectName = computed(() => remoteProject.value?.name || info.value.project?.split("/").filter(Boolean).pop() || "正在连接");
 const projectInitials = computed(() => {
   if (!info.value.project) return "…";
   const words = projectName.value.split(/[\s_-]+/).filter(Boolean);
@@ -48,13 +49,14 @@ function keyboard(e: KeyboardEvent) {
     e.preventDefault(); showSearch.value = true;
   }
 }
+watch(refreshRevision, () => { if (remoteProject.value) void refreshAttention(); });
 let timer: ReturnType<typeof setInterval>;
 onMounted(() => {
   refreshInfo();
   refreshAttention();
   applyTheme();
   window.addEventListener('keydown', keyboard);
-  timer = setInterval(() => { refreshInfo(); void refreshAttention(); }, 10000);
+  timer = setInterval(() => { if (remoteProject.value) void pollDashboard(); else { refreshInfo(); void refreshAttention(); } }, 2000);
 });
 onUnmounted(() => { clearInterval(timer); window.removeEventListener('keydown', keyboard); });
 </script>
@@ -71,13 +73,14 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener('keydown', 
       <div class="workspace">
         <span class="workspace-avatar" aria-hidden="true">{{ projectInitials }}</span><span class="workspace-info"><strong>{{ projectName }}</strong
         ><small>{{
-          info.config?.mode === "shadow"
+          info.config?.mode === "remote" ? "中心协作项目" : info.config?.mode === "shadow"
             ? "预览模式 · 工作流未激活"
             : info.config
               ? "活动工作区"
               : "等待读取项目身份"
         }}</small></span>
       </div>
+      <slot name="workspace-controls" />
       <p class="sidebar-label">WORKSPACE</p><nav aria-label="主导航" @click="mobileMenu = false">
         <a
           v-for="[key, name] in [
@@ -94,7 +97,7 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener('keydown', 
       </nav>
       <div class="sidebar-bottom">
         <a
-          href="#/settings"
+          v-if="!remoteProject" href="#/settings"
           :class="{ chosen: area === 'settings' }"
           :aria-current="area === 'settings' ? 'page' : undefined"
           @click="mobileMenu = false"><AppIcon name="settings"/>项目设置</a
@@ -102,7 +105,7 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener('keydown', 
         <button class="theme-switch" :aria-label="theme === 'indigo' ? '切换到石墨外观' : '切换到靛蓝外观'" @click="toggleTheme"><AppIcon name="theme"/>外观：{{ theme === 'indigo' ? '靛蓝' : '石墨' }}</button>
         <footer>
           <span :class="['dot', { offline: infoError }]"></span
-          >{{ infoError ? "连接或数据异常" : "本机服务已连接"
+          >{{ infoError ? "连接或数据异常" : remoteProject ? "中心服务已连接" : "本机服务已连接"
           }}<small
             >v{{ info.service_version || "…" }} · 内嵌离线资源<br />更新于
             {{ infoLast || "等待连接" }}</small
@@ -114,23 +117,24 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener('keydown', 
     <main id="main-content" tabindex="-1">
       <header v-if="!id || (area === 'tasks' && id === 'new')" class="page-header">
         <div>
-          <p class="eyebrow">{{ info.project?.split("/").pop() || "AEL" }}</p>
+          <p class="eyebrow">{{ remoteProject?.name || info.project?.split("/").pop() || "AEL" }}</p>
           <h1>{{ titles[area] || "页面不存在" }}</h1>
           <p class="page-subtitle">{{ subtitles[area] }}</p>
         </div>
-        <a v-if="area === 'tasks'" class="button primary" href="#/tasks/new"
+        <a v-if="area === 'tasks' && !remoteProject" class="button primary" href="#/tasks/new"
           >＋ 创建任务</a
-        ><a v-else-if="area === 'knowledge'" class="button" href="#/settings?section=sources">资料来源</a><a v-else-if="area === 'evolution'" class="button" href="#/settings?section=diagnostics">技术记录</a><button v-else @click="refreshCurrentView">刷新项目状态</button>
+        ><a v-else-if="area === 'knowledge' && !remoteProject" class="button" href="#/settings?section=sources">资料来源</a><a v-else-if="area === 'evolution' && !remoteProject" class="button" href="#/settings?section=diagnostics">技术记录</a><button v-else-if="!remoteProject" @click="refreshCurrentView">刷新项目状态</button>
       </header>
+      <p v-if="remoteProject && remoteSyncError" role="alert" class="notice">连接异常，当前内容可能过期。最后成功同步 {{ remoteSyncAt || '尚未同步' }}。<button @click="pollDashboard">重试连接</button></p>
       <div v-if="notices" role="status" class="notice">
         <span>{{ notices }}</span
         ><button @click="notices = ''" aria-label="关闭操作反馈">×</button>
       </div>
-      <template v-if="area === 'tasks'"><TaskList v-if="!id || id === 'new'" /><CreateTask v-if="id === 'new'" /><TaskPage v-else-if="id" :id="id" /></template><KnowledgePage
+      <template v-if="area === 'tasks'"><TaskList v-if="!id || id === 'new'" /><CreateTask v-if="id === 'new' && !remoteProject" /><TaskPage v-else-if="id" :id="id" /></template><KnowledgePage
         v-else-if="area === 'knowledge'"
         :id="id"
       /><EvolutionPage v-else-if="area === 'evolution'" :id="id" /><SettingsPage
-        v-else-if="area === 'settings'"
+        v-else-if="area === 'settings' && !remoteProject"
       />
       <section v-else class="empty">
         <h2>页面不存在</h2>

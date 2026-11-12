@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from "vue";
+import { onMounted, onUnmounted, ref, watch } from "vue";
+
+import WorkspaceApp from "./App.vue";
+import { connectDashboard } from "./remoteDashboard";
+import { navigate, route } from "./router";
+const workspaceMode = ref(false);
+let projectGeneration = 0;
 
 type Session = { username: string; admin: boolean; csrf: string };
 type Project = { id: string; name: string; role: string };
@@ -36,6 +42,7 @@ function clearPreview() {
 }
 
 function clearSession() {
+  projectGeneration++; workspaceMode.value = false; connectDashboard(null);
   session.value = null; projects.value = []; tokens.value = []; selected.value = null;
   tasks.value = []; selectedTask.value = ""; taskLookup.value = ""; artifacts.value = []; taskContext.value = null; contextError.value = ""; clearPreview();
   tokenSecret.value = ""; tokenID.value = ""; tokenProject.value = ""; tokenUsername.value = ""; tokenLabel.value = "";
@@ -52,6 +59,8 @@ if (sessionChannel) sessionChannel.onmessage = (event) => {
 
 async function request(path: string, body?: unknown) {
   const expectedSession = session.value?.csrf || "";
+  const expectedGeneration = projectGeneration;
+  const expectedTask = selectedTask.value;
   const response = await fetch(path, {
     method: body === undefined ? "GET" : "POST",
     headers: body === undefined ? {} : {
@@ -64,6 +73,7 @@ async function request(path: string, body?: unknown) {
     if (session.value?.csrf === expectedSession) clearSession();
     throw new Error("登录状态已变化，请重新打开工作台。");
   }
+  if (path.startsWith("/api/v1/projects/") && (expectedGeneration !== projectGeneration || ((path.includes("/artifacts") || path.includes("/contexts")) && expectedTask !== selectedTask.value))) throw new Error("项目或任务已切换，旧请求已失效。");
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
     if (response.status === 401 && session.value) clearSession();
@@ -101,6 +111,8 @@ async function restore() {
   try {
     session.value = await request("/api/v1/auth/session");
     await refresh();
+    const wanted = new URL(location.hash.slice(1) || "/tasks", location.origin).searchParams.get("project") || sessionStorage.getItem("ael-remote-project:" + session.value?.csrf);
+    if (wanted && projects.value.some(project => project.id === wanted)) await view(wanted);
   } catch {
     clearSession();
   } finally {
@@ -157,7 +169,31 @@ async function revoke(id: string) {
   await action(async () => { await request("/api/v1/tokens/revoke", { id }); }, "令牌已撤销。");
 }
 async function view(id: string) {
-  await action(async () => { selected.value = null; tasks.value = []; selectedTask.value = ""; artifacts.value = []; taskContext.value = null; contextError.value = ""; clearPreview(); selected.value = await request(`/api/v1/projects/${encodeURIComponent(id)}`); }, "");
+  const epoch = ++projectGeneration;
+  busy.value = true;
+  error.value = "";
+  workspaceMode.value = false;
+  connectDashboard(null);
+  clearPreview();
+  selectedTask.value = ""; artifacts.value = []; taskContext.value = null;
+  try {
+    const project = await request(`/api/v1/projects/${encodeURIComponent(id)}`);
+    if (epoch !== projectGeneration || !session.value) return;
+    selected.value = project;
+    connectDashboard(project, session.value.csrf, clearSession, () => {
+      workspaceMode.value = false; selected.value = null; connectDashboard(null); void action(refresh, "项目访问权限已变化。");
+    });
+    sessionStorage.setItem("ael-remote-project:" + session.value.csrf, id);
+    const url = new URL(location.hash.slice(1) || "/tasks", location.origin);
+    if (url.searchParams.get("project") !== id) navigate("/tasks?project=" + encodeURIComponent(id));
+    workspaceMode.value = true;
+  } catch (e) { if (epoch === projectGeneration) error.value = String(e); }
+  finally { if (epoch === projectGeneration) busy.value = false; }
+}
+async function showServerProject() {
+  workspaceMode.value = false;
+  connectDashboard(null);
+  await action(refresh, "");
 }
 
 async function loadTaskContext(base: string, id: string) {
@@ -235,9 +271,10 @@ async function checkContext() {
     taskContext.value.validity = fresh.validity; taskContext.value.validity_reasons = fresh.validity_reasons;
     taskContext.value.changed_paths = fresh.changed_paths; taskContext.value.impact_unknown = fresh.impact_unknown;
     taskContext.value.checks = fresh.checks;
+    contextError.value = "";
   } catch (e) {
     if (selected.value?.id === project && selectedTask.value === task && taskContext.value?.id === id) {
-      taskContext.value = null; contextError.value = e instanceof Error ? e.message : "依据快照无法核对。";
+      contextError.value = e instanceof Error ? e.message : "依据快照无法核对。";
     }
   } finally { contextChecking = false; }
 }
@@ -273,12 +310,26 @@ async function preview(item: Artifact) {
   finally { busy.value = false; }
 }
 
+watch(() => route.value.query.get("project"), (id) => {
+  if (id && workspaceMode.value && id !== selected.value?.id) {
+    if (projects.value.some(project => project.id === id)) void view(id);
+    else { workspaceMode.value = false; selected.value = null; connectDashboard(null); error.value = "当前账号无法访问此项目。"; }
+  }
+});
 onMounted(() => { void restore(); previewTimer = setInterval(() => { void checkPreview(); void checkContext(); }, 2000); });
 onUnmounted(() => { if (previewTimer) clearInterval(previewTimer); clearPreview(); sessionChannel?.close(); });
 </script>
 
 <template>
-  <div class="standalone-shell">
+  <WorkspaceApp v-if="session && selected && workspaceMode" :key="selected.id + session.csrf">
+    <template #workspace-controls>
+      <label class="remote-project-picker">项目<select aria-label="切换项目" :value="selected.id" @change="view(($event.target as HTMLSelectElement).value)"><option v-for="project in projects" :key="project.id" :value="project.id">{{ project.name }}</option></select></label>
+      <button @click="showServerProject">执行依据与附件</button>
+      <button @click="showServerProject">项目与账户</button>
+      <button @click="logout">退出登录</button>
+    </template>
+  </WorkspaceApp>
+  <div v-else class="standalone-shell">
     <header class="standalone-header">
       <div><strong class="standalone-brand">AEL</strong><span>工程工作台</span></div>
       <div v-if="session" class="standalone-account"><span>{{ session.username }}</span><button type="button" :disabled="busy" @click="logout">退出登录</button></div>
@@ -310,6 +361,7 @@ onUnmounted(() => { if (previewTimer) clearInterval(previewTimer); clearPreview(
               <button type="button" :disabled="busy" @click="view(project.id)">查看项目</button>
             </li>
           </ul>
+          <button v-if="selected" @click="view(selected.id)">返回项目工作台</button>
           <p v-if="selected" class="standalone-selection">{{ selected.name }} · {{ roles[selected.role] || selected.role }}</p>
         </section>
         <section v-if="selected" class="standalone-card" aria-label="项目证据">

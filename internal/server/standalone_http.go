@@ -351,6 +351,10 @@ func (h *standaloneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.HasPrefix(r.URL.Path, "/api/v1/projects/") {
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v1/projects/"), "/")
+		if len(parts) == 3 && parts[1] == "dashboard" {
+			h.remoteDashboard(w, r, p, parts[0], parts[2])
+			return
+		}
 		if len(parts) >= 2 && parts[1] == "artifacts" {
 			h.remoteArtifacts(w, r, p, method, parts[0], parts[2:])
 			return

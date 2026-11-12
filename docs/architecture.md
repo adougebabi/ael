@@ -68,3 +68,11 @@ verify 结果必须携带 runtime:report.json，绑定 candidate/check/definitio
 新增 remote_workspace_holds 记录已声明工作区的未知旧责任，metadata 保存一次交接的接收方领取约束。runner recover 复用 Store.Write、领域 save、事件、任务版本和 p.mutate。显式确认停工或选择独立工作区后撤销旧接口责任，旧 Attempt 保留历史。实施已完成时可把完全相同候选交给另一身份验收，历史 PASS 保留，接收工作区重新提交检查。对未知声明工作区的后续领取保持拒绝，直至停工确认或独立交接。
 
 远程 cancel 可以撤销活动责任的有效提交权，旧执行保留 interrupted/unknown 状态供后续确认。Local 的原进程恢复规则继续适用于其显式入口。新增状态字段仅描述接口责任和最近上报，宿主隔离由外部执行环境负责。数据迁移为两个 CREATE TABLE IF NOT EXISTS 和可选响应字段，旧回执与任务数据保留。
+
+## V2-14 统一远程读取与协作状态
+
+StandaloneApp 保留登录、项目和账户管理，将项目工作区接入既有 App/TaskList/TaskPage/KnowledgePage/EvolutionPage。api 的远程传输适配绑定项目及会话代次，页面资源沿用请求序号丢弃旧响应，滚动与焦点按项目和会话区分。sync 提供项目、实例与事件水位组成的游标，发生变化或重连后重新获取权威摘要。
+
+远程 Dashboard 读取逐次执行项目授权，任务投影使用 RemoteTaskView，角色控制继续沿用原 mutation 入口。责任有效性、最后上报与未知宿主状态分别投影，心跳不会制造工程成果。可选客户端标签使用 remote_runner_labels 保存，旧登记回执和旧客户端结构继续可用。
+
+中央知识读取仅使用已 finalize 且哈希匹配的 context 来源，复用现有资料分页、Markdown 阅读和演进投影。多个当前任务版本冲突时提供选择。正文相对链接沿同一 context 解析并携带目标版本，无法接入的链接明确失败。Server 不从客户端路径读取规范或证据。

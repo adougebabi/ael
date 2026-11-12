@@ -6,6 +6,7 @@ export const boards = [
   ["cancelled", "已取消"],
 ] as const;
 const labels: Record<string, string> = {
+  central_snapshots: "已接收规范快照",
   epic: "大任务",
   bug: "缺陷",
   feature: "功能",

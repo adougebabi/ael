@@ -30,3 +30,9 @@ python3 scripts/standalone_server_acceptance.py --bundle /path/to/dist --out /tm
 ```
 
 脚本只创建合成账号、项目和令牌，启动本机临时端口，实际操作浏览器并重启服务；完成后停止自身进程。它不部署真实服务或操作业务数据。
+
+## 项目工作台
+
+选择项目后打开共用工作台。项目读取使用 `/api/v1/projects/ID/dashboard/VIEW`，每次检查当前角色与会话。sync 返回绑定项目、Server 实例和事件水位的游标。task、tasks、task-tree、attention、knowledge-page、knowledge-record、knowledge-link、task-knowledge、evolution 与 events 都由中央项目数据生成。
+
+原始依据和附件仍可通过侧栏入口打开，账户/项目管理保持原有权限。浏览器暂停、取消继续调用原 task mutation API，使用 UI 实际读取的 expected_revision 和幂等键。客户端 alias/machine 标签按声明展示，宿主进程状态为未知。

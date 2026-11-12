@@ -4,7 +4,7 @@ import MarkdownIt from "markdown-it";
 import { api, params } from "../api";
 import { knowledgeHref, navigate, route } from "../router";
 import { readableError } from "../display";
-const props = withDefaults(defineProps<{ body: string; id: string; tocRight?: boolean; showBody?: boolean }>(), { showBody: true });
+const props = withDefaults(defineProps<{ body: string; id: string; tocRight?: boolean; showBody?: boolean; version?: string; context?: string }>(), { showBody: true, version: "", context: "" });
 const emit = defineEmits<{ showBody: [] }>();
 const linkError = ref("");
 const md = new MarkdownIt({ html: false, linkify: false, typographer: false });
@@ -65,9 +65,9 @@ async function click(e: MouseEvent) {
   }
   try {
     const v = await api(
-      "/api/knowledge-link?" + params({ id: props.id, href: target }),
+      "/api/knowledge-link?" + params({ id: props.id, href: target, version: props.version, context: props.context }),
     );
-    navigate(knowledgeHref(v.id, "", v.fragment || "").slice(1));
+    navigate(knowledgeHref(v.id, v.version || "", v.fragment || "", v.context || "").slice(1));
   } catch (e) {
     linkError.value = String(e);
   }

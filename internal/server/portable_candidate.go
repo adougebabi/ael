@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS portable_contexts(id TEXT PRIMARY KEY,task_id TEXT NO
 CREATE TABLE IF NOT EXISTS portable_context_sources(context_id TEXT NOT NULL,id TEXT NOT NULL,path TEXT NOT NULL,artifact_id TEXT NOT NULL,sha256 TEXT NOT NULL,status TEXT NOT NULL,kind TEXT NOT NULL,reason TEXT NOT NULL,PRIMARY KEY(context_id,id));
 CREATE TABLE IF NOT EXISTS portable_checks(id TEXT PRIMARY KEY,context_id TEXT NOT NULL,task_id TEXT NOT NULL,candidate_id TEXT NOT NULL,check_id TEXT NOT NULL,artifact_id TEXT NOT NULL,body TEXT NOT NULL,created TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS remote_runners(id TEXT PRIMARY KEY,actor TEXT NOT NULL,workspace_id TEXT NOT NULL,checkout_id TEXT NOT NULL,repository TEXT NOT NULL,version TEXT NOT NULL,capabilities TEXT NOT NULL,created TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS remote_runner_labels(runner_id TEXT PRIMARY KEY,alias TEXT NOT NULL,machine TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS remote_runner_attempts(attempt_id TEXT PRIMARY KEY,task_id TEXT NOT NULL,runner_id TEXT NOT NULL,actor TEXT NOT NULL,context_id TEXT NOT NULL,candidate_id TEXT NOT NULL,claim_revision TEXT NOT NULL,output_candidate TEXT NOT NULL DEFAULT '',state TEXT NOT NULL DEFAULT 'running',fence INTEGER NOT NULL,token_hash TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS remote_artifact_leases(upload_id TEXT PRIMARY KEY,runner_id TEXT NOT NULL,attempt_id TEXT NOT NULL,fence INTEGER NOT NULL,token_hash TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS remote_submission_digests(submission_key TEXT PRIMARY KEY,digest TEXT NOT NULL);

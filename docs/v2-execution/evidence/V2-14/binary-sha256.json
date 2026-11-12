@@ -1,0 +1,20 @@
+{
+  "ael-darwin-amd64": "614efdbaf135ff7267f5e390c8a90945e63fec1a4aa213be73e84a2600907f59",
+  "ael-0.1.13-unix.tar.gz.sha256": "ed74456a273ce82d07b59dbd0ef037f6e465bff1f0747cc4c387a23b6e207ecc",
+  "ael-0.1.10-unix.tar.gz.sha256": "6e39e22dc8deebfb93a5c1bb58fd3f4a7401e6bdc144893ba589335577e99750",
+  "ael-0.1.9-acceptance-evidence.zip.sha256": "573b751bc533a3c98d43b47b04966752861dbb34d4abb9d396486f333eb8a6a8",
+  "ael-0.1.16-unix.tar.gz.sha256": "a37f1802794ff7c109228e818fe29a5b811644aaa5ca2e220faf1339d724deff",
+  "ael-0.1.15-unix.tar.gz.sha256": "25ee558fdc4a2f673b7cf7c1542fa8630c3381ea07a16f73c5fdf87a46fe4c5c",
+  "ael-linux-arm64": "1f4f63e5f690a7c700b91c0546322b4b1a400074824ca00158f6788be8d17f6f",
+  "ael-0.1.9-acceptance-evidence.zip": "fc3d6f9c9749352b90146f8912a64f86616a531a0f4103eda323fd6dd6f84fe6",
+  "ael-0.1.14-unix.tar.gz.sha256": "162962a8609402fe220e080bdfc7909e3a3fb37419b5f21ac44e386da57f09fc",
+  "ael-0.1.10-acceptance-evidence.zip": "d519a5fa49396e4b59daf0e1292f050a51245c529f8afa63c712255f2038249e",
+  "ael-toolchain.lock": "c31b20cff9f901ea5848319d5c46eb890cb3171ec5d16e9a78cae9576d4759e3",
+  "ael-darwin-arm64": "970d05fc2a1616cf472f3002b6276b41d3d7276a197b866daf834cc6abad2d79",
+  "ael-0.1.10-acceptance-evidence.zip.sha256": "62c52c56214dcaae317bc6a007f11991207a5feb446b5f304159c047eb76b68d",
+  "ael-0.1.17-unix.tar.gz.sha256": "a4f314dc4c8bf42179abe46d19f34b7e36fc8257823482b3f8e522a648f02c70",
+  "ael-linux-amd64": "d3efd5160dff645d04cc5a0c7987e5724e325bcfbd9ebae15e2cbfa403b8630d",
+  "ael-0.1.11-unix.tar.gz.sha256": "3813084c3cb9a7e9b796819d0e1090b57c2049ed4ca345d93f5615e4ddca94f1",
+  "ael-0.1.9-unix.tar.gz.sha256": "456460934c8cb4703de3a3b4490279fcfe0efdd596ece22dc3447ded6a11874b",
+  "ael-0.1.12-unix.tar.gz.sha256": "53bec3f5c95dcbf1144f0f9f80b9b65c7405824b9670b36e501e971b62e4dbb5"
+}

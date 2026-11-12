@@ -15,6 +15,7 @@ test("授权用户预览真实证据，清理后不显示假预览", async ({ pa
   await page.getByLabel("密码", { exact: true }).fill("fixture-reader-password");
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await page.getByLabel("项目列表").getByRole("listitem").filter({ hasText: "Shared Evidence" }).getByRole("button", { name: "查看项目" }).click();
+  await page.getByRole("button", { name: "执行依据与附件", exact: true }).click();
   const evidence = page.getByLabel("项目证据");
   await evidence.getByLabel("按任务 ID 查找").fill("task");
   await evidence.getByRole("button", { name: "查找任务" }).click();

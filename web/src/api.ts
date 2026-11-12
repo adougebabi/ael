@@ -22,11 +22,24 @@ export class ApiError extends Error {
     super(detail);
   }
 }
+export type RemoteProject = { id: string; name: string; role: string };
+export const remoteProject = ref<RemoteProject | null>(null);
+let remoteTransport: ((path: string, body?: unknown, raw?: boolean | "blob") => Promise<any>) | undefined;
+export function useRemoteTransport(project: RemoteProject | null, transport?: typeof remoteTransport) {
+  remoteProject.value = project;
+  remoteTransport = transport;
+  info.value = {};
+  infoError.value = "";
+  infoLast.value = "";
+  notices.value = "";
+}
+
 export async function api(
   path: string,
   body?: unknown,
   raw: boolean | "blob" = false,
 ): Promise<any> {
+  if (remoteTransport) return remoteTransport(path, body, raw);
   if (!token) await authenticate();
   const controller = new AbortController();
   // Read recovery has a deadline; an acknowledged write/check uses the real
@@ -90,13 +103,17 @@ export function refreshCurrentView() {
   refreshRevision.value++;
   void refreshInfo();
 }
+let infoRequest = 0;
 export async function refreshInfo() {
+  const sequence = ++infoRequest;
   try {
-    info.value = await api("/api/info");
+    const value = await api("/api/info");
+    if (sequence !== infoRequest) return;
+    info.value = value;
     infoError.value = "";
     infoLast.value = new Date().toLocaleTimeString("zh-CN");
   } catch (e) {
-    infoError.value = String(e);
+    if (sequence === infoRequest) infoError.value = String(e);
   }
 }
 export function params(data: Record<string, unknown>) {

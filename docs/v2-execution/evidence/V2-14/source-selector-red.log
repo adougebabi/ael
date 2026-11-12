@@ -1,0 +1,49 @@
+
+Running 1 test using 1 worker
+
+(node:75082) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:75082) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/remote-dashboard.spec.ts:15:1 › 统一远程工作台保持责任、证据、导航和项目隔离 (2.5m)
+
+
+  1) tests/remote-dashboard.spec.ts:15:1 › 统一远程工作台保持责任、证据、导航和项目隔离 ──────────────────────────────────
+
+    [31mTest timeout of 150000ms exceeded.[39m
+
+    Error: locator.click: Test timeout of 150000ms exceeded.
+    Call log:
+    [2m  - waiting for getByRole('link', { name: /Shared rules|source:spec\/rules.md/ }).first()[22m
+
+
+      74 |   await page.getByRole("button", { name: /^规范与决策/ }).click();
+      75 |   const sourceLink = page.getByRole("link", { name: /Shared rules|source:spec\/rules.md/ }).first();
+    > 76 |   await sourceLink.click();
+         |                    ^
+      77 |   await expect(page.getByText("REMOTE_RULES_SHARED", { exact: false }).first()).toBeVisible();
+      78 |   await page.getByRole("button", { name: /返回上一页/ }).click();
+      79 |   await expect(page.getByRole("heading", { name: "Dashboard child", exact: true })).toBeVisible();
+        at /Users/vinson/Documents/project/个人/ael/web/tests/remote-dashboard.spec.ts:76:20
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../private/tmp/ael-v214-second/browser/remote-dashboard-统一远程工作台保持责任、证据、导航和项目隔离/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../private/tmp/ael-v214-second/browser/remote-dashboard-统一远程工作台保持责任、证据、导航和项目隔离/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../private/tmp/ael-v214-second/browser/remote-dashboard-统一远程工作台保持责任、证据、导航和项目隔离/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../../private/tmp/ael-v214-second/browser/remote-dashboard-统一远程工作台保持责任、证据、导航和项目隔离/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    tests/remote-dashboard.spec.ts:15:1 › 统一远程工作台保持责任、证据、导航和项目隔离 ───────────────────────────────────
+Traceback (most recent call last):
+  File "/Users/vinson/Documents/project/个人/ael/scripts/remote_dashboard_acceptance.py", line 160, in <module>
+    if result.returncode:raise RuntimeError('packaged Dashboard browser acceptance failed')
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: packaged Dashboard browser acceptance failed

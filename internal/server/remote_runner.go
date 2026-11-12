@@ -24,6 +24,8 @@ type remoteRunnerInput struct {
 	ExpectedRevision string   `json:"expected_revision"`
 	OperationID      string   `json:"operation_id"`
 	IdempotencyKey   string   `json:"idempotency_key"`
+	Alias            string   `json:"alias,omitempty"`
+	Machine          string   `json:"machine,omitempty"`
 }
 
 type remoteRunnerClaimInput struct {
@@ -82,6 +84,11 @@ func (p *portableStore) registerRunner(principal standalonePrincipal, input remo
 	if !standaloneID.MatchString(input.ID) || !standaloneID.MatchString(input.WorkspaceID) || !standaloneID.MatchString(input.CheckoutID) || !standaloneID.MatchString(input.Repository) || input.ExpectedRevision != "absent" || strings.TrimSpace(input.Version) == "" || len(input.Version) > 100 || strings.ContainsAny(input.Version, "\r\n\x00") || len(input.Capabilities) > 32 {
 		return nil, errors.New("RUNNER_INVALID")
 	}
+	for _, label := range []string{input.Alias, input.Machine} {
+		if len(label) > 160 || strings.ContainsAny(label, "\r\n\x00") {
+			return nil, errors.New("RUNNER_INVALID")
+		}
+	}
 	seen := map[string]bool{}
 	for _, capability := range input.Capabilities {
 		if !standaloneID.MatchString(capability) || seen[capability] {
@@ -107,6 +114,9 @@ func (p *portableStore) registerRunner(principal standalonePrincipal, input remo
 		if _, err = tx.Exec("INSERT INTO remote_runners(id,actor,workspace_id,checkout_id,repository,version,capabilities,created) VALUES(?,?,?,?,?,?,?,?)", input.ID, principal.UserID, input.WorkspaceID, input.CheckoutID, input.Repository, input.Version, string(capabilities), created); err != nil {
 			return nil, err
 		}
+		if _, err = tx.Exec("INSERT INTO remote_runner_labels(runner_id,alias,machine) VALUES(?,?,?)", input.ID, input.Alias, input.Machine); err != nil {
+			return nil, err
+		}
 		return map[string]any{"id": input.ID, "workspace_id": input.WorkspaceID, "checkout_id": input.CheckoutID, "repository": input.Repository, "version": input.Version, "capabilities": input.Capabilities, "actor": principal.Username, "created_at": created, "operation_id": input.OperationID}, nil
 	})
 }
@@ -115,8 +125,8 @@ func (p *portableStore) getRunner(principal standalonePrincipal, runnerID string
 	if !standaloneID.MatchString(runnerID) {
 		return nil, errors.New("RUNNER_NOT_FOUND")
 	}
-	var owner, workspace, checkout, repository, version, rawCapabilities, created string
-	if err := p.service.Store.DB.QueryRow("SELECT actor,workspace_id,checkout_id,repository,version,capabilities,created FROM remote_runners WHERE id=?", runnerID).Scan(&owner, &workspace, &checkout, &repository, &version, &rawCapabilities, &created); err != nil || owner != principal.UserID {
+	var owner, workspace, checkout, repository, version, rawCapabilities, created, alias, machine string
+	if err := p.service.Store.DB.QueryRow("SELECT r.actor,r.workspace_id,r.checkout_id,r.repository,r.version,r.capabilities,r.created,coalesce(nullif(l.alias,''),r.id),coalesce(l.machine,'') FROM remote_runners r LEFT JOIN remote_runner_labels l ON l.runner_id=r.id WHERE r.id=?", runnerID).Scan(&owner, &workspace, &checkout, &repository, &version, &rawCapabilities, &created, &alias, &machine); err != nil || owner != principal.UserID {
 		return nil, errors.New("RUNNER_NOT_FOUND")
 	}
 	var capabilities []string
@@ -124,6 +134,7 @@ func (p *portableStore) getRunner(principal standalonePrincipal, runnerID string
 		return nil, errors.New("RUNNER_STORAGE_ERROR")
 	}
 	connection := "no_responsibility"
+	responsibility := "none"
 	rows, err := p.service.Store.DB.Query("SELECT a.attempt_id,t.body FROM remote_runner_attempts a JOIN tasks t ON t.id=a.task_id WHERE a.runner_id=? AND a.state IN ('running','interrupted')", runnerID)
 	if err != nil {
 		return nil, err
@@ -140,17 +151,14 @@ func (p *portableStore) getRunner(principal standalonePrincipal, runnerID string
 		}
 		for _, attempt := range task.Attempts {
 			if attempt.ID == id {
-				connection = "last_reported"
-				if attempt.Status != "running" || !attempt.Lease.After(time.Now()) || task.Status != "open" || task.Paused {
-					connection = "lost"
-				}
+				connection, responsibility = remoteResponsibilityState(task, attempt)
 			}
 		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	return map[string]any{"id": runnerID, "workspace_id": workspace, "checkout_id": checkout, "repository": repository, "version": version, "capabilities": capabilities, "created_at": created, "connection_state": connection, "host_execution_state": "unknown"}, nil
+	return map[string]any{"id": runnerID, "alias": alias, "machine": machine, "workspace_id": workspace, "checkout_id": checkout, "repository": repository, "version": version, "capabilities": capabilities, "created_at": created, "connection_state": connection, "responsibility_state": responsibility, "host_execution_state": "unknown"}, nil
 }
 
 func (p *portableStore) claimRunner(principal standalonePrincipal, role, runnerID string, input remoteRunnerClaimInput, artifacts *artifactStore) (map[string]any, error) {
@@ -489,4 +497,34 @@ func (p *portableStore) interruptRunner(principal standalonePrincipal, runnerID 
 		}
 		return map[string]any{"task": core.RemoteTaskView(task), "revision": core.RemoteRevision(task), "operation_id": input.OperationID}, nil
 	})
+}
+
+// Collaboration authority and last contact are separate from host execution.
+func remoteResponsibilityState(task core.Task, attempt core.Attempt) (string, string) {
+	connection := "last_reported"
+	if (attempt.Status == "running" || attempt.Status == "interrupted") && !attempt.Lease.After(time.Now()) {
+		connection = "lost"
+	}
+	if attempt.Status != "running" && attempt.Status != "interrupted" {
+		return connection, "ended"
+	}
+	if task.Status == "cancelled" {
+		return connection, "cancelled"
+	}
+	if task.Status != "open" {
+		return connection, "ended"
+	}
+	if task.Paused {
+		return connection, "paused"
+	}
+	if attempt.DefinitionRevision != task.Definition.Revision || attempt.PlanRevision != task.Plan.Revision {
+		return connection, "superseded"
+	}
+	if !attempt.Lease.After(time.Now()) {
+		return connection, "expired"
+	}
+	if attempt.Status == "interrupted" {
+		return connection, "interrupted"
+	}
+	return connection, "active"
 }

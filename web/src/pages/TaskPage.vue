@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
-import { api, ApiError, info, notices, params, refreshRevision } from "../api";
+import { api, ApiError, info, notices, params, refreshRevision, remoteProject } from "../api";
 import {
   route,
   setQuery,
@@ -32,6 +32,7 @@ import CopyButton from "../components/CopyButton.vue";
 import EpicOverview from "../components/EpicOverview.vue";
 import { pendingReviewForTask, preservePriorWork } from "../reviewDraft";
 const props = defineProps<{ id: string }>();
+const responsibilityNames: Record<string,string> = { active:"责任有效", paused:"责任已暂停", cancelled:"任务已取消", superseded:"责任版本已失效", expired:"责任已到期", interrupted:"责任已中断", ended:"责任已结束" };
 const r = useResource<any>(null),
   { data: n, loading, error, last } = r;
 const t = computed(() => n.value?.task),
@@ -84,7 +85,7 @@ const taskMenu = ref<HTMLDetailsElement>();
 const availableHumanChecks = computed(() =>
   (t.value?.definition.checks || []).filter((c: any) => n.value?.check_access?.[c.id]?.can_review),
 );
-const showReviewEntry = computed(() => t.value?.definition.type !== "epic" || !!availableHumanChecks.value.length || !!n.value?.summary?.human_review_count);
+const showReviewEntry = computed(() => !remoteProject.value && ( t.value?.definition.type !== "epic" || !!availableHumanChecks.value.length || !!n.value?.summary?.human_review_count));
 const claimed = ref<any>(null),
   result = ref({
     status: "pass",
@@ -187,7 +188,7 @@ async function load(quiet = false) {
   const id = props.id;
   await r.load(() => api("/api/task?" + params({ id })), quiet);
   if (id !== props.id) return;
-  await restoreClaim(id);
+  if (!remoteProject.value) await restoreClaim(id);
   pendingReviewCheck.value = pendingReviewForTask(info.value.project || "", id);
   const requestedReview = route.value.query.get("review");
   if (requestedReview && n.value?.task?.definition?.id === id) {
@@ -201,6 +202,17 @@ async function load(quiet = false) {
     checkOpen.value[requestedCheck] = true;
     await nextTick();
     requestAnimationFrame(() => document.getElementById("task-check-" + requestedCheck)?.scrollIntoView({ block: "start" }));
+  }
+  if (remoteProject.value && artifact.value?.ref) {
+    const ref = artifact.value.ref;
+    try {
+      const metadata = await api("/api/artifact-status?" + params({ task: id, ref }));
+      if (artifact.value?.ref === ref && (metadata.task_id !== id || metadata.status !== "finalized" || metadata.sha256 !== artifact.value.sha256)) {
+        attachments.clear(); artifactError.value = "证据原件已清理或不可用。";
+      }
+    } catch (e) {
+      if (artifact.value?.ref === ref) { attachments.clear(); artifactError.value = String(e); }
+    }
   }
   try {
     await extras();
@@ -271,6 +283,7 @@ const recoverable = computed(
       )),
 );
 const primaryKind = computed(() => {
+  if (remoteProject.value) return t.value?.status === "open" ? (t.value?.current_step === "verify" ? "checks" : "execution") : "";
   if (needsRootReview.value) return "root_review";
   if (t.value?.definition.type === "epic" && n.value?.next_action === "wait_integration") return "prepare_integration";
   if (pendingReviewCheck.value !== null) return "review_pending";
@@ -294,7 +307,7 @@ const bannerTitle = computed(() => {
   if (t.value?.confirmation) return "这一步需要你的决定";
   if (availableHumanChecks.value.length) return "还有人工验收需要你处理";
   if (n.value?.next_action === "repair") return "验收未通过，需要修复";
-  if (n.value?.board === "active") return "当前工作正在执行";
+  if (n.value?.board === "active") return remoteProject.value ? "协作责任已领取" : "当前工作正在执行";
   if (runnable.value) return "工作已就绪，等待接手";
   return "当前工作状态";
 });
@@ -399,6 +412,7 @@ function start(action: string, title: string, extra: any = {}) {
     id: props.id,
     objectTitle: t.value.definition.title,
     revision: n.value.definition_revision,
+    remote_revision: n.value.revision,
     candidate: t.value.candidate,
     plan_revision: n.value.plan_revision,
     ...extra,
@@ -439,6 +453,7 @@ async function perform() {
       executor: actor.value,
       reason: reason.value,
       ack_stopped: ack.value,
+      ...(remoteProject.value ? { remote_revision: current.remote_revision } : {}),
       ...extra,
     });
     if (current.action === "claim" && v.attempt?.id && v.attempt?.token) {
@@ -573,6 +588,7 @@ async function readReceipt() {
 async function openArtifact(ref: string) {
   const id = props.id;
   await attachments.read(async () => {
+    if (remoteProject.value) return api("/api/artifact?" + params({ task: id, ref }));
     if (/\.(png|jpe?g)$/i.test(ref)) {
       const blob = await api(
         "/api/artifact?" + params({ task: id, ref, format: "image" }),
@@ -602,7 +618,7 @@ async function readBasis(k: any) {
   await basisReader.read(async () => {
     const record = await api(
       "/api/knowledge-record?" +
-        params({ id: k.id, version: b?.version || "" }),
+        params({ id: k.id, version: b?.version || "", ...(remoteProject.value ? { task: props.id } : {}) }),
     );
     return {
       ...record,
@@ -648,6 +664,7 @@ function canCheck(c: any) {
   );
 }
 function checkReason(c: any) {
+  if (remoteProject.value) return "由外部执行者在已领取责任中运行并提交报告。";
   if (n.value?.check_access?.[c.id]?.effective_method === "human" && !n.value?.check_access?.[c.id]?.can_review)
     return "可先记录人工意见，候选和检查条件满足后再正式确认。";
   if (!canCheck(c)) return "当前未到此检查的可执行节点，或检查已在运行。";
@@ -674,8 +691,17 @@ function checkReason(c: any) {
             ><span v-if="n.summary.activity_at" :title="stamp(n.summary.activity_at)">{{ relativeStamp(n.summary.activity_at) }}</span>
           </p>
         </div>
-        <div class="task-heading-actions"><button v-if="showReviewEntry && !needsRootReview && t.status === 'open' && !['review', 'review_pending'].includes(primaryKind)" class="primary" :disabled="busy" @click="openTaskReview">{{ reviewState ? '查看验收记录' : '开始人工验收' }}</button><button v-if="t.status !== 'open' && n.summary.human_review_count" :disabled="busy" @click="openTaskReview">查看验收记录</button><button v-if="primaryKind" :class="{ primary: ['review', 'review_pending', 'root_review'].includes(primaryKind) }" :disabled="busy" @click="primaryAction">{{ primaryKind === 'claim' ? '接手工作' : primaryKind === 'checks' ? '查看检查' : primaryKind === 'review' && reviewState ? '查看验收记录' : primaryLabels[primaryKind] }}</button><details ref="taskMenu" class="task-more"><summary aria-label="更多任务操作" title="更多任务操作">···</summary><div class="task-more-menu"><button v-if="t.status === 'open' && !t.paused" :disabled="busy" @click="startFromMenu('pause', '暂缓任务')">暂缓</button><button v-if="t.status === 'open'" :disabled="busy" @click="startFromMenu('edit', '修订任务定义')">编辑任务定义</button><button v-if="t.status === 'open'" :disabled="busy" class="danger-text" @click="startFromMenu('cancel', '取消任务')">取消任务</button><a :href="href('/evolution', { q: t.definition.title })">查看相关演进</a></div></details></div>
+        <div class="task-heading-actions"><button v-if="showReviewEntry && !needsRootReview && t.status === 'open' && !['review', 'review_pending'].includes(primaryKind)" class="primary" :disabled="busy" @click="openTaskReview">{{ reviewState ? '查看验收记录' : '开始人工验收' }}</button><button v-if="!remoteProject && t.status !== 'open' && n.summary.human_review_count" :disabled="busy" @click="openTaskReview">查看验收记录</button><button v-if="primaryKind" :class="{ primary: ['review', 'review_pending', 'root_review'].includes(primaryKind) }" :disabled="busy" @click="primaryAction">{{ primaryKind === 'claim' ? '接手工作' : primaryKind === 'checks' ? '查看检查' : primaryKind === 'review' && reviewState ? '查看验收记录' : primaryLabels[primaryKind] }}</button><details ref="taskMenu" class="task-more"><summary aria-label="更多任务操作" title="更多任务操作">···</summary><div class="task-more-menu"><button v-if="t.status === 'open' && !t.paused && (!remoteProject || ['admin','executor'].includes(remoteProject.role))" :disabled="busy" @click="startFromMenu('pause', '暂缓任务')">暂缓</button><button v-if="t.status === 'open' && !remoteProject" :disabled="busy" @click="startFromMenu('edit', '修订任务定义')">编辑任务定义</button><button v-if="t.status === 'open' && (!remoteProject || ['admin','executor'].includes(remoteProject.role))" :disabled="busy" class="danger-text" @click="startFromMenu('cancel', '取消任务')">取消任务</button><a :href="href('/evolution', { q: t.definition.title })">查看相关演进</a></div></details></div>
       </header>
+      <p v-if="remoteProject && n.collaboration?.length" class="secondary">执行者 {{ n.collaboration.at(-1).alias || n.collaboration.at(-1).runner }} · 最近联系 {{ stamp(n.collaboration.at(-1).last_contact) }} · 上报阶段 {{ n.collaboration.at(-1).stage || '未上报' }} · 宿主进程状态未知</p>
+      <section v-if="remoteProject && n.collaboration?.length && section === 'execution'" aria-label="执行者协作状态" class="content-section">
+        <h2>执行者与最近上报</h2>
+        <dl v-for="item in n.collaboration" :key="item.attempt">
+          <dt>{{ item.alias || item.runner }} · {{ item.unit }}</dt><dd>责任记录 {{ item.attempt }} · Agent 会话未声明 · 客户端 {{ item.runner }} · 声明设备 {{ item.machine || '未声明' }} · 检出 {{ item.checkout || '未声明' }} · 工作区 {{ item.workspace || '未声明' }}</dd>
+          <dd>最后联系 {{ stamp(item.last_contact) }} · {{ item.connection_state === 'lost' ? '已失联' : '最近上报' }} · {{ responsibilityNames[item.responsibility_state] || '责任状态待核对' }} · 宿主进程状态未知</dd>
+          <dd v-if="item.stage">上报阶段 {{ item.stage }}</dd><dd>受检候选 {{ item.candidate || '尚未固定' }}</dd>
+        </dl>
+      </section>
       <ol class="stage-track" aria-label="任务流程位置"><li v-for="(step, index) in t.plan.steps" :key="step" :class="{ current: t.status === 'open' && step === t.current_step, done: stageDone(step) && !(t.status === 'open' && step === t.current_step) }"><span class="stage-node">{{ stageDone(step) && !(t.status === 'open' && step === t.current_step) ? '✓' : Number(index) + 1 }}</span><span>{{ label(step) }}</span></li></ol>
       <nav class="tabs" aria-label="任务详情分区">
         <button
@@ -975,14 +1001,14 @@ function checkReason(c: any) {
                   checkOpen[c.id] ? "收起检查依据" : "查看检查依据与证据"
                 }}</button>
             </div><div class="actions check-actions"><button v-if="n.current_checks[c.id]?.result === 'pass'" :aria-expanded="!!checkOpen[c.id]" @click="checkOpen[c.id] = !checkOpen[c.id]">{{ checkOpen[c.id] ? '收起证据' : '查看证据' }}</button><button v-else-if="n.current_runs[c.id]" @click="setQuery({ section: 'execution' })">查看执行</button><button
-                v-else-if="c.command?.length"
+                v-else-if="c.command?.length && !remoteProject"
                 :disabled="busy || !canCheck(c)"
                 :title="checkReason(c)"
                 @click="start('verify', '运行检查', { extra: { unit: c.id } })"
               >
                 运行真实检查</button
               ><button
-                v-else-if="n.check_access?.[c.id]?.effective_method === 'human'"
+                v-else-if="n.check_access?.[c.id]?.effective_method === 'human' && !remoteProject"
                 :disabled="busy || t.status !== 'open'"
                 :title="checkReason(c)"
                 @click="manualCheck = c.id"
@@ -1013,7 +1039,7 @@ function checkReason(c: any) {
                 其他检查也配置了相同覆盖条件；仍分别保留原门禁。
               </p>
               <pre v-if="c.command?.length">{{ c.command.join(" ") }}</pre>
-              <button v-if="n.current_checks[c.id]?.result === 'pass' && c.command?.length" :disabled="busy || !canCheck(c)" @click="start('verify', '运行检查', { extra: { unit: c.id } })">重新运行检查</button>
+              <button v-if="!remoteProject && n.current_checks[c.id]?.result === 'pass' && c.command?.length" :disabled="busy || !canCheck(c)" @click="start('verify', '运行检查', { extra: { unit: c.id } })">重新运行检查</button>
               <section
                 v-for="e in [
                   ...(t.evidence_history || []),
@@ -1242,7 +1268,7 @@ function checkReason(c: any) {
                   : "此处为影响当前任务的待核实规范，尚未向执行者提供，不能当作已使用的依据。"
             }}
           </p>
-          <MarkdownBody :body="reading.body" :id="reading.id" />
+          <MarkdownBody :body="reading.body" :id="reading.id" :version="reading.hash" :context="reading.context_id" />
           <details>
             <summary>来源与版本</summary>
             <dl class="facts">
@@ -1288,12 +1314,12 @@ function checkReason(c: any) {
           <p>{{ nextAction(n.summary) }}</p>
           <button v-if="showReviewEntry && !needsRootReview && t.status === 'open' && !['review', 'review_pending'].includes(primaryKind)" class="primary" :disabled="busy" @click="openTaskReview">{{ reviewState ? '查看验收记录' : '开始人工验收' }}</button>
           <button v-if="primaryKind" :class="{ primary: ['review', 'review_pending'].includes(primaryKind) }" :disabled="busy" @click="primaryAction">{{ primaryKind === 'review' && reviewState ? '查看验收记录' : primaryLabels[primaryKind] }}</button>
-          <div v-if="unownedRunning" class="lost-claim-help"><p>当前标签页没有这次接手的凭据。若原执行确已停止，可以确认后恢复任务并重新接手。</p><button @click="start('resume', '恢复无法继续的接手')">恢复无法继续的接手</button></div>
+          <div v-if="unownedRunning && !remoteProject" class="lost-claim-help"><p>当前标签页没有这次接手的凭据。若原执行确已停止，可以确认后恢复任务并重新接手。</p><button @click="start('resume', '恢复无法继续的接手')">恢复无法继续的接手</button></div>
         </section>
         <section class="next-panel-facts">
           <h3>工作信息</h3>
           <dl>
-            <div><dt>执行 / 负责</dt><dd>{{ n.summary.executors.length ? n.summary.executors.join('、') : '当前无人执行' }}</dd></div>
+            <div><dt>执行 / 负责</dt><dd>{{ n.summary.executors.length ? n.summary.executors.join('、') : (remoteProject ? '尚无有效责任' : '当前无人执行') }}</dd></div>
             <div><dt>最近联系</dt><dd>{{ n.health?.last_contact ? stamp(n.health.last_contact) : '尚无' }}</dd></div>
             <div><dt>最近有证据进展</dt><dd>{{ n.health?.last_progress_at ? stamp(n.health.last_progress_at) : '尚无' }}</dd></div>
             <div><dt>交付目标</dt><dd>{{ goalLabel(t.definition.goal) }}</dd></div>
@@ -1328,6 +1354,7 @@ function checkReason(c: any) {
         @retry="attachments.retry"
       />
       <p v-if="artifact">{{ artifact.ref }}</p>
+      <a v-if="artifact?.download" :href="artifact.download" download>下载原件</a>
       <img
         v-if="artifact?.image"
         :src="artifact.image"
@@ -1355,6 +1382,7 @@ function checkReason(c: any) {
       @close="op = null"
       @submit="perform"
     >
+      <p v-if="remoteProject && ['pause','cancel'].includes(op.action)" class="info-strip">撤销后续协作结果提交与推进，并请求外部执行者停工。宿主进程状态未知。</p>
       <label v-if="['claim', 'confirm', 'review_failure'].includes(op.action)"
         >执行者 / 决策者<input v-model="actor" required
       /></label>

@@ -1,0 +1,64 @@
+
+Running 1 test using 1 worker
+
+(node:73187) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:73187) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/remote-dashboard.spec.ts:15:1 › 统一远程工作台保持责任、证据、导航和项目隔离 (8.9s)
+
+
+  1) tests/remote-dashboard.spec.ts:15:1 › 统一远程工作台保持责任、证据、导航和项目隔离 ──────────────────────────────────
+
+    Error: route.fulfill: Route is already handled!
+
+      46 |       const response = await route.fetch();
+      47 |       await oldResponse;
+    > 48 |       await route.fulfill({ response });
+         |                   ^
+      49 |     } else await route.continue();
+      50 |   });
+      51 |   await expect.poll(() => delayed).toBeTruthy();
+        at /Users/vinson/Documents/project/个人/ael/web/tests/remote-dashboard.spec.ts:48:19
+
+    Error: locator.click: Test ended.
+    Call log:
+    [2m  - waiting for getByRole('button', { name: /^查看证据 artifact_/ }).first()[22m
+    [2m    - locator resolved to <button> 查看证据 artifact_bsXNy-0f4OAGwT-YrXsIe3tSJORO79Qs-d…</button>[22m
+    [2m  - attempting click action[22m
+    [2m    - waiting for element to be visible, enabled and stable[22m
+    [2m    - element is visible, enabled and stable[22m
+    [2m    - scrolling into view if needed[22m
+    [2m    - done scrolling[22m
+
+
+      61 |   await page.getByRole("button", { name: /^检查与验收/ }).click();
+      62 |   await page.getByRole("button", { name: "查看证据", exact: true }).click();
+    > 63 |   await page.getByRole("button", { name: /^查看证据 artifact_/ }).first().click();
+         |                                                                       ^
+      64 |   await expect(page.locator(".artifact-panel")).toContainText("External host asserted fixed file");
+      65 |   await page.getByRole("button", { name: "关闭证据", exact: true }).click();
+      66 |   await page.getByRole("button", { name: /^规范与决策/ }).click();
+        at /Users/vinson/Documents/project/个人/ael/web/tests/remote-dashboard.spec.ts:63:71
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../private/tmp/ael-v214-first/browser/remote-dashboard-统一远程工作台保持责任、证据、导航和项目隔离/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../private/tmp/ael-v214-first/browser/remote-dashboard-统一远程工作台保持责任、证据、导航和项目隔离/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../private/tmp/ael-v214-first/browser/remote-dashboard-统一远程工作台保持责任、证据、导航和项目隔离/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../../private/tmp/ael-v214-first/browser/remote-dashboard-统一远程工作台保持责任、证据、导航和项目隔离/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    tests/remote-dashboard.spec.ts:15:1 › 统一远程工作台保持责任、证据、导航和项目隔离 ───────────────────────────────────
+Traceback (most recent call last):
+  File "/Users/vinson/Documents/project/个人/ael/scripts/remote_dashboard_acceptance.py", line 160, in <module>
+    if result.returncode:raise RuntimeError('packaged Dashboard browser acceptance failed')
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: packaged Dashboard browser acceptance failed

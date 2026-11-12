@@ -27,6 +27,7 @@ type Standalone struct {
 	store           *store.Store
 	projectMu       sync.Mutex
 	projectServices map[string]*core.Service
+	dashboardEpoch  string
 }
 
 type standalonePrincipal struct {
@@ -155,7 +156,7 @@ CREATE TABLE IF NOT EXISTS server_tokens(id TEXT PRIMARY KEY, secret_hash BLOB N
 		db.Close()
 		return nil, err
 	}
-	return &Standalone{store: db, projectServices: map[string]*core.Service{}}, nil
+	return &Standalone{store: db, projectServices: map[string]*core.Service{}, dashboardEpoch: core.ID("server-")}, nil
 }
 
 func (s *Standalone) Close() error {

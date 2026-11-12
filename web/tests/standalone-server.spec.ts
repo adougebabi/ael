@@ -62,12 +62,12 @@ if (fixture.phase === "initial") {
     await login(page, "owner", "fixture-admin-password");
     const privateRow = page.getByLabel("项目列表").getByRole("listitem").filter({ hasText: "Private Project" });
     await privateRow.getByRole("button", { name: "查看项目" }).click();
-    await expect(page.locator(".standalone-selection")).toContainText("Private Project");
+    await expect(page.getByLabel("切换项目")).toHaveValue("private");
     await page.evaluate(async () => {
       const current = await (await fetch("/api/v1/auth/session")).json();
       await fetch("/api/v1/auth/logout", { method: "POST", headers: { "Content-Type": "application/json", "X-AEL-Protocol": "1", "X-AEL-CSRF": current.csrf }, body: "{}" });
     });
-    await page.getByRole("button", { name: "刷新" }).click();
+    await page.getByRole("button", { name: "刷新项目状态", exact: true }).click();
     await expect(page.getByRole("heading", { name: "登录工作台" })).toBeVisible();
     await login(page, "worker", "fixture-worker-password", false);
     await expect(page.getByLabel("项目列表")).toContainText("Shared Project");
@@ -78,12 +78,12 @@ if (fixture.phase === "initial") {
     await page.getByRole("button", { name: "退出登录" }).click();
     await login(page, "owner", "fixture-admin-password", false);
     await page.getByLabel("项目列表").getByRole("listitem").filter({ hasText: "Private Project" }).getByRole("button", { name: "查看项目" }).click();
-    await expect(page.locator(".standalone-selection")).toContainText("Private Project");
+    await expect(page.getByLabel("切换项目")).toHaveValue("private");
     const switched = await page.evaluate(async () => {
       return (await fetch("/api/v1/auth/login", { method: "POST", headers: { "Content-Type": "application/json", "X-AEL-Protocol": "1" }, body: JSON.stringify({ username: "worker", password: "fixture-worker-password" }) })).status;
     });
     expect(switched).toBe(200);
-    await page.getByRole("button", { name: "刷新" }).click();
+    await page.getByRole("button", { name: "刷新项目状态", exact: true }).click();
     await expect(page.getByRole("heading", { name: "登录工作台" })).toBeVisible();
     await page.reload();
     await expect(page.getByLabel("项目列表")).toContainText("Shared Project");
@@ -98,7 +98,7 @@ if (fixture.phase === "initial") {
     await expect(page.locator("section").filter({ has: page.getByRole("heading", { name: "Agent 令牌", exact: true }) })).toContainText("已撤销");
     await page.screenshot({ path: path.join(browserOutput, "after-restart.png"), fullPage: true });
     await page.getByLabel("项目列表").getByRole("listitem").filter({ hasText: "Private Project" }).getByRole("button", { name: "查看项目" }).click();
-    await expect(page.locator(".standalone-selection")).toContainText("Private Project");
+    await expect(page.getByLabel("切换项目")).toHaveValue("private");
     const otherTab = await context.newPage();
     await otherTab.goto(fixture.url);
     await expect(otherTab.getByRole("heading", { name: "项目", exact: true })).toBeVisible();

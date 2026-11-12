@@ -201,3 +201,8 @@ func ResolveLink(s *core.Service, id, href string) (any, error) {
 	}
 	return nil, core.Error("KNOWLEDGE_LINK_UNAVAILABLE", "target is not an accessible indexed document")
 }
+
+// BrowseRecords reuses the library projection for authenticated central snapshots.
+func BrowseRecords(records []Record, query BrowseQuery) BrowsePage {
+	return browseRecords(records, query)
+}

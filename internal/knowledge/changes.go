@@ -70,16 +70,21 @@ func inDateRange(at *time.Time, from, to string) bool {
 // Changes is computed from source records and task results, without storing a
 // competing evolution state. Only explicit references group records together.
 func Changes(s *core.Service, q BrowseQuery, kind, from, to string) (ChangePage, error) {
+	records, err := ReadAll(s.Root)
+	if err != nil {
+		return ChangePage{}, err
+	}
+	return ChangesWithRecords(s, records, q, kind, from, to)
+}
+
+// ChangesWithRecords projects the same task facts against central snapshots.
+func ChangesWithRecords(s *core.Service, all []Record, q BrowseQuery, kind, from, to string) (ChangePage, error) {
 	p := ChangePage{Items: []Change{}, Scopes: []string{}, Limit: q.Limit, Offset: q.Offset}
 	if p.Limit <= 0 || p.Limit > 100 {
 		p.Limit = 25
 	}
 	if p.Offset < 0 {
 		p.Offset = 0
-	}
-	all, e := ReadAll(s.Root)
-	if e != nil {
-		return p, e
 	}
 	rows, e := s.Store.DB.Query("SELECT body FROM tasks ORDER BY id")
 	if e != nil {

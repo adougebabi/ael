@@ -1,0 +1,10 @@
+{
+  "baseline": "03de32f",
+  "baseline_sha256": "f1192d3885c8a4521dd9fe54adb87531336a9b114b0831d66e774c2d2a185595",
+  "historical_prefix_verified": true,
+  "permitted_prefix_changes": [
+    "current task pointer",
+    "V2-14 row title/status/receipt"
+  ],
+  "recovery": "Restored complete baseline history after accidental README write; new progress only appended."
+}

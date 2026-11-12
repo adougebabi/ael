@@ -1,0 +1,11 @@
+
+Running 1 test using 1 worker
+
+(node:91366) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:91366) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 tests/portable-context.spec.ts:13:1 › Dashboard 与客户端读取同一候选的不可变规范 (2.6s)
+
+  1 passed (3.2s)
+{"status": "passed", "isolated": true, "checkouts": 2, "same_candidate": "e94cd37771f0b1064d64015ed61cd8cf3503608acf62cc6e866c008babe4fba6", "context": "context_wEYvY7UoEc-KXs-qeqFd19YMLQ0UOR5eq4eNxiwQz7c"}

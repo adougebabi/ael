@@ -21,7 +21,7 @@ const scope = computed(() => route.value.query.get("scope") || "");
 const readerTab = computed(() => route.value.query.get("reader") || "body");
 const offset = computed(() => Number(route.value.query.get("offset") || 0));
 const resourceKey = computed(() => props.id
-  ? JSON.stringify(["record", props.id, route.value.query.get("version") || ""])
+  ? JSON.stringify(["record", props.id, route.value.query.get("version") || "", route.value.query.get("context") || ""])
   : JSON.stringify(["list", view.value, scope.value, route.value.query.get("q") || "", offset.value]));
 const activeResource = computed(() => props.id ? record : list);
 const views = [["current", "现行规范"], ["decisions", "决策与取舍"], ["history", "历史资料"]];
@@ -39,7 +39,7 @@ watch(() => info.value.project, syncBookmarks, { immediate: true });
 async function load() {
   if (props.id) {
     const id = props.id, version = route.value.query.get("version") || "";
-    await record.load(() => api("/api/knowledge-record?" + params({ id, version })));
+    await record.load(() => api("/api/knowledge-record?" + params({ id, version, context: route.value.query.get("context") || "" })));
   } else {
     const query = { q: route.value.query.get("q") || "", view: view.value, scope: scope.value, limit: 25, offset: offset.value };
     await list.load(() => api("/api/knowledge-page?" + params(query)));
@@ -114,7 +114,8 @@ function clearFilters() { clearTimeout(searchTimer); typing = false; search.valu
         <p v-if="bookmarkError" role="alert" class="alert">{{ bookmarkError }}</p>
         <p v-if="route.query.get('version')" class="notice">正在阅读任务实际使用的历史版本，不能据此认定当前实现已复验。</p>
         <section class="knowledge-reader">
-          <MarkdownBody :id="detail.id" :body="detail.body" :show-body="readerTab === 'body'" toc-right @show-body="setQuery({ reader: undefined, fragment: undefined })">
+          <section v-if="detail?.versions?.length" class="info-strip"><p>{{ detail.reason }}</p><a v-for="version in detail.versions" :key="version.hash" :href="knowledgeHref(detail.id, version.hash)">{{ version.hash }} · {{ label(version.status) }}</a></section>
+        <MarkdownBody :id="detail.id" :body="detail.body" :version="detail.hash" :context="detail.context_id" :show-body="readerTab === 'body'" toc-right @show-body="setQuery({ reader: undefined, fragment: undefined })">
             <template #before>
               <nav class="tabs reader-tabs" aria-label="资料详情分区"><button v-for="[key, title] in [['body', '正文'], ['source', '版本与变化'], ['related', '关联工作']]" :key="key" :class="{ chosen: readerTab === key }" :aria-current="readerTab === key ? 'page' : undefined" @click="setQuery({ reader: key === 'body' ? undefined : key })">{{ title }}</button></nav>
               <p v-if="readerTab === 'body' && detail.summary" class="doc-intro">{{ detail.summary }}</p>
