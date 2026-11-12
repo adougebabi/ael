@@ -1,0 +1,90 @@
+{
+  "fixture": "/private/tmp/ael-v212-freeze-4vhn32sj",
+  "status": "observed",
+  "create": {
+    "exit": 0,
+    "stdout": "created: /private/tmp/ael-v212-freeze-4vhn32sj/fixture.dmg\n",
+    "stderr": "hdiutil: WARNING: 'hdiutil create -size -volname ...' is deprecated. Please use 'diskutil image create from/blank -size --volumeName ...' instead.\n"
+  },
+  "attach": {
+    "exit": 0,
+    "stderr": "hdiutil: WARNING: 'hdiutil attach -mountpoint -nobrowse ...' is deprecated. Please use 'diskutil image attach --mountPoint --mountOptions nobrowse ...' instead.\n",
+    "device": "/dev/disk7s1"
+  },
+  "remount_readonly": {
+    "exit": 64,
+    "stdout": "",
+    "stderr": "mount_apfs: unrecognized option 'force'\nmount_apfs: [-o options] [-u UID] [-g GID] [-n] [-c [-r] | [-C]] [-s snapshot] [-P <im4p file> -M <im4m file> [-T <generic | brain>] [-E <generic | supplemental | pdi_nonce | mobile_asset | smac>]] <volume | device> <directory>\nmount: /private/tmp/ael-v212-freeze-4vhn32sj/mount failed with 64\n"
+  },
+  "readonly_flag": false,
+  "remount_existing_fd": {
+    "exit": 0,
+    "stderr": "",
+    "operation": {
+      "result": "allowed"
+    }
+  },
+  "detach_between": {
+    "exit": 0,
+    "stdout": "\"disk6\" ejected.\n",
+    "stderr": "hdiutil: WARNING: 'hdiutil detach -force ...' is deprecated. Please use 'diskutil eject force ...' instead.\n"
+  },
+  "reattach": {
+    "exit": 0,
+    "stderr": "hdiutil: WARNING: 'hdiutil attach -mountpoint -nobrowse ...' is deprecated. Please use 'diskutil image attach --mountPoint --mountOptions nobrowse ...' instead.\n",
+    "device": "/dev/disk7s1"
+  },
+  "flags_set": {
+    "file": 2,
+    "root": 2
+  },
+  "immutable_operations": {
+    "pwrite": {
+      "exit": 0,
+      "stderr": "",
+      "operation": {
+        "result": "allowed"
+      }
+    },
+    "truncate": {
+      "exit": 0,
+      "stderr": "",
+      "operation": {
+        "result": "allowed"
+      }
+    },
+    "mmap": {
+      "exit": 0,
+      "stderr": "",
+      "operation": {
+        "result": "allowed"
+      }
+    },
+    "create_root": {
+      "exit": 0,
+      "stderr": "",
+      "operation": {
+        "errno": 1,
+        "error": "Operation not permitted"
+      }
+    },
+    "create_nested": {
+      "exit": 0,
+      "stderr": "",
+      "operation": {
+        "result": "allowed"
+      }
+    }
+  },
+  "sandbox_clear_file_flag": {
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  "file_flags_after_child": 0,
+  "cleanup": {
+    "exit": 0,
+    "stdout": "\"disk6\" ejected.\n",
+    "stderr": "hdiutil: WARNING: 'hdiutil detach -force ...' is deprecated. Please use 'diskutil eject force ...' instead.\n"
+  }
+}

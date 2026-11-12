@@ -1,0 +1,12 @@
+{
+  "fixture": "/private/tmp/ael-v212-codex-sandbox-ilsswj_d",
+  "sandbox_exit": 0,
+  "stderr": "",
+  "stdout": "{\"control_read\": \"allowed\", \"can_encode_control\": true, \"workspace_write\": \"allowed\", \"git_tag\": {\"exit\": 128, \"stderr\": \"fatal: cannot lock ref 'refs/tags/fixture-probe': Unable to create '/private/tmp/ael-v212-codex-sandbox-ilsswj_d/work/.git/refs/tags/fixture-probe.lock': Operation not permitted\\n\"}, \"loopback_connect\": {\"errno\": 1, \"error\": \"[Errno 1] Operation not permitted\"}}\n",
+  "secret_mode": "0o600",
+  "tag_query_exit": 0,
+  "fixture_tag_created": false,
+  "listener_received": [
+    "fixture-control"
+  ]
+}
