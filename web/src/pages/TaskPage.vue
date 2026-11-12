@@ -87,7 +87,8 @@ const taskMenu = ref<HTMLDetailsElement>();
 const availableHumanChecks = computed(() =>
   (t.value?.definition.checks || []).filter((c: any) => n.value?.check_access?.[c.id]?.can_review),
 );
-const showReviewEntry = computed(() => !remoteProject.value && ( t.value?.definition.type !== "epic" || !!availableHumanChecks.value.length || !!n.value?.summary?.human_review_count));
+const mayJudge = computed(() => !remoteProject.value || ["admin", "reviewer"].includes(remoteProject.value.role));
+const showReviewEntry = computed(() => mayJudge.value && ( t.value?.definition.type !== "epic" || !!availableHumanChecks.value.length || !!n.value?.summary?.human_review_count));
 const claimed = ref<any>(null),
   result = ref({
     status: "pass",
@@ -1012,7 +1013,7 @@ function checkReason(c: any) {
               >
                 运行真实检查</button
               ><button
-                v-else-if="n.check_access?.[c.id]?.effective_method === 'human' && !remoteProject"
+                v-else-if="n.check_access?.[c.id]?.effective_method === 'human' && mayJudge"
                 :disabled="busy || t.status !== 'open'"
                 :title="checkReason(c)"
                 @click="manualCheck = c.id"

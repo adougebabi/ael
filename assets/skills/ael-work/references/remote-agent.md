@@ -68,3 +68,7 @@ runner 写命令和显式 artifact upload 在网络写入前，将完整请求�
 同任务、检查配置、验收/计划版本、候选、规则及精确定位归并。标题不参与身份。新报告增加出现记录，原键重放返回原回执。不同位置与候选保持独立。每个报告最多 100 项，单批唯一证据最多 64 MiB，沿用附件单文件和配额限制。
 
 用 `finding list --task ID --severity high --completeness incomplete` 筛选，`finding show --finding ID` 读取出现记录和来源。`runner retry --pending FILE` 继续恢复原 finding 报告。接收发现保持 gate_effect=none，任务的正式验收继续按原规则提交。图片哈希与完整性标签说明已接收的证据，实际结论由具备能力和权限的验收者判断。
+
+## 人工裁定交接
+
+human 检查交由项目 reviewer/admin 登录中央 Dashboard 完成。外部 Agent 通过原 artifact upload 上传实际截图、基准及报告，并记录来源和受检候选。页面支持明确基准比较，人工结论仍绑定候选/定义/计划。普通令牌不能伪装成人工记录人。人工 fail 留修复方向，blocked 留恢复条件，pass 后继续读取 next_action 和其余门禁。意见与正式检查分别保存，旧候选意见需针对新候选重新记录。

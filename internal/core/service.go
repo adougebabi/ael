@@ -16,15 +16,16 @@ import (
 )
 
 type Service struct {
-	ToolBuild           string
-	Store               *store.Store
-	Root                string
-	Active              bool
-	RemoteAuthority     bool
-	remoteOperation     *RemoteOperation
-	ResolveBasis        func(Definition) ([]BasisReference, error)
-	ConstraintCheck     func(Definition) []string
-	SnapshotConstraints func() ConstraintResolvers
+	ToolBuild            string
+	Store                *store.Store
+	Root                 string
+	Active               bool
+	RemoteAuthority      bool
+	MatchRemoteCandidate func(*store.Tx, *Task) (bool, error)
+	remoteOperation      *RemoteOperation
+	ResolveBasis         func(Definition) ([]BasisReference, error)
+	ConstraintCheck      func(Definition) []string
+	SnapshotConstraints  func() ConstraintResolvers
 }
 
 type ConstraintResolvers struct {
@@ -386,11 +387,23 @@ func (s *Service) syncDefinitionExpected(old Task, d Definition, raw []byte, exp
 			if workspace == "" {
 				workspace = s.Root
 			}
-			fp, err := Fingerprint(workspace)
-			if err != nil {
-				return err
+			matches := false
+			if s.RemoteAuthority {
+				if s.MatchRemoteCandidate != nil {
+					var err error
+					matches, err = s.MatchRemoteCandidate(tx, &old)
+					if err != nil {
+						return err
+					}
+				}
+			} else {
+				fp, err := Fingerprint(workspace)
+				if err != nil {
+					return err
+				}
+				matches = fp == old.Candidate
 			}
-			if fp == old.Candidate {
+			if matches {
 				t.Candidate = old.Candidate
 				t.CandidateWorkspace = workspace
 				t.Step = "verify"
@@ -905,6 +918,24 @@ func (s *Service) submitWithEnvironment(sub Submission, evidence *Evidence, requ
 		return Next{}, e
 	}
 	e := s.Store.Write(func(tx *store.Tx) error {
+		var err error
+		response, err = s.submitTx(tx, sub, evidence, hash, remote)
+		return err
+	})
+	if e != nil {
+		return Next{}, e
+	}
+	if e = s.Store.Flush(); e != nil {
+		return Next{}, e
+	}
+	return response, nil
+}
+
+// submitTx applies the shared result state machine inside the caller's write
+// transaction. The caller owns commit and outbox flush.
+func (s *Service) submitTx(tx *store.Tx, sub Submission, evidence *Evidence, hash string, remote *RemoteSubmitEnvironment) (Next, error) {
+	var response Next
+	err := func() error {
 		var h, r string
 		err := tx.Row("SELECT hash,response FROM submissions WHERE key=?", sub.Key).Scan(&h, &r)
 		if err == nil {
@@ -1023,6 +1054,9 @@ func (s *Service) submitWithEnvironment(sub Submission, evidence *Evidence, requ
 				}
 				if note.Check != "" && note.Check != evidence.Check {
 					return Error("REVIEW_NOTE_CHECK_MISMATCH", evidence.Check)
+				}
+				if note.Candidate != "" && note.Candidate != t.Candidate {
+					return Error("REVIEW_NOTE_VERSION_MISMATCH", "record a new opinion for the current candidate")
 				}
 				if note.DefinitionRevision != t.Definition.Revision || note.PlanRevision != t.Plan.Revision {
 					return Error("REVIEW_NOTE_VERSION_MISMATCH", "record a new opinion for the current definition and plan")
@@ -1308,15 +1342,10 @@ func (s *Service) submitWithEnvironment(sub Submission, evidence *Evidence, requ
 		b, _ := json.Marshal(response)
 		_, e = tx.Exec("INSERT INTO submissions(key,hash,response) VALUES(?,?,?)", sub.Key, hash, string(b))
 		return e
-	})
-	if e != nil {
-		return Next{}, e
-	}
-	if e = s.Store.Flush(); e != nil {
-		return Next{}, e
-	}
-	return response, nil
+	}()
+	return response, err
 }
+
 func gates(t *Task) bool {
 	if len(t.Definition.Checks) == 0 {
 		return false

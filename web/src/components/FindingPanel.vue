@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, watch } from "vue";
-import { api, params, refreshRevision } from "../api";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { api, params, refreshRevision, remoteProject } from "../api";
 import { route, setQuery, taskHref } from "../router";
 import { useResource } from "../resource";
 import { stamp } from "../display";
+import EvidenceComparison from "./EvidenceComparison.vue";
 import LoadState from "./LoadState.vue";
 import Pagination from "./Pagination.vue";
 
+const comparison = ref({ baseline: "", actual: "" });
+const comparing = ref(false);
 const props = defineProps<{ taskId: string }>();
 const emit = defineEmits<{ artifact: [ref: string] }>();
 const list = useResource<any>({ items: [], total: 0 });
@@ -64,6 +67,8 @@ onUnmounted(() => clearInterval(timer));
         <p>受检候选 <code>{{ record.data.value.candidate_id }}</code> · 定义 {{ record.data.value.definition_revision }} · 计划 {{ record.data.value.plan_revision }}</p>
         <p>路由 {{ record.data.value.route || '未声明' }} · 定位 {{ record.data.value.location.selector || record.data.value.location.path || '页面整体' }}<span v-if="record.data.value.location.line"> · 行 {{ record.data.value.location.line }}</span></p>
         <p><a :href="taskHref(record.data.value.task_id)">查看关联任务 {{ record.data.value.task_id }}</a></p>
+        <button v-if="remoteProject" type="button" @click="comparing = !comparing">{{ comparing ? '收起图片比较' : '比较证据图片' }}</button>
+        <EvidenceComparison v-if="remoteProject && comparing" v-model="comparison" :task-id="taskId" :candidate="record.data.value.candidate_id" />
         <article v-for="appearance in record.data.value.occurrences" :key="appearance.id" class="content-section" aria-label="发现出现记录">
           <h4>{{ sourceNames[appearance.source.method] }} · {{ appearance.source.actor }} · {{ stamp(appearance.created_at) }}</h4>
           <p>{{ appearance.source.tool || '工具未声明' }} {{ appearance.source.version }} · 运行 {{ appearance.source.run_id || '未声明' }}</p>

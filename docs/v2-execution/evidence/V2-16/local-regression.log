@@ -1,0 +1,250 @@
+{
+  "out": "/private/tmp/ael-v216-local-final-runtime",
+  "root": "/private/tmp/ael-v216-local-final-runtime/project",
+  "runtime_base": "/private/tmp/ael-v216-local-final-runtime/runtime",
+  "results": [
+    {
+      "id": "T01",
+      "status": "passed_installed_cli",
+      "detail": {
+        "version": {
+          "build": "b7c0d7f-976982221a3f",
+          "cli_output_protocol": 1,
+          "version": "0.1.18"
+        },
+        "health": {
+          "state": "ready",
+          "reason": "",
+          "counts": {
+            "connected": 3
+          },
+          "sources": [
+            {
+              "path": "AGENTS.md",
+              "hash": "a4294312af2e0064e93757f250d0bf014915843c4076a8716f653b1e12768b23",
+              "action": "connected",
+              "reason": "original file remains the sole authoritative source",
+              "record": {
+                "id": "source:AGENTS.md",
+                "title": "AGENTS.md",
+                "kind": "spec",
+                "status": "current",
+                "paths": null,
+                "source": "AGENTS.md",
+                "superseded_by": "",
+                "tasks": null,
+                "critical": true,
+                "path": "AGENTS.md",
+                "hash": "a4294312af2e0064e93757f250d0bf014915843c4076a8716f653b1e12768b23",
+                "body": "",
+                "reason": "inherited baseline; implementation compliance has not been verified"
+              }
+            },
+            {
+              "path": "docs/adr/old.md",
+              "hash": "d3cbfe59e45221c0ad89ef9e1cbd8ee7030a0211f16ecbc4c5e28bdcc6253509",
+              "action": "connected",
+              "reason": "original file remains the sole authoritative source",
+              "record": {
+                "id": "old-decision",
+                "title": "old.md",
+                "kind": "decision",
+                "status": "rejected",
+                "paths": null,
+                "source": "docs/adr/old.md",
+                "superseded_by": "",
+                "tasks": null,
+                "critical": false,
+                "path": "docs/adr/old.md",
+                "hash": "d3cbfe59e45221c0ad89ef9e1cbd8ee7030a0211f16ecbc4c5e28bdcc6253509",
+                "body": "",
+                "reason": "inherited baseline; implementation compliance has not been verified"
+              }
+            },
+            {
+              "path": "docs/spec/arithmetic.md",
+              "hash": "57605cd0503ef0d8a2dbc855db3f585d33c8e4883df75438bb9abb1353e0262c",
+              "action": "connected",
+              "reason": "original file remains the sole authoritative source",
+              "record": {
+                "id": "arithmetic",
+                "title": "Addition contract",
+                "kind": "spec",
+                "status": "current",
+                "paths": [
+                  "calculator.py",
+                  "test_calculator.py"
+                ],
+                "source": "docs/spec/arithmetic.md",
+                "superseded_by": "",
+                "tasks": null,
+                "critical": false,
+                "path": "docs/spec/arithmetic.md",
+                "hash": "57605cd0503ef0d8a2dbc855db3f585d33c8e4883df75438bb9abb1353e0262c",
+                "body": "",
+                "reason": "inherited baseline; implementation compliance has not been verified"
+              }
+            }
+          ]
+        },
+        "data_dir": "/private/tmp/ael-v216-local-final-runtime/runtime/ed9cc77d911a5abd22f1ab71",
+        "note": "index references original sources; no legacy activation"
+      }
+    },
+    {
+      "id": "T02",
+      "status": "passed_installed_cli",
+      "detail": {
+        "candidate": "ee4a9d8b6c299bf9987e96728ad1b81522bab4afeb16b6c8820fc660a44a3c9e",
+        "attempts": 5,
+        "agent_claim": "deterministic driver, NOT a real Agent run"
+      }
+    },
+    {
+      "id": "T03",
+      "status": "passed_installed_cli",
+      "detail": [
+        {
+          "id": "source:AGENTS.md",
+          "source": "AGENTS.md",
+          "version": "a4294312af2e0064e93757f250d0bf014915843c4076a8716f653b1e12768b23",
+          "status": "current",
+          "reason": "scope or explicit reference; effective constraint"
+        },
+        {
+          "id": "arithmetic",
+          "source": "docs/spec/arithmetic.md",
+          "version": "19e35f57d75e2532c362a6ff157794e4a2cf8db0289fbb051afeec0fc6327373",
+          "status": "current",
+          "reason": "scope or explicit reference; effective constraint"
+        }
+      ]
+    },
+    {
+      "id": "T04",
+      "status": "passed_installed_cli",
+      "detail": {
+        "result": "report_delivered_with_findings",
+        "source_hash": "0884fbc98c3315ea5d06d0e8ed2a78834f28704ec552b32443c247dc3945ffba",
+        "linked_defect": "T04-followup",
+        "note": "intentionally false criterion, not a real addition defect"
+      }
+    },
+    {
+      "id": "T05",
+      "status": "passed_installed_cli",
+      "detail": {
+        "decisions": [
+          {
+            "kind": "plan",
+            "actor": "fixture-project-owner",
+            "decision": "adjust",
+            "reason": "keep add behavior; reject subtracting alternative",
+            "definition_revision": 1,
+            "plan_revision": 1,
+            "candidate": "deb486d2e9a65a96f93f477a30f65a9e210551b96854e39b46f1c5e831481a1d",
+            "at": "2026-11-12T11:36:49.052876Z"
+          },
+          {
+            "kind": "plan",
+            "actor": "fixture-project-owner",
+            "decision": "approve",
+            "reason": "approve revised fixture plan for this candidate",
+            "definition_revision": 1,
+            "plan_revision": 2,
+            "candidate": "deb486d2e9a65a96f93f477a30f65a9e210551b96854e39b46f1c5e831481a1d",
+            "at": "2026-11-12T11:36:49.397854Z"
+          }
+        ],
+        "authorization": "isolated fixture owner decisions, not user business approvals"
+      }
+    },
+    {
+      "id": "T06",
+      "status": "passed_installed_cli",
+      "detail": {
+        "handoff": "first executor ended after submit; second claimed next unit",
+        "parallel": "two independent CLI processes claimed tasks in the same workspace; no task/version mixing; deterministic protocol driver, not an Agent run"
+      }
+    },
+    {
+      "id": "T07",
+      "status": "passed_installed_cli",
+      "detail": {
+        "actual_environment_missing": true,
+        "recovery_node": "verify",
+        "result": "blocked, never pass"
+      }
+    },
+    {
+      "id": "T08",
+      "status": "passed_installed_cli",
+      "detail": {
+        "revision": 1,
+        "progress_and_title": "did not invalidate definition; check-specific revision reuse covered by Go regression"
+      }
+    },
+    {
+      "id": "T09",
+      "status": "passed_installed_cli",
+      "detail": {
+        "blocker": {
+          "category": "environment",
+          "reason": "No scenario browser configured for this test executor. Install/configure capability then resume verify.",
+          "scope": [
+            "calculator.py",
+            "test_calculator.py"
+          ],
+          "tried": "No scenario browser configured for this test executor. Install/configure capability then resume verify.",
+          "recovery": "restore the missing capability or dependency; verify any old writer stopped then resume",
+          "resume_at": "verify",
+          "unit": "check:scenario",
+          "failure_input": "deb486d2e9a65a96f93f477a30f65a9e210551b96854e39b46f1c5e831481a1d",
+          "next": "resolve the retained blocker and resume the required unit"
+        },
+        "scenario_path": "actual browser scenario is exercised separately; this missing-capability case remains blocked"
+      }
+    },
+    {
+      "id": "T10",
+      "status": "passed_installed_cli",
+      "detail": {
+        "non_publish": "verified task requires no deployment",
+        "feedback": "linked new task; original outcome retained",
+        "local_delivery_receipt": {
+          "run_id": "isolated-copy-1",
+          "idempotency_key": "local-copy-1",
+          "candidate": "deb486d2e9a65a96f93f477a30f65a9e210551b96854e39b46f1c5e831481a1d",
+          "artifact": "runtime:delivery-receipt.json",
+          "environment": "fixture-local",
+          "target": "",
+          "status": "success"
+        },
+        "target": "/private/tmp/ael-v216-local-final-runtime/local-environment",
+        "production": "never touched"
+      }
+    },
+    {
+      "id": "T11",
+      "status": "passed_installed_cli",
+      "detail": {
+        "distinguished": [
+          "empty",
+          "not_indexed",
+          "index_error",
+          "read_failed"
+        ],
+        "no_inferred_specs": true
+      }
+    },
+    {
+      "id": "T12",
+      "status": "passed_installed_cli",
+      "detail": {
+        "uninstall": "only isolated global executable removed; project runtime and original rules retained",
+        "fresh_host": "requires separate real-host discovery/run; not claimed by this script",
+        "entry": "/private/tmp/ael-v216-local-final-runtime/project/.agents/skills/ael-work/SKILL.md"
+      }
+    }
+  ]
+}

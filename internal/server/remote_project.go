@@ -83,7 +83,7 @@ func (s *Standalone) projectService(id string) (*core.Service, error) {
 	}
 	// Pending projections are reconciled by task/operation endpoints. Opening
 	// must remain possible when a conflict needs inspection and recovery.
-	service := &core.Service{Store: db, Root: workspace, Active: true, RemoteAuthority: true}
+	service := &core.Service{Store: db, Root: workspace, Active: true, RemoteAuthority: true, MatchRemoteCandidate: matchRemoteCandidateTx}
 	s.projectServices[id] = service
 	return service, nil
 }

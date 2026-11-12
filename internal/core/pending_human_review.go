@@ -57,6 +57,48 @@ func (s *Service) RecordPendingReview(id, check, actor, reason, recovery, result
 	}
 	var note HumanReviewNote
 	err := s.Store.Write(func(tx *store.Tx) error {
+		var err error
+		note, err = s.recordPendingReviewTx(tx, id, check, actor, reason, recovery, result, refs, key, hash, expected, nil)
+		return err
+	})
+	if err == nil {
+		err = s.Store.Flush()
+	}
+	return note, err
+}
+
+// ConfirmPendingReview binds a task-level observation to an exact current
+// candidate. It remains a human observation and never becomes check evidence.
+func (s *Service) ConfirmPendingReview(id, noteID, actor, requestKey string, expected ReviewExpectation) (HumanReviewNote, error) {
+	if !validReviewKey(requestKey) {
+		return HumanReviewNote{}, Error("IDEMPOTENCY_KEY_REQUIRED", "a unique review request key is required")
+	}
+	if strings.TrimSpace(actor) == "" {
+		return HumanReviewNote{}, Error("REVIEW_INPUT_REQUIRED", "reviewer is required")
+	}
+	request, _ := json.Marshal(struct {
+		Task, Note, Actor string
+		Expected          ReviewExpectation
+	}{id, noteID, actor, expected})
+	key, hash := "human-review-confirm:"+requestKey, store.Hash(request)
+	if _, err := s.Get(id); err != nil {
+		return HumanReviewNote{}, err
+	}
+	var note HumanReviewNote
+	err := s.Store.Write(func(tx *store.Tx) error {
+		var err error
+		note, err = s.confirmPendingReviewTx(tx, id, noteID, actor, key, hash, expected, nil)
+		return err
+	})
+	if err == nil {
+		err = s.Store.Flush()
+	}
+	return note, err
+}
+
+func (s *Service) recordPendingReviewTx(tx *store.Tx, id, check, actor, reason, recovery, result string, refs []string, key, hash string, expected ReviewExpectation, env *RemoteReviewEnvironment) (HumanReviewNote, error) {
+	var note HumanReviewNote
+	err := func() error {
 		previous, found, err := replayHumanNote(tx, key, hash)
 		if found || err != nil {
 			note = previous
@@ -90,21 +132,30 @@ func (s *Service) RecordPendingReview(id, check, actor, reason, recovery, result
 				return Error("CHECK_METHOD_MISMATCH", "declared check capability cannot be replaced with human review")
 			}
 		}
+		if env != nil {
+			if err = env.Validate(tx, &t); err != nil {
+				return err
+			}
+		}
+
 		workspace := s.Root
 		if t.Candidate != "" && t.CandidateWorkspace != "" {
 			workspace = t.CandidateWorkspace
 		}
 		hashes := map[string]string{}
 		for _, ref := range refs {
-			data, err := s.artifactAt(workspace, ref)
+			data, err := readReviewArtifact(s, tx, env, workspace, ref)
 			if err != nil {
 				return err
 			}
 			hashes[ref] = store.Hash(data)
 		}
 		note = HumanReviewNote{ID: ID("HR-"), Check: check, Actor: strings.TrimSpace(actor), Result: result, Reason: strings.TrimSpace(reason), Recovery: strings.TrimSpace(recovery), Artifacts: refs, ArtifactHashes: hashes, Candidate: t.Candidate, DefinitionRevision: t.Definition.Revision, PlanRevision: t.Plan.Revision, Status: "pending", RecordedAt: time.Now().UTC()}
+		if env != nil {
+			note.Comparison = env.Comparison
+		}
 		kind := "human_review_recorded"
-		if check == "" && t.Candidate != "" {
+		if check == "" && t.Candidate != "" && env == nil {
 			fingerprint, err := Fingerprint(workspace)
 			if err != nil {
 				return err
@@ -129,32 +180,13 @@ func (s *Service) RecordPendingReview(id, check, actor, reason, recovery, result
 		}
 		_, err = tx.Exec("INSERT INTO submissions(key,hash,response) VALUES(?,?,?)", key, hash, string(body))
 		return err
-	})
-	if err == nil {
-		err = s.Store.Flush()
-	}
+	}()
 	return note, err
 }
 
-// ConfirmPendingReview binds a task-level observation to an exact current
-// candidate. It remains a human observation and never becomes check evidence.
-func (s *Service) ConfirmPendingReview(id, noteID, actor, requestKey string, expected ReviewExpectation) (HumanReviewNote, error) {
-	if !validReviewKey(requestKey) {
-		return HumanReviewNote{}, Error("IDEMPOTENCY_KEY_REQUIRED", "a unique review request key is required")
-	}
-	if strings.TrimSpace(actor) == "" {
-		return HumanReviewNote{}, Error("REVIEW_INPUT_REQUIRED", "reviewer is required")
-	}
-	request, _ := json.Marshal(struct {
-		Task, Note, Actor string
-		Expected          ReviewExpectation
-	}{id, noteID, actor, expected})
-	key, hash := "human-review-confirm:"+requestKey, store.Hash(request)
-	if _, err := s.Get(id); err != nil {
-		return HumanReviewNote{}, err
-	}
+func (s *Service) confirmPendingReviewTx(tx *store.Tx, id, noteID, actor, key, hash string, expected ReviewExpectation, env *RemoteReviewEnvironment) (HumanReviewNote, error) {
 	var note HumanReviewNote
-	err := s.Store.Write(func(tx *store.Tx) error {
+	err := func() error {
 		previous, found, err := replayHumanNote(tx, key, hash)
 		if found || err != nil {
 			note = previous
@@ -189,22 +221,33 @@ func (s *Service) ConfirmPendingReview(id, noteID, actor, requestKey string, exp
 		if selected.Check != "" {
 			return Error("REVIEW_CHECK_CONFIRM_REQUIRED", "confirm this opinion through its human check")
 		}
+		if selected.Candidate != "" && selected.Candidate != t.Candidate {
+			return Error("REVIEW_NOTE_VERSION_MISMATCH", "record a new opinion for the current candidate")
+		}
 		if selected.DefinitionRevision != t.Definition.Revision || selected.PlanRevision != t.Plan.Revision {
 			return Error("REVIEW_NOTE_VERSION_MISMATCH", "record a new opinion for the current definition and plan")
 		}
+		if env != nil {
+			if err = env.Validate(tx, &t); err != nil {
+				return err
+			}
+		}
+
 		workspace := t.CandidateWorkspace
 		if workspace == "" {
 			workspace = s.Root
 		}
-		fingerprint, err := Fingerprint(workspace)
-		if err != nil {
-			return err
-		}
-		if fingerprint != t.Candidate {
-			return Error("CANDIDATE_CHANGED", "the workspace no longer matches the candidate")
+		if env == nil {
+			fingerprint, err := Fingerprint(workspace)
+			if err != nil {
+				return err
+			}
+			if fingerprint != t.Candidate {
+				return Error("CANDIDATE_CHANGED", "the workspace no longer matches the candidate")
+			}
 		}
 		for ref, expectedHash := range selected.ArtifactHashes {
-			data, err := s.artifactAt(workspace, ref)
+			data, err := readReviewArtifact(s, tx, env, workspace, ref)
 			if err != nil || store.Hash(data) != expectedHash {
 				return Error("REVIEW_EVIDENCE_CHANGED", ref)
 			}
@@ -224,9 +267,6 @@ func (s *Service) ConfirmPendingReview(id, noteID, actor, requestKey string, exp
 		}
 		_, err = tx.Exec("INSERT INTO submissions(key,hash,response) VALUES(?,?,?)", key, hash, string(body))
 		return err
-	})
-	if err == nil {
-		err = s.Store.Flush()
-	}
+	}()
 	return note, err
 }

@@ -4,6 +4,7 @@ import (
 	"ael/internal/bootstrap"
 	"ael/internal/core"
 	"ael/internal/knowledge"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -42,7 +43,7 @@ func dashboardNext(service *core.Service, id string) (map[string]any, error) {
 	access := map[string]core.CheckAccess{}
 	for _, check := range safe.Definition.Checks {
 		checks[check.ID] = core.CurrentEvidence(&safe, check)
-		access[check.ID] = core.CheckAccess{EffectiveMethod: core.EffectiveCheckMethod(check)}
+		access[check.ID] = core.ReviewAccess(next, check)
 	}
 	result["summary"], result["current_checks"], result["current_runs"], result["check_access"] = summary, checks, summary.CurrentRuns, access
 	result["activity"], result["activity_truncated"], result["revision"] = activity, truncated, revision
@@ -183,7 +184,7 @@ func (h *standaloneHandler) remoteDashboard(w http.ResponseWriter, r *http.Reque
 	case "info":
 		var name string
 		err = h.server.store.DB.QueryRow("SELECT name FROM server_projects WHERE id=?", project).Scan(&name)
-		result = map[string]any{"project": "remote:" + project + ":" + principal.UserID + ":" + hex.EncodeToString(principal.CSRFHash), "project_name": name, "project_id": project, "remote": true, "role": role, "config": map[string]string{"mode": "remote"}, "service_version": bootstrap.Version, "service_build": bootstrap.Build, "knowledge_health": map[string]any{"sources": []any{}, "state": "central_snapshots"}}
+		result = map[string]any{"project": "remote:" + project + ":" + principal.UserID + ":" + hex.EncodeToString(principal.CSRFHash), "project_name": name, "project_id": project, "remote": true, "role": role, "actor": principal.Username, "config": map[string]string{"mode": "remote"}, "service_version": bootstrap.Version, "service_build": bootstrap.Build, "knowledge_health": map[string]any{"sources": []any{}, "state": "central_snapshots"}}
 	case "tasks":
 		days, _ := strconv.Atoi(q.Get("days"))
 		offsets := map[string]int{}
@@ -215,6 +216,27 @@ func (h *standaloneHandler) remoteDashboard(w http.ResponseWriter, r *http.Reque
 		result = map[string]any{"items": items, "counts": page.Counts, "total": page.Total, "limit": page.Limit, "offset": page.Offset, "offsets": page.Offsets}
 	case "task":
 		result, err = dashboardNext(service, id)
+	case "review-candidate":
+		task, e := service.Get(id)
+		err = e
+		if err == nil {
+			var latest, created string
+			err = service.Store.DB.QueryRow("SELECT candidate_id,created FROM portable_observations WHERE task_id=? ORDER BY rowid DESC LIMIT 1", id).Scan(&latest, &created)
+			if err == sql.ErrNoRows {
+				err = nil
+			}
+			blocked, blockErr := service.HumanReviewBlocker(id)
+			if blockErr != nil {
+				err = blockErr
+			}
+			result = map[string]any{"candidate": task.Candidate, "matches": task.Candidate != "" && reviewObservationMatches(task, latest, created), "blocked_check": blocked}
+		}
+	case "review-evidence":
+		artifacts, e := h.server.artifacts(project, service)
+		err = e
+		if err == nil {
+			result, err = artifacts.reviewEvidence(id)
+		}
 	case "task-tree":
 		tree, e := service.Tree(id)
 		err = e

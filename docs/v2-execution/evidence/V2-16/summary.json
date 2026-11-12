@@ -1,0 +1,13 @@
+{
+  "result": "PASS",
+  "mode": "external dual CLI clients, real rendered images and packaged browser; synthetic reviewer decisions",
+  "actions": [
+    "real-http-pass-and-idempotent-receipt",
+    "real-http-fail-and-idempotent-receipt",
+    "real-http-blocked-and-idempotent-receipt",
+    "provisional-opinion-non-gating-and-explicit-application",
+    "candidate-updated-through-external-repair",
+    "definition-changed-after-committed-review",
+    "external-command-after-human-completes-required-gates"
+  ]
+}

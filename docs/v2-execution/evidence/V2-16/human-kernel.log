@@ -1,0 +1,74 @@
+=== RUN   TestRemoteHumanReviewOutcomesAndAtomicReplay
+=== RUN   TestRemoteHumanReviewOutcomesAndAtomicReplay/pass
+=== RUN   TestRemoteHumanReviewOutcomesAndAtomicReplay/fail
+=== RUN   TestRemoteHumanReviewOutcomesAndAtomicReplay/blocked
+--- PASS: TestRemoteHumanReviewOutcomesAndAtomicReplay (2.06s)
+    --- PASS: TestRemoteHumanReviewOutcomesAndAtomicReplay/pass (0.73s)
+    --- PASS: TestRemoteHumanReviewOutcomesAndAtomicReplay/fail (0.67s)
+    --- PASS: TestRemoteHumanReviewOutcomesAndAtomicReplay/blocked (0.66s)
+=== RUN   TestRemoteHumanReviewRejectsStaleUnauthorizedAndMissingEvidence
+--- PASS: TestRemoteHumanReviewRejectsStaleUnauthorizedAndMissingEvidence (0.73s)
+=== RUN   TestRemoteHumanOpinionRemainsNonGatingAndCanBeAppliedExplicitly
+--- PASS: TestRemoteHumanOpinionRemainsNonGatingAndCanBeAppliedExplicitly (0.59s)
+=== RUN   TestReviewObservationDoesNotInvalidateAcceptedExecutionOutput
+--- PASS: TestReviewObservationDoesNotInvalidateAcceptedExecutionOutput (0.00s)
+=== RUN   TestRemoteBlockedReviewResumeIsExactAndReplayable
+--- PASS: TestRemoteBlockedReviewResumeIsExactAndReplayable (0.64s)
+=== RUN   TestRemoteReviewRejectsDefinitionAndPlanFormsAndCompletesOnlyAllChecks
+--- PASS: TestRemoteReviewRejectsDefinitionAndPlanFormsAndCompletesOnlyAllChecks (0.60s)
+=== RUN   TestRemoteCheckRevisionRetainsHistoryWithoutOpeningClientWorkspace
+--- PASS: TestRemoteCheckRevisionRetainsHistoryWithoutOpeningClientWorkspace (0.60s)
+PASS
+ok  	ael/internal/server	5.522s
+=== RUN   TestHumanReviewOutcomesAndIdempotency
+=== RUN   TestHumanReviewOutcomesAndIdempotency/pass
+=== RUN   TestHumanReviewOutcomesAndIdempotency/fail
+=== RUN   TestHumanReviewOutcomesAndIdempotency/blocked
+--- PASS: TestHumanReviewOutcomesAndIdempotency (0.65s)
+    --- PASS: TestHumanReviewOutcomesAndIdempotency/pass (0.21s)
+    --- PASS: TestHumanReviewOutcomesAndIdempotency/fail (0.24s)
+    --- PASS: TestHumanReviewOutcomesAndIdempotency/blocked (0.20s)
+=== RUN   TestHumanReviewEligibilityAndValidation
+=== RUN   TestHumanReviewEligibilityAndValidation/method_
+=== RUN   TestHumanReviewEligibilityAndValidation/method_human
+=== RUN   TestHumanReviewEligibilityAndValidation/method_model
+=== RUN   TestHumanReviewEligibilityAndValidation/method_scenario
+=== RUN   TestHumanReviewEligibilityAndValidation/method_command
+=== RUN   TestHumanReviewEligibilityAndValidation/inputs_and_revisions
+=== RUN   TestHumanReviewEligibilityAndValidation/inputs_and_revisions/no_explicit_result
+=== RUN   TestHumanReviewEligibilityAndValidation/inputs_and_revisions/blank_actor
+=== RUN   TestHumanReviewEligibilityAndValidation/inputs_and_revisions/no_evidence
+=== RUN   TestHumanReviewEligibilityAndValidation/inputs_and_revisions/missing_evidence
+=== RUN   TestHumanReviewEligibilityAndValidation/inputs_and_revisions/failure_without_recovery
+=== RUN   TestHumanReviewEligibilityAndValidation/inputs_and_revisions/wrong_candidate
+=== RUN   TestHumanReviewEligibilityAndValidation/inputs_and_revisions/wrong_revision
+=== RUN   TestHumanReviewEligibilityAndValidation/inputs_and_revisions/wrong_plan
+--- PASS: TestHumanReviewEligibilityAndValidation (1.08s)
+    --- PASS: TestHumanReviewEligibilityAndValidation/method_ (0.22s)
+    --- PASS: TestHumanReviewEligibilityAndValidation/method_human (0.19s)
+    --- PASS: TestHumanReviewEligibilityAndValidation/method_model (0.15s)
+    --- PASS: TestHumanReviewEligibilityAndValidation/method_scenario (0.16s)
+    --- PASS: TestHumanReviewEligibilityAndValidation/method_command (0.17s)
+    --- PASS: TestHumanReviewEligibilityAndValidation/inputs_and_revisions (0.19s)
+        --- PASS: TestHumanReviewEligibilityAndValidation/inputs_and_revisions/no_explicit_result (0.00s)
+        --- PASS: TestHumanReviewEligibilityAndValidation/inputs_and_revisions/blank_actor (0.00s)
+        --- PASS: TestHumanReviewEligibilityAndValidation/inputs_and_revisions/no_evidence (0.00s)
+        --- PASS: TestHumanReviewEligibilityAndValidation/inputs_and_revisions/missing_evidence (0.00s)
+        --- PASS: TestHumanReviewEligibilityAndValidation/inputs_and_revisions/failure_without_recovery (0.00s)
+        --- PASS: TestHumanReviewEligibilityAndValidation/inputs_and_revisions/wrong_candidate (0.00s)
+        --- PASS: TestHumanReviewEligibilityAndValidation/inputs_and_revisions/wrong_revision (0.00s)
+        --- PASS: TestHumanReviewEligibilityAndValidation/inputs_and_revisions/wrong_plan (0.00s)
+=== RUN   TestHumanReviewConcurrentRetryAndDeliveryGate
+--- PASS: TestHumanReviewConcurrentRetryAndDeliveryGate (0.19s)
+=== RUN   TestPendingHumanReviewRecordsWithoutChangingWorkOrGates
+--- PASS: TestPendingHumanReviewRecordsWithoutChangingWorkOrGates (0.19s)
+=== RUN   TestPendingHumanReviewCanBeExplicitlyUsedForARealHumanCheck
+--- PASS: TestPendingHumanReviewCanBeExplicitlyUsedForARealHumanCheck (0.20s)
+=== RUN   TestPendingHumanReviewConcurrentRetry
+--- PASS: TestPendingHumanReviewConcurrentRetry (0.08s)
+=== RUN   TestPendingHumanReviewConcurrentWithWorkSubmission
+--- PASS: TestPendingHumanReviewConcurrentWithWorkSubmission (0.16s)
+=== RUN   TestHumanReviewExactRejectsAnUnreviewedCandidate
+--- PASS: TestHumanReviewExactRejectsAnUnreviewedCandidate (0.20s)
+PASS
+ok  	ael/internal/core	3.050s

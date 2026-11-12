@@ -351,6 +351,10 @@ func (h *standaloneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.HasPrefix(r.URL.Path, "/api/v1/projects/") {
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v1/projects/"), "/")
+		if len(parts) == 2 && parts[1] == "reviews" {
+			h.remoteReview(w, r, p, parts[0])
+			return
+		}
 		if len(parts) >= 2 && parts[1] == "findings" {
 			h.remoteFindings(w, r, p, parts[0], parts[2:])
 			return

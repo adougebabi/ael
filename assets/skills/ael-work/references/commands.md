@@ -29,3 +29,5 @@
 双客户端恢复使用 `runner retry --pending PRIVATE_OPERATION_FILE`，领取回执追加 `--out NEW_PRIVATE_FILE`。显式工作区交接使用 `runner recover --runner RECEIVER --file PRIVATE_JSON`。请求字段、权限、原责任和有界重试规则见 [远程 Agent 协议](remote-agent.md)。
 
 外部发现通过 `finding report --file PRIVATE_JSON` 接入。`finding list` 支持任务、候选、严重性、完整性和文本筛选，`finding show --finding ID` 给出所有出现及原件。完整请求见 remote-agent.md。
+
+远程 human 检查使用中央 Dashboard 的会话人工验收入口。截图、基准和报告仍由外部客户端调用 artifact upload 上传，页面明确选择比较来源。reviewer/admin 的结论绑定准确版本与中央证据，普通 Agent 令牌无法调用人工裁定。详见 remote-agent.md 的人工裁定交接。

@@ -29,10 +29,14 @@ export function connectDashboard(project: Project | null, csrf = "", expired?: (
     let payload = body;
     if (body !== undefined) {
       const input = body as Record<string, any>;
-      if (url.pathname !== "/api/action" || !["pause", "cancel"].includes(input.action)) throw new ApiError("REMOTE_ACTION_UNAVAILABLE", "此操作需要对应执行者权限与责任。");
-      endpoint = `/api/v1/projects/${encodeURIComponent(project.id)}/tasks/${encodeURIComponent(input.id)}/${input.action}`;
-      const key = crypto.randomUUID();
-      payload = { reason: input.reason, expected_revision: input.remote_revision, operation_id: key, idempotency_key: key };
+      if (url.pathname === "/api/action" && ["review_result", "review_pending", "review_confirm", "review_resume"].includes(input.action)) {
+        endpoint = `/api/v1/projects/${encodeURIComponent(project.id)}/reviews`;
+      } else {
+        if (url.pathname !== "/api/action" || !["pause", "cancel"].includes(input.action)) throw new ApiError("REMOTE_ACTION_UNAVAILABLE", "此操作需要对应执行者权限与责任。");
+        endpoint = `/api/v1/projects/${encodeURIComponent(project.id)}/tasks/${encodeURIComponent(input.id)}/${input.action}`;
+        const key = crypto.randomUUID();
+        payload = { reason: input.reason, expected_revision: input.remote_revision, operation_id: key, idempotency_key: key };
+      }
     }
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 20000);

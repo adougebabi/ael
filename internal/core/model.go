@@ -120,7 +120,21 @@ type Attempt struct {
 	OwnerPID           int        `json:"owner_pid,omitempty" yaml:"owner_pid,omitempty"`
 	OwnerIdentity      string     `json:"owner_identity,omitempty" yaml:"owner_identity,omitempty"`
 }
+
+// ReviewComparison records the exact selected images and their central provenance.
+type ReviewImage struct {
+	ArtifactID string `json:"artifact_id"`
+	SHA256     string `json:"sha256"`
+	Candidate  string `json:"candidate"`
+	Source     string `json:"source"`
+	Uploader   string `json:"uploader"`
+}
+type ReviewComparison struct {
+	Baseline ReviewImage `json:"baseline"`
+	Actual   ReviewImage `json:"actual"`
+}
 type Evidence struct {
+	Comparison          *ReviewComparison `json:"comparison,omitempty"`
 	DiagnosticArtifacts []string          `json:"diagnostic_artifacts,omitempty" yaml:"diagnostic_artifacts,omitempty"`
 	ReviewNoteID        string            `json:"review_note_id,omitempty" yaml:"review_note_id,omitempty"`
 	ReusedFrom          string            `json:"reused_from,omitempty"`
@@ -145,6 +159,7 @@ type Evidence struct {
 // HumanReviewNote is an explicitly recorded observation, not check evidence.
 // It remains non-gating until a person separately reviews a specific candidate.
 type HumanReviewNote struct {
+	Comparison         *ReviewComparison `json:"comparison,omitempty"`
 	ID                 string            `json:"id"`
 	Check              string            `json:"check,omitempty"`
 	Actor              string            `json:"actor"`

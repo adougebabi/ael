@@ -1,0 +1,724 @@
+{
+  "passed": true,
+  "total_additions": 0,
+  "total_deletions": 0,
+  "affected_modules": [
+    ".",
+    "assets",
+    "docs",
+    "docs/v2-execution/evidence/V2-16",
+    "internal",
+    "scripts",
+    "web"
+  ],
+  "changes": [
+    {
+      "path": "README.md",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": true,
+      "is_test": false
+    },
+    {
+      "path": "assets/skills/ael-work/references/commands.md",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": true,
+      "is_test": false
+    },
+    {
+      "path": "assets/skills/ael-work/references/remote-agent.md",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": true,
+      "is_test": false
+    },
+    {
+      "path": "docs/architecture.md",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": true,
+      "is_test": false
+    },
+    {
+      "path": "docs/remote-tasks.md",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": true,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/WORKLOG.md",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": true,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/README.md",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": true,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/agent-regression.log",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/artifact-regression.log",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/binary-sha256.json",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/collaboration-regression.log",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/comparison-overlay.png",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/context-regression.log",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/dashboard-regression.log",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/expanded-browser-red.log",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/findings-regression.log",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/formal.log",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/go-full.log",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/human-kernel.log",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/initial-browser.log",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/initial-fixture-01.log",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/initial-fixture-02.log",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/local-regression.log",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/local-ui-red.log",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/local-ui-second-red.log",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/local-ui.log",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/package.log",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/post-review-revision-red.log",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/race.log",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/remote-tasks-regression.log",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/security-core.json",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/security-server.json",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/security-web.json",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/stale-review-retained.png",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/summary.json",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/unavailable-evidence.png",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/vet.log",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/worklog-tests.log",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/receipts/V2-09.md",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": true,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/receipts/V2-10.md",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": true,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/receipts/V2-11.md",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": true,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/receipts/V2-12.md",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": true,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/receipts/V2-13.md",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": true,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/receipts/V2-14.md",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": true,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/receipts/V2-15.md",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": true,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/receipts/V2-16.md",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": true,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/tasks/V2-16.md",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": true,
+      "is_test": false
+    },
+    {
+      "path": "internal/core/model.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/core/pending_human_review.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/core/remote_review.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/core/review_readiness.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/core/service.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/core/verify.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/remote_dashboard.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/remote_project.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/remote_review.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/remote_review_test.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": true
+    },
+    {
+      "path": "internal/server/standalone_http.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/ui/assets/StandaloneApp-CU3nu0xf.js",
+      "type": "renamed",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/ui/assets/index-C9mo1a7s.css",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/ui/assets/index-CWTa2Mg3.js",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/ui/assets/index-DuBfnoWY.css",
+      "type": "deleted",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/ui/assets/index-w44OEBC3.js",
+      "type": "deleted",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/ui/index.html",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "scripts/remote_review_acceptance.py",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "web/playwright.review.config.ts",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "web/src/components/EvidenceComparison.vue",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "web/src/components/FindingPanel.vue",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "web/src/components/ManualReviewDialog.vue",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "web/src/pages/TaskPage.vue",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "web/src/remoteDashboard.ts",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "web/tests/review.spec.ts",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": true
+    },
+    {
+      "path": "web/tests/usability.spec.ts",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": true
+    }
+  ],
+  "issues": [
+    {
+      "severity": "info",
+      "message": "模块 internal 新增了文件，建议更新 README.md",
+      "related_files": [
+        "internal/core/remote_review.go",
+        "internal/server/remote_review.go",
+        "internal/server/remote_review_test.go",
+        "internal/server/ui/assets/index-CWTa2Mg3.js"
+      ]
+    },
+    {
+      "severity": "info",
+      "message": "模块 scripts 新增了文件，建议更新 README.md",
+      "related_files": [
+        "scripts/remote_review_acceptance.py"
+      ]
+    },
+    {
+      "severity": "info",
+      "message": "模块 web 新增了文件，建议更新 README.md",
+      "related_files": [
+        "web/playwright.review.config.ts",
+        "web/tests/review.spec.ts"
+      ]
+    },
+    {
+      "severity": "info",
+      "message": "配置文件有变更，请确认是否需要更新文档",
+      "related_files": [
+        "docs/v2-execution/evidence/V2-16/binary-sha256.json",
+        "docs/v2-execution/evidence/V2-16/security-core.json",
+        "docs/v2-execution/evidence/V2-16/security-server.json",
+        "docs/v2-execution/evidence/V2-16/security-web.json",
+        "docs/v2-execution/evidence/V2-16/summary.json"
+      ]
+    },
+    {
+      "severity": "info",
+      "message": "删除了 2 个文件，请确认相关引用已清理",
+      "related_files": [
+        "internal/server/ui/assets/index-DuBfnoWY.css",
+        "internal/server/ui/assets/index-w44OEBC3.js"
+      ]
+    }
+  ],
+  "doc_sync_status": {
+    "internal/DESIGN.md": true,
+    "scripts/DESIGN.md": true,
+    "web/DESIGN.md": true
+  }
+}

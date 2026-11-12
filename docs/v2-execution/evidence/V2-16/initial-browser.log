@@ -1,0 +1,132 @@
+
+Running 4 tests using 1 worker
+
+(node:12401) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:12401) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/review.spec.ts:21:1 › 明确基准、键盘比较、丢失响应和幂等人工回执 (5.7s)
+(node:13123) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:13123) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  2 tests/review.spec.ts:67:1 › 新候选拒绝旧表单且保留输入及图片选择 (15.5s)
+(node:14866) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:14866) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  3 tests/review.spec.ts:91:1 › 缺失、清理及未完成上传分别显示并阻止错误验收 (15.5s)
+(node:15143) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:15143) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  4 tests/review.spec.ts:109:1 › 只读会话可读图片并受到人工裁定权限保护 (314ms)
+
+
+  1) tests/review.spec.ts:21:1 › 明确基准、键盘比较、丢失响应和幂等人工回执 ─────────────────────────────────────────────
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoHaveValue[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Locator: getByRole('dialog').getByRole('region', { name: '证据图片比较' }).getByLabel('基准图片', { exact: true })
+    Expected: [32m""[39m
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+    [2m  - Expect "toHaveValue" with timeout 5000ms[22m
+    [2m  - waiting for getByRole('dialog').getByRole('region', { name: '证据图片比较' }).getByLabel('基准图片', { exact: true })[22m
+
+
+      23 |   const dialog = await open(page, "browser");
+      24 |   const compare = dialog.getByRole("region", { name: "证据图片比较" });
+    > 25 |   await expect(compare.getByLabel("基准图片", { exact: true })).toHaveValue("");
+         |                                                             ^
+      26 |   await expect(dialog.getByRole("radio", { name: "通过", exact: true })).not.toBeChecked();
+      27 |   await compare.getByLabel("基准图片", { exact: true }).selectOption(fixture.tasks.browser.baseline);
+      28 |   await compare.getByLabel("实际图片", { exact: true }).selectOption(fixture.tasks.browser.actual);
+        at /Users/vinson/Documents/project/个人/ael/web/tests/review.spec.ts:25:61
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../private/tmp/ael-v216-review-03/browser/review-明确基准、键盘比较、丢失响应和幂等人工回执/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../private/tmp/ael-v216-review-03/browser/review-明确基准、键盘比较、丢失响应和幂等人工回执/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../private/tmp/ael-v216-review-03/browser/review-明确基准、键盘比较、丢失响应和幂等人工回执/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../../private/tmp/ael-v216-review-03/browser/review-明确基准、键盘比较、丢失响应和幂等人工回执/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) tests/review.spec.ts:67:1 › 新候选拒绝旧表单且保留输入及图片选择 ────────────────────────────────────────────────
+
+    TimeoutError: locator.selectOption: Timeout 15000ms exceeded.
+    Call log:
+    [2m  - waiting for getByRole('dialog').getByLabel('基准图片', { exact: true })[22m
+
+
+      68 |   await login(page);
+      69 |   let dialog = await open(page, "stale");
+    > 70 |   await dialog.getByLabel("基准图片", { exact: true }).selectOption(fixture.tasks.stale.baseline);
+         |                                                    ^
+      71 |   await dialog.getByLabel("实际图片", { exact: true }).selectOption(fixture.tasks.stale.actual);
+      72 |   await dialog.getByRole("radio", { name: "通过", exact: true }).check();
+      73 |   await dialog.getByLabel("实际观察与理由", { exact: false }).fill("KEEP_OLD_VERSION_INPUT");
+        at /Users/vinson/Documents/project/个人/ael/web/tests/review.spec.ts:70:52
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../private/tmp/ael-v216-review-03/browser/review-新候选拒绝旧表单且保留输入及图片选择/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../private/tmp/ael-v216-review-03/browser/review-新候选拒绝旧表单且保留输入及图片选择/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../private/tmp/ael-v216-review-03/browser/review-新候选拒绝旧表单且保留输入及图片选择/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../../private/tmp/ael-v216-review-03/browser/review-新候选拒绝旧表单且保留输入及图片选择/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) tests/review.spec.ts:91:1 › 缺失、清理及未完成上传分别显示并阻止错误验收 ────────────────────────────────────────────
+
+    TimeoutError: locator.selectOption: Timeout 15000ms exceeded.
+    Call log:
+    [2m  - waiting for getByRole('dialog').getByLabel('基准图片', { exact: true })[22m
+
+
+      92 |   await login(page);
+      93 |   const dialog = await open(page, "missing");
+    > 94 |   await dialog.getByLabel("基准图片", { exact: true }).selectOption(fixture.tasks.missing.baseline);
+         |                                                    ^
+      95 |   await dialog.getByLabel("实际图片", { exact: true }).selectOption(fixture.tasks.missing.actual);
+      96 |   await expect(dialog.getByRole("region", { name: "证据图片比较" })).toContainText("原件已清理");
+      97 |   await expect(dialog.getByRole("region", { name: "证据图片比较" })).toContainText("原件缺失");
+        at /Users/vinson/Documents/project/个人/ael/web/tests/review.spec.ts:94:52
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../../../private/tmp/ael-v216-review-03/browser/review-缺失、清理及未完成上传分别显示并阻止错误验收/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../../private/tmp/ael-v216-review-03/browser/review-缺失、清理及未完成上传分别显示并阻止错误验收/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../private/tmp/ael-v216-review-03/browser/review-缺失、清理及未完成上传分别显示并阻止错误验收/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../../private/tmp/ael-v216-review-03/browser/review-缺失、清理及未完成上传分别显示并阻止错误验收/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3 failed
+    tests/review.spec.ts:21:1 › 明确基准、键盘比较、丢失响应和幂等人工回执 ──────────────────────────────────────────────
+    tests/review.spec.ts:67:1 › 新候选拒绝旧表单且保留输入及图片选择 ─────────────────────────────────────────────────
+    tests/review.spec.ts:91:1 › 缺失、清理及未完成上传分别显示并阻止错误验收 ─────────────────────────────────────────────
+  1 passed (39.2s)
+Traceback (most recent call last):
+  File "/Users/vinson/Documents/project/个人/ael/scripts/remote_review_acceptance.py", line 198, in <module>
+    if result.returncode:raise RuntimeError('packaged human review browser acceptance failed')
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: packaged human review browser acceptance failed

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"strings"
+	"time"
 )
 
 const lastReviewBlockerEvent = `SELECT kind,body FROM events WHERE task_id=? AND (kind IN ('paused','resumed','review_resumed','definition_revised') OR (kind='submitted' AND json_extract(body,'$.result.status')='blocked')) ORDER BY id DESC LIMIT 1`
@@ -82,51 +83,62 @@ func (s *Service) ResumeBlockedHumanReview(id, check string, expected ReviewExpe
 	}
 	updated := n.Task.Updated
 	return s.mutate(id, "review_resumed", func(tx *store.Tx, t *Task) error {
-		if !t.Updated.Equal(updated) || t.Status != "open" || t.Step != "verify" || !t.Paused || t.Confirmation != nil || t.Blocker == nil || t.Blocker.ResumeAt != "verify" || t.Failure != t.Blocker.Reason {
-			return Error("REVIEW_RESUME_NOT_ALLOWED", "the task or its blocker changed")
+		return s.resumeBlockedReviewTx(tx, t, id, check, expected, updated, nil)
+	})
+}
+
+func (s *Service) resumeBlockedReviewTx(tx *store.Tx, t *Task, id, check string, expected ReviewExpectation, updated time.Time, env *RemoteReviewEnvironment) error {
+
+	if !t.Updated.Equal(updated) || t.Status != "open" || t.Step != "verify" || !t.Paused || t.Confirmation != nil || t.Blocker == nil || t.Blocker.ResumeAt != "verify" || t.Failure != t.Blocker.Reason {
+		return Error("REVIEW_RESUME_NOT_ALLOWED", "the task or its blocker changed")
+	}
+	if expected.Candidate == "" || !reviewSnapshotMatches(t, expected) {
+		return Error("REVIEW_VERSION_MISMATCH", "review the current candidate and revisions")
+	}
+	if timeBudgetExhausted(t) {
+		return Error("BUDGET_EXHAUSTED", "review the task budget first")
+	}
+	var selected Check
+	for _, c := range t.Definition.Checks {
+		if c.ID == check {
+			selected = c
 		}
-		if expected.Candidate == "" || !reviewSnapshotMatches(t, expected) {
-			return Error("REVIEW_VERSION_MISMATCH", "review the current candidate and revisions")
+	}
+	if selected.ID == "" || EffectiveCheckMethod(selected) != "human" || len(selected.Command) != 0 {
+		return Error("CHECK_METHOD_MISMATCH", check)
+	}
+	ev := CurrentEvidence(t, selected)
+	if ev == nil || ev.Result != "blocked" || ev.Reason != t.Blocker.Reason {
+		return Error("REVIEW_RESUME_NOT_ALLOWED", "this check is not the current blocker")
+	}
+	var kind, raw string
+	if err := tx.Row(lastReviewBlockerEvent, id).Scan(&kind, &raw); err != nil {
+		return err
+	}
+	if blockedReviewCheck(t, kind, raw) != check {
+		return Error("REVIEW_RESUME_NOT_ALLOWED", "the blocker is not owned by this check")
+	}
+	for _, a := range t.Attempts {
+		if a.Status == "running" || a.Status == "interrupted" {
+			return Error("REVIEW_RESUME_NOT_ALLOWED", "an old execution still needs recovery")
 		}
-		if timeBudgetExhausted(t) {
-			return Error("BUDGET_EXHAUSTED", "review the task budget first")
-		}
-		var selected Check
-		for _, c := range t.Definition.Checks {
-			if c.ID == check {
-				selected = c
-			}
-		}
-		if selected.ID == "" || EffectiveCheckMethod(selected) != "human" || len(selected.Command) != 0 {
-			return Error("CHECK_METHOD_MISMATCH", check)
-		}
-		ev := CurrentEvidence(t, selected)
-		if ev == nil || ev.Result != "blocked" || ev.Reason != t.Blocker.Reason {
-			return Error("REVIEW_RESUME_NOT_ALLOWED", "this check is not the current blocker")
-		}
-		var kind, raw string
-		if err := tx.Row(lastReviewBlockerEvent, id).Scan(&kind, &raw); err != nil {
+	}
+	var locks int
+	if err := tx.Row("SELECT count(*) FROM workspace_locks WHERE task=?", id).Scan(&locks); err != nil {
+		return err
+	}
+	if locks != 0 {
+		return Error("REVIEW_RESUME_NOT_ALLOWED", "a previous workspace lock still needs recovery")
+	}
+	workspace := t.CandidateWorkspace
+	if workspace == "" {
+		workspace = s.Root
+	}
+	if env != nil {
+		if err := env.Validate(tx, t); err != nil {
 			return err
 		}
-		if blockedReviewCheck(t, kind, raw) != check {
-			return Error("REVIEW_RESUME_NOT_ALLOWED", "the blocker is not owned by this check")
-		}
-		for _, a := range t.Attempts {
-			if a.Status == "running" || a.Status == "interrupted" {
-				return Error("REVIEW_RESUME_NOT_ALLOWED", "an old execution still needs recovery")
-			}
-		}
-		var locks int
-		if err := tx.Row("SELECT count(*) FROM workspace_locks WHERE task=?", id).Scan(&locks); err != nil {
-			return err
-		}
-		if locks != 0 {
-			return Error("REVIEW_RESUME_NOT_ALLOWED", "a previous workspace lock still needs recovery")
-		}
-		workspace := t.CandidateWorkspace
-		if workspace == "" {
-			workspace = s.Root
-		}
+	} else {
 		fingerprint, err := Fingerprint(workspace)
 		if err != nil {
 			return err
@@ -134,8 +146,46 @@ func (s *Service) ResumeBlockedHumanReview(id, check string, expected ReviewExpe
 		if fingerprint != t.Candidate {
 			return Error("CANDIDATE_CHANGED", "the workspace no longer matches the candidate")
 		}
-		t.Paused = false
-		t.Blocker = nil
-		return nil
-	})
+	}
+	t.Paused = false
+	t.Blocker = nil
+	return nil
+}
+
+func (s *Service) RemoteResumeReviewTx(tx *store.Tx, id, check string, expected ReviewExpectation, updated time.Time, env *RemoteReviewEnvironment) (Next, error) {
+	if !s.RemoteAuthority || env == nil || env.Validate == nil {
+		return Next{}, Error("REMOTE_OPERATION_REQUIRED", "authorized review environment required")
+	}
+	if err := s.active(); err != nil {
+		return Next{}, err
+	}
+	task, err := load(tx, id)
+	if err != nil {
+		return Next{}, err
+	}
+	if err = s.resumeBlockedReviewTx(tx, &task, id, check, expected, updated, env); err != nil {
+		return Next{}, err
+	}
+	if err = s.save(tx, &task); err != nil {
+		return Next{}, err
+	}
+	if err = tx.Event(id, "review_resumed", nil); err != nil {
+		return Next{}, err
+	}
+	next := task.BaseNext()
+	next.Task = &task
+	return next, nil
+}
+
+func (s *Service) HumanReviewBlocker(id string) (string, error) {
+	task, err := s.Get(id)
+	if err != nil {
+		return "", err
+	}
+	var kind, raw string
+	err = s.Store.DB.QueryRow(lastReviewBlockerEvent, id).Scan(&kind, &raw)
+	if err != nil && err != sql.ErrNoRows {
+		return "", err
+	}
+	return blockedReviewCheck(&task, kind, raw), nil
 }

@@ -106,3 +106,13 @@ V2-13 的双客户端领取、持久待提交记录、固定字节恢复与显�
 POST `/api/v1/projects/ID/findings` 复用 context 检查报告事务和当前修订/候选校验。GET 同路径提供任务、候选、严重性和完整性筛选，GET `/findings/FINDING_ID` 返回不可覆盖的出现记录、报告来源、证据 hash 及当前可用性。项目角色按每次请求重新校验。
 
 观察阶段附件可显式带 context_id，它必须属于当前任务修订和最新观察候选。此绑定用于诊断资料接入，执行结果提交仍校验原 Attempt、fence、租约及 finalized 关联。
+
+## 远程人工验收与图片比较
+
+项目 reviewer/admin 登录中央 Dashboard 后，可在任务“检查与验收”中记录人工意见或对声明为 human 的检查提交 pass/fail/blocked。记录人来自登录身份。正式提交绑定显示的候选、定义和计划，包含实际证据、观察及失败/阻塞恢复条件；其余必要检查继续参与门禁。普通 Agent 令牌不能提交人工裁定。
+
+图片比较从明确选择基准和实际图开始，可并排、缩放、叠加、定位及下载中央原件。图像由外部客户端通过原 artifact upload 上传。未知基准保持待选择，来源、上传者和候选可追溯；发现报告携带的页面、视口、环境及交互证据一同展示。候选变化时保留输入和选择，重新读取后须再次确认。只有明确相同版本的当前检查会得到正式结论。
+
+会话 API 为 POST `/api/v1/projects/ID/reviews`。请求字段为 action（review_result、review_pending、review_confirm、review_resume）、id、unit、reason、recovery、result、artifacts、candidate、revision、plan_revision、request_key，可附 review_note_id 和 comparison（baseline、actual 中央附件 ID）。executor 兼容旧表单字段，服务端始终使用实际会话身份。相同请求和 request_key 可恢复同一回执，修改内容须用新键。原始图片与比较来源在正式证据中保存。读取和上传未完成状态分别由 Dashboard 的 review-evidence 与原附件接口投影。
+
+隔离正式验收入口为 `python3 scripts/remote_review_acceptance.py --bundle dist --out /tmp/ael-review-NEW`，包括两个客户端正式 CLI 上传、真实浏览器图像、三种结论和打包界面操作。

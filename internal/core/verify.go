@@ -253,26 +253,22 @@ func (s *Service) reviewReplay(key, hash string) (Next, bool, error) {
 	return previous, true, s.Store.Flush()
 }
 
-func (s *Service) review(id, check, actor, reason, recovery, result string, refs []string, expected *ReviewExpectation, key, hash, noteID string) (Next, error) {
+func validateHumanReview(t Task, check, actor, reason, recovery, result string, refs []string, expected *ReviewExpectation, noteID string) (Check, error) {
 	if result != "pass" && result != "fail" && result != "blocked" {
-		return Next{}, Error("INVALID_RESULT", "select pass, fail or blocked")
+		return Check{}, Error("INVALID_RESULT", "select pass, fail or blocked")
 	}
 	if strings.TrimSpace(actor) == "" || strings.TrimSpace(reason) == "" || (result != "blocked" && len(refs) == 0) {
-		return Next{}, Error("HUMAN_EVIDENCE_REQUIRED", "actor and observation are required; pass and fail require actual evidence")
+		return Check{}, Error("HUMAN_EVIDENCE_REQUIRED", "actor and observation are required; pass and fail require actual evidence")
 	}
 	if result != "pass" && strings.TrimSpace(recovery) == "" {
-		return Next{}, Error("RECOVERY_REQUIRED", "describe the correction or conditions needed to continue")
-	}
-	t, e := s.Get(id)
-	if e != nil {
-		return Next{}, e
+		return Check{}, Error("RECOVERY_REQUIRED", "describe the correction or conditions needed to continue")
 	}
 	if expected != nil {
 		if expected.Candidate == "" || expected.DefinitionRevision <= 0 || expected.PlanRevision <= 0 {
-			return Next{}, Error("REVIEW_VERSION_REQUIRED", "refresh the task and review its exact candidate and revisions")
+			return Check{}, Error("REVIEW_VERSION_REQUIRED", "refresh the task and review its exact candidate and revisions")
 		}
 		if expected.Candidate != t.Candidate || expected.DefinitionRevision != t.Definition.Revision || expected.PlanRevision != t.Plan.Revision {
-			return Next{}, Error("REVIEW_VERSION_MISMATCH", "review the updated candidate before recording a result")
+			return Check{}, Error("REVIEW_VERSION_MISMATCH", "review the updated candidate before recording a result")
 		}
 	}
 	var c Check
@@ -282,10 +278,10 @@ func (s *Service) review(id, check, actor, reason, recovery, result string, refs
 		}
 	}
 	if c.ID == "" || len(c.Command) > 0 {
-		return Next{}, Error("MANUAL_CHECK_REQUIRED", check)
+		return Check{}, Error("MANUAL_CHECK_REQUIRED", check)
 	}
 	if EffectiveCheckMethod(c) != "human" {
-		return Next{}, Error("CHECK_METHOD_MISMATCH", "declared check capability cannot be replaced with human review")
+		return Check{}, Error("CHECK_METHOD_MISMATCH", "declared check capability cannot be replaced with human review")
 	}
 	if noteID != "" {
 		var note *HumanReviewNote
@@ -296,17 +292,32 @@ func (s *Service) review(id, check, actor, reason, recovery, result string, refs
 			}
 		}
 		if note == nil {
-			return Next{}, Error("REVIEW_NOTE_MISSING", noteID)
+			return Check{}, Error("REVIEW_NOTE_MISSING", noteID)
 		}
 		if note.Status != "pending" {
-			return Next{}, Error("REVIEW_NOTE_ALREADY_CONFIRMED", noteID)
+			return Check{}, Error("REVIEW_NOTE_ALREADY_CONFIRMED", noteID)
 		}
 		if note.Check != "" && note.Check != check {
-			return Next{}, Error("REVIEW_NOTE_CHECK_MISMATCH", check)
+			return Check{}, Error("REVIEW_NOTE_CHECK_MISMATCH", check)
+		}
+		if note.Candidate != "" && note.Candidate != t.Candidate {
+			return Check{}, Error("REVIEW_NOTE_VERSION_MISMATCH", "record a new opinion for the current candidate")
 		}
 		if note.DefinitionRevision != t.Definition.Revision || note.PlanRevision != t.Plan.Revision {
-			return Next{}, Error("REVIEW_NOTE_VERSION_MISMATCH", "record a new opinion for the current definition and plan")
+			return Check{}, Error("REVIEW_NOTE_VERSION_MISMATCH", "record a new opinion for the current definition and plan")
 		}
+	}
+	return c, nil
+}
+
+func (s *Service) review(id, check, actor, reason, recovery, result string, refs []string, expected *ReviewExpectation, key, hash, noteID string) (Next, error) {
+	t, e := s.Get(id)
+	if e != nil {
+		return Next{}, e
+	}
+	c, e := validateHumanReview(t, check, actor, reason, recovery, result, refs, expected, noteID)
+	if e != nil {
+		return Next{}, e
 	}
 	workspace := t.CandidateWorkspace
 	if workspace == "" {

@@ -1,0 +1,114 @@
+initialized single
+initialized empty
+initialized many
+seeded tasks and 1005 knowledge records
+initialized migration
+{
+  "isolated": true,
+  "out": "/private/tmp/ael-v216-local-ui-complete",
+  "projects": {
+    "single": {
+      "root": "/private/tmp/ael-v216-local-ui-complete/single/project",
+      "runtime": "/private/tmp/ael-v216-local-ui-complete/single/runtime",
+      "port": 7351,
+      "url": "http://127.0.0.1:7351",
+      "data_dir": "/private/tmp/ael-v216-local-ui-complete/single/runtime/f7099c363b2f4a3e0c932251"
+    },
+    "empty": {
+      "root": "/private/tmp/ael-v216-local-ui-complete/empty/project",
+      "runtime": "/private/tmp/ael-v216-local-ui-complete/empty/runtime",
+      "port": 7354,
+      "url": "http://127.0.0.1:7354",
+      "data_dir": "/private/tmp/ael-v216-local-ui-complete/empty/runtime/459d4fe1af3dc8693696577e"
+    },
+    "many": {
+      "root": "/private/tmp/ael-v216-local-ui-complete/many/project",
+      "runtime": "/private/tmp/ael-v216-local-ui-complete/many/runtime",
+      "port": 7352,
+      "url": "http://127.0.0.1:7352",
+      "warning_batch": "migration-5f9001ddaa5907fd7cfd",
+      "data_dir": "/private/tmp/ael-v216-local-ui-complete/many/runtime/36875d941fef13e24def056d"
+    },
+    "migration": {
+      "root": "/private/tmp/ael-v216-local-ui-complete/migration/project",
+      "runtime": "/private/tmp/ael-v216-local-ui-complete/migration/runtime",
+      "port": 7353,
+      "url": "http://127.0.0.1:7353",
+      "data_dir": "/private/tmp/ael-v216-local-ui-complete/migration/runtime/5afa8124e7809c58ed423b38"
+    }
+  },
+  "version": "0.1.18",
+  "build": "b7c0d7f-f3d3785e0ea9"
+}
+
+> ael-dashboard@0.1.18 test:usability
+> playwright test --config=playwright.usability.config.ts
+
+
+Running 59 tests using 1 worker
+
+(node:15306) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:15306) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 tests/usability.spec.ts:103:1 › A01 单任务：紧凑五分组与真实等待接手 (435ms)
+  ✓   2 tests/usability.spec.ts:125:1 › A02 多任务：并行执行、等待接手、环境、确认分组同源 (5.1s)
+  ✓   3 tests/usability.spec.ts:200:1 › A03 分组分页、详情直达、返回保留筛选位置 (3.8s)
+  ✓   4 tests/usability.spec.ts:248:1 › A04 单项失败与未执行分开，按需查看真实证据 (464ms)
+  ✓   5 tests/usability.spec.ts:266:1 › A05 千条资料：分类搜索分页与正文懒加载 (839ms)
+  ✓   6 tests/usability.spec.ts:298:1 › A06 状态不改写、Markdown、真实链接、来源与替代关系 (944ms)
+  ✓   7 tests/usability.spec.ts:347:1 › A07 大量观察事件仍可诊断，真实变化不会被淹没 (501ms)
+  ✓   8 tests/usability.spec.ts:382:1 › A08 显式多任务、规范和决策关系汇总且可往返 (472ms)
+  ✓   9 tests/usability.spec.ts:421:1 › A09 日期未知、实现未发布、决定与否决均保持原事实 (753ms)
+  ✓  10 tests/usability.spec.ts:461:1 › A10 大量迁移告警先汇总，当前阻断与历史可分页定位 (9.5s)
+  ✓  11 tests/usability.spec.ts:499:1 › A11 断线恢复、真实空、后端错误与快速搜索无旧响应覆盖 (8.2s)
+  ✓  12 tests/usability.spec.ts:545:1 › A12a 创建、接手、暂缓、恢复、检查、取消与删除均写入隔离库 (25.1s)
+  ✓  13 tests/usability.spec.ts:717:1 › A12b 精确版本确认、过期失败保留输入与重新审阅 (859ms)
+  ✓  14 tests/usability.spec.ts:770:1 › A12c 迁移真实预览、错误摘要、应用防重复、核验修复回滚 (795ms)
+  ✓  15 tests/usability.spec.ts:823:1 › A13 深路由刷新、键盘焦点和多尺寸无全页溢出 (19.2s)
+  ✓  16 tests/usability.spec.ts:890:1 › A11b 阅读重试与异步对象隔离，未提供依据不冒充已使用版本 (2.6s)
+  ✓  17 tests/usability.spec.ts:973:1 › A12d 领取回执成功而上下文失败时只重试读取，不重复领取 (493ms)
+  ✓  18 tests/usability.spec.ts:1017:1 › A12e 原有交付节点保留准确授权与真实回执，发布事实可追溯 (1.1s)
+  ✓  19 tests/usability.spec.ts:1094:1 › A12f 人工通过明确绑定所审阅候选，过期提交不能批准新产物 (1.7s)
+  ✓  20 tests/usability.spec.ts:1185:1 › A12g 工作台旧方法入口、失败与受阻保留真实结果 (1.8s)
+  ✓  21 tests/usability.spec.ts:1257:1 › A15 各主页面和检查详情的四种视口 (29.1s)
+  ✓  22 tests/usability.spec.ts:1283:1 › A16 外观切换持久化且不改变任务状态 (2.0s)
+  ✓  23 tests/usability.spec.ts:1300:1 › A17 全局查找连接真实资料并可跳转 (345ms)
+  ✓  24 tests/usability.spec.ts:1311:1 › A19 顶栏刷新重新读取当前页面数据 (249ms)
+  ✓  25 tests/usability.spec.ts:1320:1 › A20 本机回环服务可通过 localhost 访问 (217ms)
+  ✓  26 tests/usability.spec.ts:1328:1 › A18 方案调整和否决均记录决定而不取消任务 (790ms)
+  ✓  27 tests/usability.spec.ts:1351:1 › A14 实际项目入口使用内嵌离线资源及版本可追溯 (1.1s)
+  ✓  28 tests/usability.spec.ts:1386:1 › A21 接手后刷新及返回仍可用原领取提交，其他标签页不会自动接手 (558ms)
+  ✓  29 tests/usability.spec.ts:1416:1 › A22 任务四个分区按参考结构呈现真实内容 (675ms)
+  ✓  30 tests/usability.spec.ts:1448:1 › A23 提交已保存但回执丢失时刷新后使用原请求重试 (585ms)
+  ✓  31 tests/usability.spec.ts:1475:1 › A24 凭据丢失的接手只有确认所有旧执行停止后才能恢复 (369ms)
+  ✓  32 tests/usability.spec.ts:1492:1 › A25 产物不存在的明确拒绝允许修正后提交 (648ms)
+  ✓  33 tests/usability.spec.ts:1512:1 › A26 工作台任务行可直接进入符合条件的人工验收 (438ms)
+  ✓  34 tests/usability.spec.ts:1527:1 › A27 提交响应返回前切换任务不会误清另一任务状态 (379ms)
+  ✓  35 tests/usability.spec.ts:1559:1 › A28 详情长范围可完整展开，侧栏列出可阅读的真实依据 (437ms)
+  ✓  36 tests/usability.spec.ts:1581:1 › A29 人工验收草稿重开保留输入，未知提交可安全重放 (1.1s)
+  ✓  37 tests/usability.spec.ts:1621:1 › A30 四项检查通过且待人工验收时对齐工作台与详情入口 (893ms)
+  ✓  38 tests/usability.spec.ts:1650:1 › A31 资料分区、筛选清除和诊断摘要连接真实数据 (662ms)
+  ✓  39 tests/usability.spec.ts:1669:1 › A32 工作台可恢复已提交但响应丢失的人工验收 (785ms)
+  ✓  40 tests/usability.spec.ts:1701:1 › A33 不会把同端口其他项目的人工验收草稿当成本项目输入 (439ms)
+  ✓  41 tests/usability.spec.ts:1719:1 › A34 实施中可直接记录人工意见，候选生成后由用户用于正式验收 (1.7s)
+  ✓  42 tests/usability.spec.ts:1787:1 › A35 未配置人工检查的任务也可记录并确认任务级意见，但不替代模型检查 (790ms)
+  ✓  43 tests/usability.spec.ts:1820:1 › A36 待候选人工意见的响应丢失后可关闭重开并安全重试 (726ms)
+  ✓  44 tests/usability.spec.ts:1850:1 › A37 旧接手释放后保留未提交文字，可由用户带入人工观察 (1.0s)
+  ✓  45 tests/usability.spec.ts:1878:1 › A38 未知的实施提交在旧接手释放后可核对并保留原文字 (904ms)
+  ✓  46 tests/usability.spec.ts:1902:1 › A39 人工意见提交后工作台和详情清楚显示待候选确认 (1.6s)
+  ✓  47 tests/usability.spec.ts:1943:1 › A40 两条已保存的人工意见都可查看，不自动合并或重复提交 (689ms)
+  ✓  48 tests/usability.spec.ts:1960:1 › A41 已完成任务仍可查看已确认的人工验收记录 (836ms)
+  ✓  49 tests/usability.spec.ts:1979:1 › A42 多个人工检查时两个入口都能查看其他检查的意见 (765ms)
+  ✓  50 tests/usability.spec.ts:2016:1 › A43 人工意见不遮挡阻塞，终态记录不能再次确认 (769ms)
+  ✓  51 tests/usability.spec.ts:2037:1 › A44 已有候选的受阻 UI 检查可恢复并逐项人工验收 (1.8s)
+  ✓  52 tests/usability.spec.ts:2100:1 › A45 工作区变化时人工验收入口提示候选失效且不改变任务 (446ms)
+  ✓  53 tests/usability.spec.ts:2121:1 › A46 两个人工检查同理由受阻时定位最新阻塞 (816ms)
+  ✓  54 tests/usability.spec.ts:2152:1 › A47 规范库和阅读器按参考结构展示真实数据与常用资料 (1.2s)
+  ✓  55 tests/usability.spec.ts:2202:1 › A48 规范读取失败可重试，分类和范围切换复位分页 (834ms)
+  ✓  56 tests/usability.spec.ts:2227:1 › A49 项目演进与设置按参考分区保留真实操作 (4.4s)
+  ✓  57 tests/usability.spec.ts:2251:1 › A50 任务进展显示真实暂缓与恢复事件 (212ms)
+  ✓  58 tests/usability.spec.ts:2268:1 › A51 待处理计数覆盖同类任务，卡片仍保持紧凑 (906ms)
+  ✓  59 tests/usability.spec.ts:2293:1 › A52 历史恢复的取消与决定不冒充当前授权 (184ms)
+
+  59 passed (2.5m)

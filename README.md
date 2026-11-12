@@ -253,3 +253,7 @@ AEL_TEST_URL=http://127.0.0.1:7332 AEL_TEST_PROJECT=/tmp/ael-p7-workspace AEL_MI
 ## 结构化发现
 
 外部 UI/UX 工具可用正式 `finding report` 上报规则、定位、期望/实际、复现、影响及固定证据。相同版本和位置归并，每次报告保留来源及出现记录，缺截图或交互材料标待补证。任务详情的“发现”支持筛选、原始报告、截图和候选追溯。`python3 scripts/remote_findings_acceptance.py --bundle dist --out /tmp/ael-findings-NEW` 使用外部真实浏览器观察及正式 CLI 验证。
+
+## 人工验收与图片比较
+
+远程项目 reviewer/admin 可在“检查与验收”明确选择基准和实际图片，核对上传者、候选和来源，使用并排、缩放、叠加及定位查看证据，再记录意见或提交人工检查结论。pass/fail/blocked 绑定准确候选与修订，其他必要检查继续参与任务门禁。版本冲突与提交失败保留输入，原请求可幂等恢复。正式接口与隔离浏览器验收见 [远程任务](docs/remote-tasks.md)。

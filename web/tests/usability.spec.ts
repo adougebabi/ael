@@ -576,7 +576,7 @@ test("A12a 创建、接手、暂缓、恢复、检查、取消与删除均写入
   await confirmDialog(page, "隔离浏览器暂停验证");
   await expect(page.locator(".conclusion")).toContainText("隔离浏览器暂停验证");
   await page.locator(".next-panel").getByRole("button", { name: "恢复任务", exact: true }).click();
-  await page.getByRole("dialog").getByRole("checkbox").check();
+  await expect(page.getByRole("dialog").getByRole("checkbox")).toHaveCount(0);
   await confirmDialog(page);
   await expect(
     page.getByRole("button", { name: "接手当前工作", exact: true }),
@@ -672,7 +672,7 @@ test("A12a 创建、接手、暂缓、恢复、检查、取消与删除均写入
   await goto(page, "single", "/tasks/" + recoveryId);
   await page.locator(".next-panel").getByRole("button", { name: "恢复任务", exact: true }).click();
   await page.getByRole("dialog").getByLabel("恢复位置").selectOption("execute");
-  await page.getByRole("dialog").getByRole("checkbox").check();
+  await expect(page.getByRole("dialog").getByRole("checkbox")).toHaveCount(0);
   await confirmDialog(page);
   expect((await client.get("/api/task?id=" + recoveryId)).current_step).toBe(
     "execute",

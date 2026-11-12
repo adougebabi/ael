@@ -1,0 +1,371 @@
+{
+  "added": 3184,
+  "deleted": 181,
+  "files": [
+    {
+      "path": "README.md",
+      "added": 4,
+      "deleted": 0
+    },
+    {
+      "path": "assets/skills/ael-work/references/commands.md",
+      "added": 2,
+      "deleted": 0
+    },
+    {
+      "path": "assets/skills/ael-work/references/remote-agent.md",
+      "added": 4,
+      "deleted": 0
+    },
+    {
+      "path": "docs/architecture.md",
+      "added": 10,
+      "deleted": 0
+    },
+    {
+      "path": "docs/remote-tasks.md",
+      "added": 10,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/WORKLOG.md",
+      "added": 12,
+      "deleted": 2
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/README.md",
+      "added": 15,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/agent-regression.log",
+      "added": 1,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/artifact-regression.log",
+      "added": 11,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/binary-sha256.json",
+      "added": 41,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/collaboration-regression.log",
+      "added": 1,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/comparison-overlay.png",
+      "added": null,
+      "deleted": null
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/context-regression.log",
+      "added": 11,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/dashboard-regression.log",
+      "added": 11,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/expanded-browser-red.log",
+      "added": 95,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/findings-regression.log",
+      "added": 11,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/formal.log",
+      "added": 18,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/go-full.log",
+      "added": 14,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/human-kernel.log",
+      "added": 74,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/initial-browser.log",
+      "added": 132,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/initial-fixture-01.log",
+      "added": 8,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/initial-fixture-02.log",
+      "added": 7,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/local-regression.log",
+      "added": 250,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/local-ui-red.log",
+      "added": 153,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/local-ui-second-red.log",
+      "added": 153,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/local-ui.log",
+      "added": 114,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/package.log",
+      "added": 20,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/post-review-revision-red.log",
+      "added": 75,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/race.log",
+      "added": 5,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/remote-tasks-regression.log",
+      "added": 1,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/security-core.json",
+      "added": 7,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/security-server.json",
+      "added": 29,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/security-web.json",
+      "added": 7,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/stale-review-retained.png",
+      "added": null,
+      "deleted": null
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/summary.json",
+      "added": 13,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/unavailable-evidence.png",
+      "added": null,
+      "deleted": null
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/vet.log",
+      "added": 0,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-16/worklog-tests.log",
+      "added": 5,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/receipts/V2-09.md",
+      "added": 4,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/receipts/V2-10.md",
+      "added": 4,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/receipts/V2-11.md",
+      "added": 4,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/receipts/V2-12.md",
+      "added": 4,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/receipts/V2-13.md",
+      "added": 4,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/receipts/V2-14.md",
+      "added": 4,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/receipts/V2-15.md",
+      "added": 4,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/receipts/V2-16.md",
+      "added": 60,
+      "deleted": 0
+    },
+    {
+      "path": "docs/v2-execution/tasks/V2-16.md",
+      "added": 5,
+      "deleted": 5
+    },
+    {
+      "path": "internal/core/model.go",
+      "added": 15,
+      "deleted": 0
+    },
+    {
+      "path": "internal/core/pending_human_review.go",
+      "added": 75,
+      "deleted": 35
+    },
+    {
+      "path": "internal/core/remote_review.go",
+      "added": 145,
+      "deleted": 0
+    },
+    {
+      "path": "internal/core/review_readiness.go",
+      "added": 95,
+      "deleted": 45
+    },
+    {
+      "path": "internal/core/service.go",
+      "added": 50,
+      "deleted": 21
+    },
+    {
+      "path": "internal/core/verify.go",
+      "added": 27,
+      "deleted": 16
+    },
+    {
+      "path": "internal/server/remote_dashboard.go",
+      "added": 24,
+      "deleted": 2
+    },
+    {
+      "path": "internal/server/remote_project.go",
+      "added": 1,
+      "deleted": 1
+    },
+    {
+      "path": "internal/server/remote_review.go",
+      "added": 396,
+      "deleted": 0
+    },
+    {
+      "path": "internal/server/remote_review_test.go",
+      "added": 224,
+      "deleted": 0
+    },
+    {
+      "path": "internal/server/standalone_http.go",
+      "added": 4,
+      "deleted": 0
+    },
+    {
+      "path": "internal/server/ui/assets/{StandaloneApp-B4zpjnP9.js => StandaloneApp-CU3nu0xf.js}",
+      "added": 1,
+      "deleted": 1
+    },
+    {
+      "path": "internal/server/ui/assets/index-C9mo1a7s.css",
+      "added": 1,
+      "deleted": 0
+    },
+    {
+      "path": "internal/server/ui/assets/index-CWTa2Mg3.js",
+      "added": 20,
+      "deleted": 0
+    },
+    {
+      "path": "internal/server/ui/assets/index-DuBfnoWY.css",
+      "added": 0,
+      "deleted": 1
+    },
+    {
+      "path": "internal/server/ui/assets/index-w44OEBC3.js",
+      "added": 0,
+      "deleted": 20
+    },
+    {
+      "path": "internal/server/ui/index.html",
+      "added": 2,
+      "deleted": 2
+    },
+    {
+      "path": "scripts/remote_review_acceptance.py",
+      "added": 294,
+      "deleted": 0
+    },
+    {
+      "path": "web/playwright.review.config.ts",
+      "added": 7,
+      "deleted": 0
+    },
+    {
+      "path": "web/src/components/EvidenceComparison.vue",
+      "added": 135,
+      "deleted": 0
+    },
+    {
+      "path": "web/src/components/FindingPanel.vue",
+      "added": 7,
+      "deleted": 2
+    },
+    {
+      "path": "web/src/components/ManualReviewDialog.vue",
+      "added": 37,
+      "deleted": 20
+    },
+    {
+      "path": "web/src/pages/TaskPage.vue",
+      "added": 3,
+      "deleted": 2
+    },
+    {
+      "path": "web/src/remoteDashboard.ts",
+      "added": 8,
+      "deleted": 4
+    },
+    {
+      "path": "web/tests/review.spec.ts",
+      "added": 194,
+      "deleted": 0
+    },
+    {
+      "path": "web/tests/usability.spec.ts",
+      "added": 2,
+      "deleted": 2
+    }
+  ]
+}
