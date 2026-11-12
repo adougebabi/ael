@@ -1,0 +1,72 @@
+name: AEL distribution
+on:
+  workflow_dispatch:
+    inputs:
+      publication:
+        description: 'Explicit publication action. Build uploads workflow artifacts only.'
+        type: choice
+        default: build_artifact
+        options: [build_artifact, draft, released]
+concurrency:
+  group: ael-distribution
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: v3.1.4
+      - name: Test and build all packages
+        env:
+          RELEASE_PUBLICATION: ${{ inputs.publication }}
+        run: |
+          go test ./... -count=1
+          sh scripts/package.sh
+          python3 scripts/server_image.py --manifest dist/release/manifest.json --platform linux-amd64 --tag ael-server:ci-amd64
+          python3 scripts/server_image.py --manifest dist/release/manifest.json --platform linux-arm64 --tag ael-server:ci-arm64
+          dist/ael-linux-amd64 release verify --manifest dist/release/manifest.json --json
+      - name: Sign and verify final manifest
+        env:
+          WORKFLOW_IDENTITY: https://github.com/${{ github.workflow_ref }}
+        run: |
+          cosign sign-blob dist/release/manifest.json --bundle dist/release/manifest.sigstore.json --yes
+          cosign verify-blob dist/release/manifest.json --bundle dist/release/manifest.sigstore.json --certificate-identity "$WORKFLOW_IDENTITY" --certificate-oidc-issuer https://token.actions.githubusercontent.com
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ael-distribution
+          path: dist/release/
+          if-no-files-found: error
+  publish:
+    if: inputs.publication != 'build_artifact'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ael-distribution
+          path: release
+      - name: Create explicitly selected release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PUBLICATION: ${{ inputs.publication }}
+          SOURCE_COMMIT: ${{ github.sha }}
+        run: python3 scripts/release_publish.py --manifest release/manifest.json --publication "$PUBLICATION"

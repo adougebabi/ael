@@ -78,7 +78,7 @@ ael update --project /path/to/project
 
 ## 初始化与查看
 
-独立 Server 可在没有业务 checkout 的专用本地数据目录启动，提供浏览器登录、项目注册、成员授权和可撤销的 Agent 令牌；本机项目模式不受影响。远程客户端可连接同一 Server 读写任务和计划，断网不会回退本地。初始化、代理信任与限制见 [独立 Server](docs/standalone-server.md)，客户端连接和修订回执见 [远程任务](docs/remote-tasks.md)。本阶段只监听 loopback，未部署真实服务。
+独立 Server 可在没有业务 checkout 的专用本地数据目录启动，提供浏览器登录、项目注册、成员授权和可撤销的 Agent 令牌；本机项目模式不受影响。远程客户端可连接同一 Server 读写任务和计划，断网不会回退本地。初始化、代理信任与限制见 [独立 Server](docs/standalone-server.md)，客户端连接和修订回执见 [远程任务](docs/remote-tasks.md)。默认监听 loopback，容器监听需显式配置 Origin。独立客户端、Server、Skill 包、镜像和可信发行校验见 [发行交付](docs/distribution.md)。
 
 ```sh
 ./dist/ael-darwin-arm64 init --project /path/to/project --bundle-dir ./dist --dry-run

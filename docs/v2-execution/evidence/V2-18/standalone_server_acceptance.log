@@ -1,0 +1,21 @@
+
+Running 1 test using 1 worker
+
+(node:42393) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:42393) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 tests/standalone-server.spec.ts:23:3 › 浏览器登录、项目授权与令牌撤销 (2.4s)
+
+  1 passed (3.1s)
+
+Running 1 test using 1 worker
+
+(node:42404) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:42404) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 tests/standalone-server.spec.ts:93:3 › Server 重启后保留数据并同步跨标签会话 (924ms)
+
+  1 passed (1.6s)
+{"status": "passed", "isolated": true, "version": {"build": "b81aa06-45035685c455", "cli_output_protocol": 1, "version": "0.1.18"}, "data": "/private/tmp/ael-v218-final/standalone_server_acceptance/server-data"}

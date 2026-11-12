@@ -444,16 +444,16 @@ func (h *standaloneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	standaloneFail(w, http.StatusNotFound, "NOT_FOUND")
 }
 
-// ListenStandalone only accepts loopback binds; TLS termination, if used,
-// must come from an explicitly configured trusted proxy and origin.
+// Non-loopback listeners require an explicit canonical Origin. TLS termination
+// remains bound to the configured trusted proxy and existing request checks.
 func ListenStandalone(s *Standalone, addr string, options StandaloneHTTPOptions, ready func(string)) error {
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		return err
 	}
 	ip := net.ParseIP(host)
-	if !strings.EqualFold(host, "localhost") && (ip == nil || !ip.IsLoopback()) {
-		return errors.New("LOOPBACK_REQUIRED")
+	if !strings.EqualFold(host, "localhost") && (ip == nil || !ip.IsLoopback()) && options.Origin == "" {
+		return errors.New("SERVER_ORIGIN_REQUIRED")
 	}
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {

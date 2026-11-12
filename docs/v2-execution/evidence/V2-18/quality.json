@@ -1,0 +1,147 @@
+{
+  "scan_path": "/Users/vinson/Documents/project/个人/ael/internal/release",
+  "files_scanned": 3,
+  "total_lines": 832,
+  "total_code_lines": 787,
+  "passed": true,
+  "error_count": 0,
+  "warning_count": 0,
+  "issues": [
+    {
+      "severity": "info",
+      "category": "格式",
+      "message": "行过长 (125 > 120)",
+      "file_path": "/Users/vinson/Documents/project/个人/ael/internal/release/manifest.go",
+      "line_number": 67,
+      "suggestion": null
+    },
+    {
+      "severity": "info",
+      "category": "格式",
+      "message": "行过长 (129 > 120)",
+      "file_path": "/Users/vinson/Documents/project/个人/ael/internal/release/manifest.go",
+      "line_number": 83,
+      "suggestion": null
+    },
+    {
+      "severity": "info",
+      "category": "格式",
+      "message": "行过长 (127 > 120)",
+      "file_path": "/Users/vinson/Documents/project/个人/ael/internal/release/manifest.go",
+      "line_number": 187,
+      "suggestion": null
+    },
+    {
+      "severity": "info",
+      "category": "格式",
+      "message": "行过长 (135 > 120)",
+      "file_path": "/Users/vinson/Documents/project/个人/ael/internal/release/release_test.go",
+      "line_number": 21,
+      "suggestion": null
+    },
+    {
+      "severity": "info",
+      "category": "格式",
+      "message": "行过长 (169 > 120)",
+      "file_path": "/Users/vinson/Documents/project/个人/ael/internal/release/release_test.go",
+      "line_number": 22,
+      "suggestion": null
+    },
+    {
+      "severity": "info",
+      "category": "格式",
+      "message": "行过长 (168 > 120)",
+      "file_path": "/Users/vinson/Documents/project/个人/ael/internal/release/release_test.go",
+      "line_number": 24,
+      "suggestion": null
+    },
+    {
+      "severity": "info",
+      "category": "格式",
+      "message": "行过长 (199 > 120)",
+      "file_path": "/Users/vinson/Documents/project/个人/ael/internal/release/release_test.go",
+      "line_number": 123,
+      "suggestion": null
+    },
+    {
+      "severity": "info",
+      "category": "格式",
+      "message": "行过长 (173 > 120)",
+      "file_path": "/Users/vinson/Documents/project/个人/ael/internal/release/release_test.go",
+      "line_number": 136,
+      "suggestion": null
+    },
+    {
+      "severity": "info",
+      "category": "格式",
+      "message": "行过长 (170 > 120)",
+      "file_path": "/Users/vinson/Documents/project/个人/ael/internal/release/release_test.go",
+      "line_number": 215,
+      "suggestion": null
+    },
+    {
+      "severity": "info",
+      "category": "格式",
+      "message": "行过长 (126 > 120)",
+      "file_path": "/Users/vinson/Documents/project/个人/ael/internal/release/release_test.go",
+      "line_number": 219,
+      "suggestion": null
+    },
+    {
+      "severity": "info",
+      "category": "格式",
+      "message": "行过长 (122 > 120)",
+      "file_path": "/Users/vinson/Documents/project/个人/ael/internal/release/source.go",
+      "line_number": 78,
+      "suggestion": null
+    },
+    {
+      "severity": "info",
+      "category": "格式",
+      "message": "行过长 (136 > 120)",
+      "file_path": "/Users/vinson/Documents/project/个人/ael/internal/release/source.go",
+      "line_number": 83,
+      "suggestion": null
+    },
+    {
+      "severity": "info",
+      "category": "格式",
+      "message": "行过长 (139 > 120)",
+      "file_path": "/Users/vinson/Documents/project/个人/ael/internal/release/source.go",
+      "line_number": 215,
+      "suggestion": null
+    },
+    {
+      "severity": "info",
+      "category": "格式",
+      "message": "行过长 (172 > 120)",
+      "file_path": "/Users/vinson/Documents/project/个人/ael/internal/release/source.go",
+      "line_number": 220,
+      "suggestion": null
+    },
+    {
+      "severity": "info",
+      "category": "格式",
+      "message": "行过长 (123 > 120)",
+      "file_path": "/Users/vinson/Documents/project/个人/ael/internal/release/source.go",
+      "line_number": 286,
+      "suggestion": null
+    },
+    {
+      "severity": "info",
+      "category": "格式",
+      "message": "行过长 (169 > 120)",
+      "file_path": "/Users/vinson/Documents/project/个人/ael/internal/release/source.go",
+      "line_number": 338,
+      "suggestion": null
+    },
+    {
+      "severity": "info",
+      "category": "格式",
+      "message": "行过长 (169 > 120)",
+      "file_path": "/Users/vinson/Documents/project/个人/ael/internal/release/source.go",
+      "line_number": 350,
+      "suggestion": null
+    }
+  ]
+}

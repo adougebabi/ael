@@ -8,6 +8,7 @@ import (
 )
 
 func TestStandaloneBootstrapWithoutCheckout(t *testing.T) {
+	t.Setenv("AEL_SERVER_ORIGIN", "")
 	working := t.TempDir()
 	data := filepath.Join(t.TempDir(), "server-data")
 	oldDir, err := os.Getwd()
@@ -39,8 +40,8 @@ func TestStandaloneBootstrapWithoutCheckout(t *testing.T) {
 	if _, err = os.Stat(filepath.Join(data, "runtime.db")); err != nil {
 		t.Fatal("server database not in explicit data directory", err)
 	}
-	if _, err = run([]string{"server", "start", "--data-dir", data, "--addr", "0.0.0.0:0"}); err == nil || !strings.Contains(err.Error(), "LOOPBACK_REQUIRED") {
-		t.Fatalf("server allowed a non-loopback bind: %v", err)
+	if _, err = run([]string{"server", "start", "--data-dir", data, "--addr", "0.0.0.0:0"}); err == nil || !strings.Contains(err.Error(), "SERVER_ORIGIN_REQUIRED") {
+		t.Fatalf("server allowed a non-loopback bind without an explicit origin: %v", err)
 	}
 	if _, err = run([]string{"server", "start", "--data-dir", data, "--project", working}); err == nil {
 		t.Fatal("standalone server accepted a project checkout argument")

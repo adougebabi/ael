@@ -1,0 +1,11 @@
+
+Running 1 test using 1 worker
+
+(node:34760) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:34760) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 tests/remote-dashboard.spec.ts:15:1 › 统一远程工作台保持责任、证据、导航和项目隔离 (17.1s)
+
+  1 passed (17.6s)
+{"result": "PASS", "out": "/private/tmp/ael-v218-final/remote_dashboard_acceptance", "actions": ["two-client-progress", "child-completed", "server-restarted", "server-fixture-lease-expired"]}

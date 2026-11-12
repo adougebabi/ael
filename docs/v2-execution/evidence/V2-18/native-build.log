@@ -1,0 +1,24 @@
+
+added 59 packages, and audited 60 packages in 2s
+
+10 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities
+
+> ael-dashboard@0.1.18 build
+> vue-tsc --noEmit && vite build
+
+vite v7.3.7 building client environment for production...
+transforming...
+✓ 87 modules transformed.
+rendering chunks...
+computing gzip size...
+../internal/server/ui/index.html                           0.36 kB │ gzip:   0.29 kB
+../internal/server/ui/assets/StandaloneApp-B6ayezEn.css    2.92 kB │ gzip:   0.81 kB
+../internal/server/ui/assets/index-DpoyKcOS.css           62.74 kB │ gzip:  12.20 kB
+../internal/server/ui/assets/StandaloneApp-BS_-mWJ1.js    23.27 kB │ gzip:   7.56 kB
+../internal/server/ui/assets/index-DwbteA6p.js           411.59 kB │ gzip: 148.21 kB
+✓ built in 668ms
+{"status": "packaged", "publication": "local_unpublished", "manifest": "/private/tmp/ael-v218-final/native/manifest.json", "assets": 3}
+{"manifest":{"schema":1,"version":"0.1.18","build":"b81aa06-45035685c455","commit":"b81aa06496a06112bb2aa7f96adb1c936140ba78","dirty":true,"publication":"local_unpublished","protocols":{"api":1,"skill":1,"cli_output":1},"assets":[{"kind":"client","platform":"darwin-arm64","path":"ael-client-0.1.18-darwin-arm64.tar.gz","sha256":"1a463d6e75c6db121b1a5bee8e5ce1cb0369a3ecf1cbeaf6e927018a778f62a5","size":5736830},{"kind":"server","platform":"linux-arm64","path":"ael-server-0.1.18-linux-arm64.tar.gz","sha256":"89314956a9c8cd9faa89a19899f063bf04705ea09abc669ec62dc6b6a7dc0c01","size":5542734},{"kind":"skill","platform":"all","path":"ael-skill-0.1.18-all.tar.gz","sha256":"5bf4bad177cfc172fc9df77b2054fb6197c9b8d7fa87c998c999ba328a0c28af","size":36234}]},"content_integrity":"verified","publisher_identity":"unverified","files":["ael-client-0.1.18-darwin-arm64.tar.gz","ael-server-0.1.18-linux-arm64.tar.gz","ael-skill-0.1.18-all.tar.gz"]}

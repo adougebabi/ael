@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/Users/vinson/Documents/project/个人/ael/scripts/remote_collaboration_acceptance.py", line 307, in <module>
+    client("b","artifact","download","--artifact",received["id"],"--out",downloaded)
+  File "/Users/vinson/Documents/project/个人/ael/scripts/remote_collaboration_acceptance.py", line 84, in client
+    return run([binary, *argv, "--project", projects[name], "--json"], projects[name], client_env, input_text, expect_ok)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/vinson/Documents/project/个人/ael/scripts/remote_collaboration_acceptance.py", line 58, in run
+    raise RuntimeError(f"unexpected command result: {argv}; {process.stderr}")
+RuntimeError: unexpected command result: [PosixPath('/Users/vinson/Documents/project/个人/ael/dist/ael-darwin-arm64'), 'artifact', 'download', '--artifact', 'artifact_1sBhiZkHEdqhbSt9m1mtu2Msl6pOmF_WWl1bNb0yGgE', '--out', PosixPath('/private/tmp/ael-v218-delivery-final/remote_collaboration_acceptance/retained-download.txt'), '--project', PosixPath('/private/tmp/ael-v218-delivery-final/remote_collaboration_acceptance/checkout-b'), '--json']; {"code":"ARTIFACT_OUTPUT_EXISTS_OR_UNAVAILABLE","error":"ARTIFACT_OUTPUT_EXISTS_OR_UNAVAILABLE: choose a new output path"}
+

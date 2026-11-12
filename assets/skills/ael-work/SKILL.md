@@ -28,3 +28,8 @@ description: 在已初始化的 AEL 工程执行已授权的项目迭代、修�
 Attached 长步骤可在 claim 绑定本次宿主的可靠常驻 owner-pid；未知就不猜，租约有效期内 heartbeat。过期写入者先核实停止再 resume --ack-stopped；活 owner 不可抢占。重装/update 不覆盖用户资产；缺离线工具包准确报错。未经授权不激活旧流程、改 hooks、迁移业务数据或发布。
 
 不同任务可以在同一工作区并行，AEL 不对整个工作区加互斥锁；执行者负责避免对同一文件和共享外部资源的冲突。候选校验仍覆盖整个工作区，其他任务的改动可能使验证失效，需要在稳定候选上重验；需要文件隔离时使用已绑定的独立工作区。
+
+
+## 工具发行
+
+独立当前平台 CLI、Server 和 Skill 资源按发行 manifest 分发。外部 Agent 可用 `ael release check --source TRUSTED_SOURCE_JSON` 查询已核实来源，用 `ael release download --source TRUSTED_SOURCE_JSON --out NEW_FILE` 下载。默认没有线上源，结果明确无已配置来源。在线下载先验证固定发布身份，再核对清单与字节哈希。`ael release verify --manifest FILE` 只校验本地内容，publisher_identity 保持独立状态。CLI 使用无需 Docker，Server 镜像由服务端维护者管理。下载内容的安装/升级按用户授权和现行安装入口执行。

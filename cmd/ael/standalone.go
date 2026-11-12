@@ -57,13 +57,13 @@ func standaloneCommand(cmd string, a args) (any, error) {
 	if err != nil || !bootstrapped {
 		return nil, core.Error("SERVER_NOT_BOOTSTRAPPED", "bootstrap an administrator first")
 	}
-	options := server.StandaloneHTTPOptions{Origin: a.get("origin", ""), TrustedProxies: csvValues(a.get("trusted-proxy", ""))}
+	options := server.StandaloneHTTPOptions{Origin: a.get("origin", os.Getenv("AEL_SERVER_ORIGIN")), TrustedProxies: csvValues(a.get("trusted-proxy", ""))}
 	err = server.ListenStandalone(s, a.get("addr", "127.0.0.1:7332"), options, func(url string) {
 		_ = writeOutput(os.Stdout, map[string]string{"url": url}, a.has("json"), a.has("verbose"))
 	})
 	if err != nil {
-		if strings.Contains(err.Error(), "LOOPBACK_REQUIRED") {
-			return nil, core.Error("LOOPBACK_REQUIRED", "standalone server must bind loopback")
+		if strings.Contains(err.Error(), "SERVER_ORIGIN_REQUIRED") {
+			return nil, core.Error("SERVER_ORIGIN_REQUIRED", "non-loopback listening requires an explicit --origin or AEL_SERVER_ORIGIN")
 		}
 		return nil, core.Error("SERVER_LISTEN_FAILED", "cannot start the server with the supplied listener and proxy settings")
 	}

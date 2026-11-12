@@ -1,0 +1,12 @@
+=== RUN   TestLocalManifestVerification
+--- PASS: TestLocalManifestVerification (0.00s)
+=== RUN   TestSignedReleaseSource
+--- PASS: TestSignedReleaseSource (0.09s)
+PASS
+ok  	ael/internal/release	0.428s
+=== RUN   TestReleaseCheckBypassesRemoteBindingAndRuntime
+--- PASS: TestReleaseCheckBypassesRemoteBindingAndRuntime (0.00s)
+=== RUN   TestStandaloneBootstrapWithoutCheckout
+--- PASS: TestStandaloneBootstrapWithoutCheckout (0.08s)
+PASS
+ok  	ael/cmd/ael	0.442s

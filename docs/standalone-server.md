@@ -11,7 +11,7 @@ printf '%s\n' "$AEL_SERVER_PASSWORD" | ael server bootstrap \
 ael server start --data-dir /absolute/path/to/ael-server-data
 ```
 
-`bootstrap` 只允许创建首个管理员，密码至少 12 位；服务端使用随机盐和 Go 标准库 PBKDF2-HMAC-SHA-256 保存密码摘要。`start` 默认监听 `127.0.0.1:7332`；`--addr 127.0.0.1:0` 可选择临时端口，返回实际地址。本阶段拒绝非 loopback 监听。浏览器登录后管理员可以注册项目、创建账号、设置项目执行者/验收者/只读者，以及签发或撤销项目范围内的 Agent 令牌。令牌明文仅在签发时显示一次，数据库保存其安全摘要；每次使用均重新检查项目成员关系和撤销状态。
+`bootstrap` 只允许创建首个管理员，密码至少 12 位；服务端使用随机盐和 Go 标准库 PBKDF2-HMAC-SHA-256 保存密码摘要。`start` 默认监听 `127.0.0.1:7332`；`--addr 127.0.0.1:0` 可选择临时端口，返回实际地址。非 loopback 监听必须同时设置 `--origin` 或 `AEL_SERVER_ORIGIN` 为实际访问的完整 Origin，Host、Origin、CSRF 与可信代理检查继续生效。独立镜像使用非特权用户及专用 `/data` 卷，构建和启动见 [发行交付](distribution.md)。浏览器登录后管理员可以注册项目、创建账号、设置项目执行者/验收者/只读者，以及签发或撤销项目范围内的 Agent 令牌。令牌明文仅在签发时显示一次，数据库保存其安全摘要；每次使用均重新检查项目成员关系和撤销状态。
 
 如果由反向代理终止 TLS，必须显式设置 `--origin https://expected-host` 和 `--trusted-proxy IP_OR_CIDR`。代理须保留该 Host，并覆盖或安全追加 `X-Forwarded-For`、设置 `X-Forwarded-Proto: https`；服务端只从配置的代理信任转发信息，按可信代理链的第一个非可信来源限流。不要信任客户端自行提供的转发头。本阶段不部署或配置公网代理。
 
