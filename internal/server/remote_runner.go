@@ -269,7 +269,7 @@ func (p *portableStore) heartbeatRunner(principal standalonePrincipal, runnerID 
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"attempt_id": attempt.ID, "fence": attempt.Fence, "lease_until": attempt.Lease, "revision": core.RemoteRevision(task), "operation_id": input.OperationID}, nil
+		return map[string]any{"attempt_id": attempt.ID, "fence": attempt.Fence, "lease_issued_at": attempt.LastContact, "lease_until": attempt.Lease, "revision": core.RemoteRevision(task), "operation_id": input.OperationID}, nil
 	})
 }
 

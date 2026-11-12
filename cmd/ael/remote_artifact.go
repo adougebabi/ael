@@ -128,6 +128,7 @@ func remoteArtifactCommand(cmd string, a args, config, project string, binding r
 type runnerUploadLease struct {
 	RunnerID, Token string
 	Fence           int
+	guard           *runnerLeaseGuard
 }
 
 func remoteUploadBytes(a args, config, project string, binding remote.Binding, filename string, data []byte, lease *runnerUploadLease) (remoteOutput, error) {
@@ -154,6 +155,9 @@ func remoteUploadBytes(a args, config, project string, binding remote.Binding, f
 		}
 	}
 	call := func(method, path string, body any) (map[string]any, error) {
+		if lease != nil {
+			return runnerGuardedCall(config, project, binding, lease.guard, method, path, body)
+		}
 		return remote.Call(config, project, binding, method, path, body, nil)
 	}
 	start := map[string]any{"operation_id": op, "idempotency_key": key, "expected_revision": revision, "task_id": task, "attempt_id": a.get("attempt", ""), "candidate": a.get("candidate", ""), "filename": filename, "mime": mimeType, "size": len(data), "sha256": store.Hash(data), "source": a.get("source", "CLI")}

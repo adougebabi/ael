@@ -1,0 +1,14 @@
+=== RUN   TestRunnerWorkspaceRejectsIncludedAndWorktreeConfig
+=== RUN   TestRunnerWorkspaceRejectsIncludedAndWorktreeConfig/include
+    remote_runner_workspace_test.go:242: include configuration was silently omitted
+=== RUN   TestRunnerWorkspaceRejectsIncludedAndWorktreeConfig/worktree
+    remote_runner_workspace_test.go:242: worktree configuration was silently omitted
+--- FAIL: TestRunnerWorkspaceRejectsIncludedAndWorktreeConfig (2.44s)
+    --- FAIL: TestRunnerWorkspaceRejectsIncludedAndWorktreeConfig/include (1.25s)
+    --- FAIL: TestRunnerWorkspaceRejectsIncludedAndWorktreeConfig/worktree (1.19s)
+=== RUN   TestRunnerWorkspaceChecksFiltersBeforeReadingCandidate
+    remote_runner_workspace_test.go:266: Git filter ran before rejection: <nil>
+--- FAIL: TestRunnerWorkspaceChecksFiltersBeforeReadingCandidate (0.66s)
+FAIL
+FAIL	ael/cmd/ael	3.618s
+FAIL

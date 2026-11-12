@@ -66,3 +66,10 @@
 - 现象：现有发现逻辑扫描 `specs/`，但未带状态元数据的 `specs/security.md` 不符合 `spec/` 的现行规范路径规则，会被默认标为 historical。若某项目实际把它当作现行规范、又未显式引用，现有 Basis 不会自动选入。
 - 证据状态：V2-11 只读复核在隔离 Git 夹具中验证该分类；没有判断用户真实项目中的任何文档属于现行规范，也没有读取或修改其他业务工程。
 - 本轮处理：按用户要求记录，不自动将既有历史文档升级为现行契约；可通过项目自己明确状态或任务显式引用处理，后续再单独审议发现规则。
+
+## NB-010 · 便携候选 ID 未区分仅暂存的执行位变化
+
+- 位置：`internal/remote/candidate.go` 的 `portableTrackedModes` 与 `capturePortableCandidateOnce`。
+- 现象：Git 索引中同一文件的内容对象不变、仅执行位从 `100644` 改为 `100755` 时，便携候选 ID 仍相同；工作树模式未变时，索引模式差异没有单独进入 ID。
+- 证据状态：在独立临时 Git fixture 中通过 Go overlay 实测：`git update-index --chmod=+x` 后候选 ID 未变化，但 `git diff --cached --summary` 显示模式变化。测试源码与输出分别保存在 `evidence/V2-12-native/index-mode-test.go.txt` 和 `index-mode-observed.log`；没有修改产品中的候选计算。
+- 本轮处理：按用户要求记录，不扩大到重写既有候选协议。当前 V2-12 的工作区复制单独比较完整 Git 索引条目和前后状态，不能把这一局部检查说成已修复服务端候选 ID 的歧义；后续应在相应候选协议任务中评估兼容迁移和回归。

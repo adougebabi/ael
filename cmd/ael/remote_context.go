@@ -16,12 +16,18 @@ import (
 )
 
 func remoteContextCommand(cmd string, a args, config, project string, binding remote.Binding) (any, error) {
+	return remoteContextCommandAtWorkspace(cmd, a, config, project, project, binding)
+}
+
+// Remote identity and profile checks remain anchored to project; candidate and
+// knowledge reads may instead use a verified execution workspace.
+func remoteContextCommandAtWorkspace(cmd string, a args, config, project, workspace string, binding remote.Binding) (any, error) {
 	call := func(method, path string, body any) (map[string]any, error) {
 		return remote.Call(config, project, binding, method, path, body, nil)
 	}
 	switch cmd {
 	case "knowledge index":
-		catalog, err := knowledge.Index(project)
+		catalog, err := knowledge.Index(workspace)
 		if err != nil {
 			return nil, err
 		}
@@ -46,7 +52,7 @@ func remoteContextCommand(cmd string, a args, config, project string, binding re
 		if !ok {
 			return nil, core.Error("REMOTE_RESPONSE_INVALID", "missing context repository")
 		}
-		local, localErr := remote.CapturePortableCandidate(project, repository)
+		local, localErr := remote.CapturePortableCandidate(workspace, repository)
 		matches := localErr == nil && result["candidate_id"] == local.ID
 		if localErr == nil && !matches {
 			if id, ok := result["candidate_id"].(string); ok {
@@ -122,7 +128,7 @@ func remoteContextCommand(cmd string, a args, config, project string, binding re
 			source["content"] = string(data)
 		}
 		if matches {
-			after, err := remote.CapturePortableCandidate(project, repository)
+			after, err := remote.CapturePortableCandidate(workspace, repository)
 			if err != nil || after.ID != local.ID || (local.InputsKnown && !after.InputsKnown) {
 				result["workspace_matches"], result["usable_for_context"], result["input_equivalence_proven"], result["usable_for_current_work"] = false, false, false, false
 				if task != "" {
@@ -162,7 +168,7 @@ func remoteContextCommand(cmd string, a args, config, project string, binding re
 		if !ok {
 			return nil, core.Error("REMOTE_RESPONSE_INVALID", "missing repository")
 		}
-		candidate, err := remote.CapturePortableCandidate(project, repository)
+		candidate, err := remote.CapturePortableCandidate(workspace, repository)
 		if err != nil {
 			return nil, err
 		}
@@ -187,14 +193,14 @@ func remoteContextCommand(cmd string, a args, config, project string, binding re
 		if err != nil || json.Unmarshal(rawTask, &task) != nil || task.Definition.ID != taskID {
 			return nil, core.Error("REMOTE_RESPONSE_INVALID", "missing task definition")
 		}
-		if err = knowledge.CheckFresh(project); err != nil {
+		if err = knowledge.CheckFresh(workspace); err != nil {
 			return nil, err
 		}
-		basis, err := knowledge.Basis(project, task.Definition)
+		basis, err := knowledge.Basis(workspace, task.Definition)
 		if err != nil {
 			return nil, err
 		}
-		records, err := knowledge.ReadAll(project)
+		records, err := knowledge.ReadAll(workspace)
 		if err != nil {
 			return nil, err
 		}
@@ -204,7 +210,7 @@ func remoteContextCommand(cmd string, a args, config, project string, binding re
 			byID[record.ID] = record
 			byPath[record.Path] = record
 		}
-		catalog, err := knowledge.PortableCatalog(project)
+		catalog, err := knowledge.PortableCatalog(workspace)
 		if err != nil {
 			return nil, err
 		}
@@ -266,7 +272,7 @@ func remoteContextCommand(cmd string, a args, config, project string, binding re
 			if !ok || !found || file.Deleted || file.SHA256 != reference.Version || record.Hash != reference.Version {
 				return nil, core.Error("KNOWLEDGE_NOT_IN_CANDIDATE", reference.ID+": source is missing, ignored or changed")
 			}
-			path, err := store.SafePath(project, filepath.FromSlash(reference.Source))
+			path, err := store.SafePath(workspace, filepath.FromSlash(reference.Source))
 			if err != nil {
 				return nil, core.Error("KNOWLEDGE_SOURCE_UNAVAILABLE", reference.ID)
 			}
@@ -297,7 +303,7 @@ func remoteContextCommand(cmd string, a args, config, project string, binding re
 			}
 			sources = append(sources, map[string]any{"id": source.reference.ID, "path": source.reference.Source, "artifact_id": artifactID, "reason": source.reference.Reason})
 		}
-		after, err := remote.CapturePortableCandidate(project, repository)
+		after, err := remote.CapturePortableCandidate(workspace, repository)
 		if err != nil {
 			return nil, err
 		}
@@ -307,7 +313,7 @@ func remoteContextCommand(cmd string, a args, config, project string, binding re
 		if observed["inputs_known"] == true && !after.InputsKnown {
 			return nil, core.Error("CANDIDATE_INPUTS_CHANGED", "ignored inputs appeared while preparing the context")
 		}
-		if err = knowledge.CheckFresh(project); err != nil {
+		if err = knowledge.CheckFresh(workspace); err != nil {
 			return nil, err
 		}
 		payload := map[string]any{"task_id": taskID, "expected_revision": revision, "observation_id": observation, "sources": sources, "inventory": inventory, "operation_id": op, "idempotency_key": key}
@@ -342,7 +348,7 @@ func remoteContextCommand(cmd string, a args, config, project string, binding re
 		if !ok {
 			return nil, core.Error("REMOTE_RESPONSE_INVALID", "missing context repository")
 		}
-		candidate, err := remote.CapturePortableCandidate(project, repository)
+		candidate, err := remote.CapturePortableCandidate(workspace, repository)
 		if err != nil {
 			return nil, err
 		}

@@ -6,6 +6,7 @@ import (
 	"ael/internal/securityfs"
 	"ael/internal/store"
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -99,8 +100,16 @@ func resumeRunnerResult(cfg remoteRunnerConfig, config, project string, binding 
 			return nil, core.Error("IDEMPOTENCY_CONFLICT", "stored operation does not match")
 		}
 	} else {
+		deadline, err := runnerHeartbeatDeadline(cfg, config, project, binding, lease)
+		if err != nil {
+			if strings.Contains(err.Error(), "REMOTE_PROTOCOL_UNSUPPORTED") {
+				return nil, core.Error("REMOTE_PROTOCOL_UNSUPPORTED", "update the server before retrying; the pending result is retained")
+			}
+			return nil, core.Error("RUNNER_RESULT_PENDING", "the retained lease could not be renewed; inspect the attempt before retrying")
+		}
+		guard := newRunnerLeaseGuard(context.Background(), deadline)
 		payload["token"] = lease.Token
-		receipt, err = runnerCall(config, project, binding, http.MethodPost, "/runners/"+url.PathEscape(cfg.RunnerID)+"/submit", payload)
+		receipt, err = runnerGuardedCall(config, project, binding, guard, http.MethodPost, "/runners/"+url.PathEscape(cfg.RunnerID)+"/submit", payload)
 		if err != nil {
 			return nil, core.Error("RUNNER_RESULT_PENDING", "result remains in the private attempt directory; retry the same pending file")
 		}

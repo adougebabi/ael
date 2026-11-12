@@ -1,0 +1,34 @@
+=== RUN   TestRunnerWorkspacePreservesCandidateAndSeparatesWrites
+--- PASS: TestRunnerWorkspacePreservesCandidateAndSeparatesWrites (1.42s)
+=== RUN   TestRunnerWorkspaceRejectsUnknownInputsAndExistingDestination
+--- PASS: TestRunnerWorkspaceRejectsUnknownInputsAndExistingDestination (0.74s)
+=== RUN   TestRunnerWorkspaceRejectsExcludedTrackedFilesAndSpecialIndexFlags
+=== RUN   TestRunnerWorkspaceRejectsExcludedTrackedFilesAndSpecialIndexFlags/tracked-runtime
+=== RUN   TestRunnerWorkspaceRejectsExcludedTrackedFilesAndSpecialIndexFlags/skip-worktree
+=== RUN   TestRunnerWorkspaceRejectsExcludedTrackedFilesAndSpecialIndexFlags/intent-to-add
+--- PASS: TestRunnerWorkspaceRejectsExcludedTrackedFilesAndSpecialIndexFlags (1.43s)
+    --- PASS: TestRunnerWorkspaceRejectsExcludedTrackedFilesAndSpecialIndexFlags/tracked-runtime (0.46s)
+    --- PASS: TestRunnerWorkspaceRejectsExcludedTrackedFilesAndSpecialIndexFlags/skip-worktree (0.46s)
+    --- PASS: TestRunnerWorkspaceRejectsExcludedTrackedFilesAndSpecialIndexFlags/intent-to-add (0.51s)
+=== RUN   TestRunnerWorkspacePreservesRepositoryLineEndingRules
+--- PASS: TestRunnerWorkspacePreservesRepositoryLineEndingRules (1.42s)
+=== RUN   TestRunnerWorkspacePreservesStagedMode
+--- PASS: TestRunnerWorkspacePreservesStagedMode (1.20s)
+=== RUN   TestRunnerWorkspaceRejectsUncapturedLocalGitRules
+=== RUN   TestRunnerWorkspaceRejectsUncapturedLocalGitRules/filter
+=== RUN   TestRunnerWorkspaceRejectsUncapturedLocalGitRules/attributes
+--- PASS: TestRunnerWorkspaceRejectsUncapturedLocalGitRules (0.35s)
+    --- PASS: TestRunnerWorkspaceRejectsUncapturedLocalGitRules/filter (0.18s)
+    --- PASS: TestRunnerWorkspaceRejectsUncapturedLocalGitRules/attributes (0.17s)
+=== RUN   TestRunnerWorkspaceRejectsIncludedAndWorktreeConfig
+=== RUN   TestRunnerWorkspaceRejectsIncludedAndWorktreeConfig/include
+=== RUN   TestRunnerWorkspaceRejectsIncludedAndWorktreeConfig/worktree
+--- PASS: TestRunnerWorkspaceRejectsIncludedAndWorktreeConfig (0.21s)
+    --- PASS: TestRunnerWorkspaceRejectsIncludedAndWorktreeConfig/include (0.10s)
+    --- PASS: TestRunnerWorkspaceRejectsIncludedAndWorktreeConfig/worktree (0.11s)
+=== RUN   TestRunnerWorkspaceChecksFiltersBeforeReadingCandidate
+--- PASS: TestRunnerWorkspaceChecksFiltersBeforeReadingCandidate (0.17s)
+=== RUN   TestRunnerWorkspaceRejectsUnreadableKnowledgeBeforeCopy
+--- PASS: TestRunnerWorkspaceRejectsUnreadableKnowledgeBeforeCopy (0.43s)
+PASS
+ok  	ael/cmd/ael	7.745s

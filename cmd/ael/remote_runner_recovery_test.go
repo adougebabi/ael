@@ -12,7 +12,9 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func runnerRecoveryFixture(t *testing.T, handler http.Handler) (remoteRunnerConfig, string, string, remote.Binding) {
@@ -53,6 +55,9 @@ func TestRunnerPendingSubmissionRestoresTokenOnlyForReplay(t *testing.T) {
 			_, _ = fmt.Fprint(w, `{}`)
 		case strings.Contains(r.URL.Path, "/operations/"):
 			_, _ = fmt.Fprint(w, `{"found":false}`)
+		case strings.HasSuffix(r.URL.Path, "/heartbeat"):
+			issued := time.Now().UTC()
+			_ = json.NewEncoder(w).Encode(map[string]any{"attempt_id": "AT-recovery", "fence": 4, "lease_issued_at": issued, "lease_until": issued.Add(time.Minute)})
 		case strings.HasSuffix(r.URL.Path, "/submit"):
 			var body map[string]any
 			_ = json.NewDecoder(r.Body).Decode(&body)
@@ -81,7 +86,9 @@ func TestRunnerPendingSubmissionRestoresTokenOnlyForReplay(t *testing.T) {
 	}
 	task := core.Task{Definition: core.Definition{ID: "task"}, Step: "define"}
 	result := remoteProcessResult{Result: core.StepResult{Status: "pass", Summary: "fixture"}}
-	err = runnerSubmitResult(context.Background(), cfg, config, project, binding, lease, task, remote.PortableCandidate{ID: "candidate"}, result, paths, "fixture-profile-token")
+	ctx := context.Background()
+	guard := newRunnerLeaseGuard(ctx, time.Now().Add(time.Minute))
+	err = runnerSubmitResult(ctx, cfg, config, project, binding, lease, task, remote.PortableCandidate{ID: "candidate"}, result, paths, "fixture-profile-token", guard)
 	if err == nil || !strings.Contains(err.Error(), "RUNNER_RESULT_PENDING") {
 		t.Fatalf("submission was not retained: %v", err)
 	}
@@ -106,6 +113,82 @@ func TestRunnerPendingSubmissionRestoresTokenOnlyForReplay(t *testing.T) {
 	}
 	if _, err = os.Stat(filepath.Join(paths.Control, "receipt.json")); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRunnerPendingResultDoesNotReplayAnExpiredLease(t *testing.T) {
+	var submits atomic.Int32
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/api/v1/meta":
+			_, _ = fmt.Fprint(w, `{"mode":"server","protocol":1,"capabilities":["remote_runners"]}`)
+		case strings.Contains(r.URL.Path, "/operations/"):
+			_, _ = fmt.Fprint(w, `{"found":false}`)
+		case strings.HasSuffix(r.URL.Path, "/heartbeat"):
+			w.WriteHeader(http.StatusConflict)
+			_, _ = fmt.Fprint(w, `{"code":"STALE_TOKEN"}`)
+		case strings.HasSuffix(r.URL.Path, "/submit"):
+			submits.Add(1)
+			_, _ = fmt.Fprint(w, `{}`)
+		default:
+			http.Error(w, `{"code":"UNEXPECTED"}`, http.StatusNotFound)
+		}
+	})
+	cfg, config, project, binding := runnerRecoveryFixture(t, handler)
+	lease := remoteRunnerLease{TaskID: "task", AttemptID: "AT-expired", Token: "fixture-lease-secret", Fence: 4, ClaimRevision: "revision", RunnerID: cfg.RunnerID}
+	paths, err := runnerAttemptDirs(cfg, lease)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := map[string]any{"task_id": lease.TaskID, "attempt_id": lease.AttemptID, "fence": lease.Fence, "expected_revision": lease.ClaimRevision, "operation_id": "submit-fixture", "idempotency_key": "submit-fixture"}
+	raw, _ := json.Marshal(payload)
+	pending := filepath.Join(paths.Control, "pending-submission.json")
+	if err = os.WriteFile(pending, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = resumeRunnerResult(cfg, config, project, binding, pending); err == nil || !strings.Contains(err.Error(), "RUNNER_RESULT_PENDING") {
+		t.Fatalf("expired lease was not retained for inspection: %v", err)
+	}
+	if submits.Load() != 0 {
+		t.Fatalf("expired pending result was submitted %d times", submits.Load())
+	}
+	if _, err = os.Stat(pending); err != nil {
+		t.Fatalf("pending result was lost: %v", err)
+	}
+}
+
+func TestRunnerPendingResultReportsOldServerAndKeepsReceipt(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/api/v1/meta":
+			_, _ = fmt.Fprint(w, `{"mode":"server","protocol":1,"capabilities":["remote_runners"]}`)
+		case strings.Contains(r.URL.Path, "/operations/"):
+			_, _ = fmt.Fprint(w, `{"found":false}`)
+		case strings.HasSuffix(r.URL.Path, "/heartbeat"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"attempt_id": "AT-old-server", "fence": 4, "lease_until": time.Now().Add(time.Minute)})
+		default:
+			http.Error(w, `{"code":"UNEXPECTED"}`, http.StatusNotFound)
+		}
+	})
+	cfg, config, project, binding := runnerRecoveryFixture(t, handler)
+	lease := remoteRunnerLease{TaskID: "task", AttemptID: "AT-old-server", Token: "fixture-lease-secret", Fence: 4, ClaimRevision: "revision", RunnerID: cfg.RunnerID}
+	paths, err := runnerAttemptDirs(cfg, lease)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := map[string]any{"task_id": lease.TaskID, "attempt_id": lease.AttemptID, "fence": lease.Fence, "expected_revision": lease.ClaimRevision, "operation_id": "submit-fixture", "idempotency_key": "submit-fixture"}
+	raw, _ := json.Marshal(payload)
+	pending := filepath.Join(paths.Control, "pending-submission.json")
+	if err = os.WriteFile(pending, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = resumeRunnerResult(cfg, config, project, binding, pending); err == nil || !strings.Contains(err.Error(), "REMOTE_PROTOCOL_UNSUPPORTED") {
+		t.Fatalf("old Server did not produce an upgrade hint: %v", err)
+	}
+	if _, err = os.Stat(pending); err != nil {
+		t.Fatalf("pending result was lost: %v", err)
 	}
 }
 

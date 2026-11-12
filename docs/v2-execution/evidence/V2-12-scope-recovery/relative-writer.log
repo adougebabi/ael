@@ -1,0 +1,4 @@
+=== RUN   TestRunnerWorkspaceKeepsOldRelativeWriterOutOfNextCopy
+--- PASS: TestRunnerWorkspaceKeepsOldRelativeWriterOutOfNextCopy (3.64s)
+PASS
+ok  	ael/cmd/ael	5.077s

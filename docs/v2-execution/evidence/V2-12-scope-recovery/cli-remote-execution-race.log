@@ -1,0 +1,4 @@
+ok  	ael/cmd/ael	33.985s
+ok  	ael/internal/remote	8.663s
+ok  	ael/internal/knowledge	2.437s
+ok  	ael/internal/execution	24.581s
