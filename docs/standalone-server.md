@@ -13,7 +13,7 @@ ael server start --data-dir /absolute/path/to/ael-server-data
 
 `bootstrap` 只允许创建首个管理员，密码至少 12 位；服务端使用随机盐和 Go 标准库 PBKDF2-HMAC-SHA-256 保存密码摘要。`start` 默认监听 `127.0.0.1:7332`；`--addr 127.0.0.1:0` 可选择临时端口，返回实际地址。非 loopback 监听必须同时设置 `--origin` 或 `AEL_SERVER_ORIGIN` 为实际访问的完整 Origin，Host、Origin、CSRF 与可信代理检查继续生效。独立镜像使用非特权用户及专用 `/data` 卷，构建和启动见 [发行交付](distribution.md)。浏览器登录后管理员可以注册项目、创建账号、设置项目执行者/验收者/只读者，以及签发或撤销项目范围内的 Agent 令牌。令牌明文仅在签发时显示一次，数据库保存其安全摘要；每次使用均重新检查项目成员关系和撤销状态。
 
-如果由反向代理终止 TLS，必须显式设置 `--origin https://expected-host` 和 `--trusted-proxy IP_OR_CIDR`。代理须保留该 Host，并覆盖或安全追加 `X-Forwarded-For`、设置 `X-Forwarded-Proto: https`；服务端只从配置的代理信任转发信息，按可信代理链的第一个非可信来源限流。不要信任客户端自行提供的转发头。本阶段不部署或配置公网代理。
+如果由反向代理终止 TLS，必须显式设置 `--origin https://expected-host` 和 `--trusted-proxy IP_OR_CIDR`。代理须保留该 Host，并覆盖或安全追加 `X-Forwarded-For`、设置 `X-Forwarded-Proto: https`；服务端只从配置的代理信任转发信息，按可信代理链的第一个非可信来源限流。不要信任客户端自行提供的转发头。单实例 Compose、标准 TLS 反代、维护、备份和格式恢复见 [服务运维](server-operations.md)。
 
 浏览器使用 HttpOnly、SameSite=Strict 会话 cookie；写操作还要求同源 Origin 和会话绑定的 CSRF 值。Agent 令牌与浏览器会话分离，权限由服务端账户及成员关系决定，请求内的 executor 字段不能提升权限。登录错误和 HTTP 错误不回显密码、令牌或数据库路径；登录同时按来源和账号限流，代理后的其他本机进程即使能连接 loopback 也不能通过更换转发地址无限尝试同一账号。
 
@@ -36,3 +36,5 @@ python3 scripts/standalone_server_acceptance.py --bundle /path/to/dist --out /tm
 选择项目后打开共用工作台。项目读取使用 `/api/v1/projects/ID/dashboard/VIEW`，每次检查当前角色与会话。sync 返回绑定项目、Server 实例和事件水位的游标。task、tasks、task-tree、attention、knowledge-page、knowledge-record、knowledge-link、task-knowledge、evolution 与 events 都由中央项目数据生成。
 
 原始依据和附件仍可通过侧栏入口打开，账户/项目管理保持原有权限。浏览器暂停、取消继续调用原 task mutation API，使用 UI 实际读取的 expected_revision 和幂等键。客户端 alias/machine 标签按声明展示，宿主进程状态为未知。
+
+当前数据格式为 2。格式 1 服务使用显式离线 migrate，备份/恢复保留全部中央表和附件。恢复处于 quiesced 状态，管理员重新登录并签发项目令牌，客户端核对新代次。具体命令和实际边界见 server-operations.md。

@@ -26,6 +26,12 @@ func (body *runnerLeaseResponseBody) Close() error {
 	return err
 }
 
+func (t runnerLeaseTransport) CloseIdleConnections() {
+	if transport, ok := t.base.(interface{ CloseIdleConnections() }); ok {
+		transport.CloseIdleConnections()
+	}
+}
+
 func (t runnerLeaseTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 	if err := t.guard.check(); err != nil {
 		return nil, err
@@ -83,7 +89,18 @@ func runnerGuardedCall(config, project string, binding remote.Binding, guard *ru
 	if guard == nil {
 		return nil, core.Error("LEASE_LOST", "a local lease guard is required")
 	}
-	client := &http.Client{Timeout: 15 * time.Second, Transport: runnerLeaseTransport{guard: guard}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	profile, err := remote.LoadProfile(config, project, binding.Profile)
+	if err != nil {
+		return nil, err
+	}
+	client, err := remote.NewHTTPClient(profile)
+	if err != nil {
+		return nil, err
+	}
+	client.Transport = runnerLeaseTransport{guard: guard, base: client.Transport}
+	if profile.CertificateAuthority != "" {
+		defer client.CloseIdleConnections()
+	}
 	result, err := remote.Call(config, project, binding, method, path, body, client)
 	if err != nil {
 		if leaseErr := guard.check(); leaseErr != nil {

@@ -1,0 +1,238 @@
+{
+  "result": "PASS",
+  "mode": "same-machine isolated real HTTP and signed source",
+  "previous": {
+    "build": "b81aa06-45035685c455",
+    "cli_output_protocol": 1,
+    "version": "0.1.18"
+  },
+  "current_version": "0.1.20",
+  "current_build": "93f6013-e714595cd168",
+  "client_without_docker": true,
+  "two_projects_share_machine_cli": true,
+  "project_entries_unchanged_by_machine_upgrade": true,
+  "active_external_host_preserved": true,
+  "external_host_is_fixture": true,
+  "real_updater_killed_and_recovered": true,
+  "real_permission_failure_kept_old_tool": true,
+  "old_offline_payload_retained": true,
+  "old_local_default_update_retained": true,
+  "real_release_or_production_access": false,
+  "events": [
+    {
+      "case": "bootstrap actual isolated server",
+      "passed": true,
+      "status": "bootstrapped"
+    },
+    {
+      "case": "install actual old offline distribution",
+      "passed": true,
+      "status": "updated"
+    },
+    {
+      "case": "old executable version",
+      "passed": true,
+      "status": null
+    },
+    {
+      "case": "initialize actual old Local project",
+      "passed": true,
+      "status": null
+    },
+    {
+      "case": "save private profile a",
+      "passed": true,
+      "status": "saved"
+    },
+    {
+      "case": "connect with old shared CLI a",
+      "passed": true,
+      "status": null
+    },
+    {
+      "case": "install explicit light entry a",
+      "passed": true,
+      "status": "updated"
+    },
+    {
+      "case": "old shared CLI reads project a",
+      "passed": true,
+      "status": null
+    },
+    {
+      "case": "save private profile b",
+      "passed": true,
+      "status": "saved"
+    },
+    {
+      "case": "connect with old shared CLI b",
+      "passed": true,
+      "status": null
+    },
+    {
+      "case": "install explicit light entry b",
+      "passed": true,
+      "status": "updated"
+    },
+    {
+      "case": "old shared CLI reads project b",
+      "passed": true,
+      "status": null
+    },
+    {
+      "case": "online check inspects selected old prefix",
+      "passed": true,
+      "status": "update_available"
+    },
+    {
+      "case": "online dry-run preserves old tool",
+      "passed": true,
+      "status": "preview"
+    },
+    {
+      "case": "exact unavailable version",
+      "passed": true,
+      "status": "no_available_version"
+    },
+    {
+      "case": "signed exact-version upgrade",
+      "passed": true,
+      "status": "updated"
+    },
+    {
+      "case": "new installed version",
+      "passed": true,
+      "status": null
+    },
+    {
+      "case": "new machine CLI retains default old Local source",
+      "passed": true,
+      "status": "up_to_date"
+    },
+    {
+      "case": "old pinned Local entry retains its default source",
+      "passed": true,
+      "status": "up_to_date"
+    },
+    {
+      "case": "old pinned Local executable remains unchanged",
+      "passed": true,
+      "status": null
+    },
+    {
+      "case": "old backup remains executable",
+      "passed": true,
+      "status": null
+    },
+    {
+      "case": "online same version is up to date",
+      "passed": true,
+      "status": "up_to_date"
+    },
+    {
+      "case": "online check refuses downgrade",
+      "passed": true,
+      "status": "DOWNGRADE_REFUSED"
+    },
+    {
+      "case": "new shared CLI reads unchanged project 0",
+      "passed": true,
+      "status": null
+    },
+    {
+      "case": "CLI project and Server versions 0",
+      "passed": true,
+      "status": null
+    },
+    {
+      "case": "human readable version 0",
+      "passed": true,
+      "status": "text"
+    },
+    {
+      "case": "new shared CLI reads unchanged project 1",
+      "passed": true,
+      "status": null
+    },
+    {
+      "case": "CLI project and Server versions 1",
+      "passed": true,
+      "status": null
+    },
+    {
+      "case": "human readable version 1",
+      "passed": true,
+      "status": "text"
+    },
+    {
+      "case": "active unsupported session stays explicit",
+      "passed": true,
+      "status": "CLIENT_SESSION_PROTOCOL_UNSUPPORTED"
+    },
+    {
+      "case": "incompatible Server GET is rejected",
+      "passed": true,
+      "status": "REMOTE_PROTOCOL_UNSUPPORTED"
+    },
+    {
+      "case": "prepare real interruption old tool",
+      "passed": true,
+      "status": "updated"
+    },
+    {
+      "case": "killed updater target stays executable",
+      "passed": true,
+      "status": null
+    },
+    {
+      "case": "killed updater keeps old cached tool usable",
+      "passed": true,
+      "status": null
+    },
+    {
+      "case": "unacknowledged stale updater is refused",
+      "passed": true,
+      "status": "UPDATE_BUSY"
+    },
+    {
+      "case": "actual killed updater recovers exact source",
+      "passed": true,
+      "status": "updated"
+    },
+    {
+      "case": "interrupted target is usable",
+      "passed": true,
+      "status": null
+    },
+    {
+      "case": "prepare permission fixture old tool",
+      "passed": true,
+      "status": "updated"
+    },
+    {
+      "case": "real permission failure",
+      "passed": true,
+      "status": "permission denied"
+    },
+    {
+      "case": "permission failure retains old executable",
+      "passed": true,
+      "status": null
+    },
+    {
+      "case": "permission restored exact-source retry",
+      "passed": true,
+      "status": "updated"
+    },
+    {
+      "case": "tampered package rejected",
+      "passed": true,
+      "status": "CLIENT_PACKAGE_INVALID"
+    },
+    {
+      "case": "user entry conflict preserved",
+      "passed": true,
+      "status": "ASSET_CONFLICT"
+    }
+  ]
+}

@@ -74,3 +74,12 @@ func TestRemoteGETRejectsIncompatibleServerBeforeAuthoritativeRead(t *testing.T)
 		t.Fatalf("incompatible GET became authoritative %+v %v", value, err)
 	}
 }
+
+func TestProxyMaintenanceFailureIsTransientWithoutAuthority(t *testing.T) {
+	client := &http.Client{Transport: transportFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 502, Body: io.NopCloser(strings.NewReader("temporary proxy failure")), Header: make(http.Header)}, nil
+	})}
+	if _, err := Metadata(client, Profile{URL: "http://127.0.0.1:7332"}); err == nil || !strings.Contains(err.Error(), "REMOTE_UNAVAILABLE") {
+		t.Fatalf("proxy outage was interpreted as protocol incompatibility %v", err)
+	}
+}

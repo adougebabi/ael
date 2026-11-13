@@ -202,12 +202,21 @@ func (h *standaloneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'")
+	if r.URL.Path == "/healthz" && r.Method == http.MethodGet {
+		h.privateHealth(w, r)
+		return
+	}
 	if !h.validOrigin(r) {
 		standaloneFail(w, http.StatusForbidden, "ORIGIN_REJECTED")
 		return
 	}
 	if r.URL.Path == "/api/v1/meta" && r.Method == http.MethodGet {
-		standaloneReply(w, http.StatusOK, map[string]any{"mode": "server", "protocol": 1, "skill_protocol": 1, "cli_output_protocol": 1, "version": h.version, "build": h.build, "capabilities": []string{"login", "projects", "project_roles", "revocable_tokens", "remote_tasks", "remote_plans", "operation_receipts", "artifacts", "portable_candidates", "portable_contexts", "remote_runners", "findings"}})
+		state, err := h.server.Maintenance()
+		if err != nil {
+			standaloneFail(w, 503, "SERVER_MAINTENANCE")
+			return
+		}
+		standaloneReply(w, http.StatusOK, map[string]any{"maintenance": state.publicNotice(), "mode": "server", "protocol": 1, "skill_protocol": 1, "cli_output_protocol": 1, "version": h.version, "build": h.build, "capabilities": []string{"login", "projects", "project_roles", "revocable_tokens", "remote_tasks", "remote_plans", "operation_receipts", "artifacts", "portable_candidates", "portable_contexts", "remote_runners", "findings"}})
 		return
 	}
 	if !strings.HasPrefix(r.URL.Path, "/api/") {
@@ -247,6 +256,12 @@ func (h *standaloneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			standaloneFail(w, http.StatusTooManyRequests, "LOGIN_THROTTLED")
 			return
 		}
+		loginUnlock, lockErr := h.server.lockAuthorization(false)
+		if lockErr != nil {
+			standaloneFail(w, 500, "SERVER_ERROR")
+			return
+		}
+		defer loginUnlock()
 		session, csrf, err := h.server.login(in.Username, in.Password)
 		if err != nil {
 			standaloneFail(w, http.StatusUnauthorized, "INVALID_CREDENTIALS")
@@ -277,7 +292,7 @@ func (h *standaloneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = r.Body.Close()
 		r.Body = io.NopCloser(bytes.NewReader(raw))
 	}
-	exclusive := r.Method != http.MethodGet && (r.URL.Path == "/api/v1/auth/logout" || r.URL.Path == "/api/v1/tokens/revoke" || strings.HasSuffix(r.URL.Path, "/members"))
+	exclusive := r.Method != http.MethodGet && (r.URL.Path == "/api/v1/admin/maintenance" || r.URL.Path == "/api/v1/auth/logout" || r.URL.Path == "/api/v1/tokens/revoke" || strings.HasSuffix(r.URL.Path, "/members"))
 	unlock, err := h.server.lockAuthorization(exclusive)
 	if err != nil {
 		standaloneFail(w, http.StatusInternalServerError, "SERVER_ERROR")
@@ -299,6 +314,21 @@ func (h *standaloneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Allows an existing tab to detect that another tab replaced its
 		// browser session before applying an authenticated response.
 		w.Header().Set("X-AEL-Session-Context", cookie.Value)
+	}
+	state, stateErr := h.server.Maintenance()
+	if stateErr != nil {
+		standaloneFail(w, 503, "SERVER_MAINTENANCE")
+		return
+	}
+	notice, _ := json.Marshal(state.publicNotice())
+	w.Header().Set("X-AEL-Maintenance", string(notice))
+	if err = h.maintenanceAllows(r); err != nil {
+		standaloneFail(w, http.StatusServiceUnavailable, "SERVER_MAINTENANCE")
+		return
+	}
+	if r.URL.Path == "/api/v1/admin/maintenance" {
+		h.maintenanceAPI(w, r, p, method)
+		return
 	}
 	if r.URL.Path == "/api/v1/auth/session" && r.Method == http.MethodGet && method == "session" {
 		cookie, err := r.Cookie("ael_csrf")

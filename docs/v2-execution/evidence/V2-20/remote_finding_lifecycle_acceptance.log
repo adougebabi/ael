@@ -1,0 +1,14 @@
+
+Running 4 tests using 1 worker
+
+(node:39897) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:39897) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 tests/finding-lifecycle.spec.ts:35:1 › 发现修复经过真实外部实施和复验，旧失败与复发可追溯 (19.3s)
+  ✓  2 tests/finding-lifecycle.spec.ts:104:1 › 裁定保留未知请求、理由与精确版本，权衡继续保留任务门禁 (1.1s)
+  ✓  3 tests/finding-lifecycle.spec.ts:147:1 › 关联既有授权任务保留原定义并提供来源上下文 (2.0s)
+  ✓  4 tests/finding-lifecycle.spec.ts:167:1 › 只读会话不能裁定，非 UUID 浏览器与草稿存储失败仍可操作授权裁定 (804ms)
+
+  4 passed (24.0s)
+{"result": "PASS", "out": "/private/tmp/ael-v220-final/remote_finding_lifecycle_acceptance", "actions": ["scanner-role-denied-repair", "one-repair-across-keys", "server-restart-original-receipt", "required-repair-blocks-parent", "implement-b", "verify-b", "fail-ready", "implement-c", "verify-c", "complete-repair", "group-evolution", "recurrence", "prepare-existing", "linked-context"]}

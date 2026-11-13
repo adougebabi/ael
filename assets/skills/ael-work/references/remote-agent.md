@@ -94,3 +94,8 @@ human 检查交由项目 reviewer/admin 登录中央 Dashboard 完成。外部 A
 当前 API/Skill 协议均为 1，旧绑定按 1 兼容读取。会话可声明 AEL_API_PROTOCOL=1、AEL_SKILL_PROTOCOL=1，保留已经取得的规则。机器级 upgrade 保留各项目 Skill，活动 Agent 继续使用原上下文。显式项目入口更新为后续会话使用，不终止宿主进程。服务不兼容时读写均给出明确提示，断网缓存继续标为非权威。
 
 版本查询 `upgrade --source TRUSTED_JSON --version EXACT --check --prefix DIR` 使用真实签名清单和目标安装，dry-run 不下载资产。正式升级才下载并验证包、暂存和原子切换。updater 自身中断可用原包 `upgrade --from ORIGINAL --prefix DIR --ack-stopped` 恢复，仍核对其停止身份。该参数的安装恢复与任务责任恢复各自使用对应原始记录。
+
+
+## 服务维护
+
+读取 server_maintenance 的 mode、epoch、deadline。draining 时保存现场并按授权释放当前责任，截止后接口拒绝有效写入。quiescing/quiesced 时等待维护完成，保留原请求与私有材料。维护后先核对协议和当前责任，查原回执，再根据当前版本处理新领取或 runner recover。unknown workspace 仍需停工确认或独立工作区声明。恢复备份会要求管理员重新签发项目令牌，旧回执可作为历史查询。宿主工作由现有 Agent 自行管理。

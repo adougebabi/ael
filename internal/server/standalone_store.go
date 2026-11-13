@@ -55,7 +55,9 @@ type standaloneTokenInfo struct {
 
 // OpenStandalone uses a dedicated persistent directory and never opens a
 // checkout. Refusing unmarked nonempty directories protects existing data.
-func OpenStandalone(dir string) (*Standalone, error) {
+func OpenStandalone(dir string) (*Standalone, error) { return openStandalone(dir, false) }
+
+func openStandalone(dir string, operator bool) (*Standalone, error) {
 	if !filepath.IsAbs(dir) {
 		return nil, errors.New("SERVER_DATA_DIR_REQUIRED: use an absolute dedicated data directory")
 	}
@@ -78,6 +80,11 @@ func OpenStandalone(dir string) (*Standalone, error) {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, err
 	}
+	canonical, canonicalErr := filepath.EvalSymlinks(dir)
+	if canonicalErr != nil {
+		return nil, canonicalErr
+	}
+	dir = canonical
 	if err := standaloneLocalFilesystem(dir); err != nil {
 		return nil, err
 	}
@@ -86,6 +93,9 @@ func OpenStandalone(dir string) (*Standalone, error) {
 		return nil, errors.New("SERVER_DATA_DIR_PERMISSIONS: directory must not be writable by other users")
 	}
 	if err = standaloneNoACL(dir); err != nil {
+		return nil, err
+	}
+	if err = checkServerFormatFiles(dir, operator); err != nil {
 		return nil, err
 	}
 	marker := filepath.Join(dir, "ael-server.marker")
@@ -104,7 +114,7 @@ func OpenStandalone(dir string) (*Standalone, error) {
 		if createErr != nil {
 			return nil, createErr
 		}
-		_, writeErr := f.WriteString("AEL-STANDALONE-1\n")
+		_, writeErr := f.WriteString("AEL-STANDALONE-2\n")
 		closeErr := f.Close()
 		if writeErr != nil {
 			return nil, writeErr
@@ -112,8 +122,14 @@ func OpenStandalone(dir string) (*Standalone, error) {
 		if closeErr != nil {
 			return nil, closeErr
 		}
-	} else if err != nil || string(raw) != "AEL-STANDALONE-1\n" {
-		return nil, errors.New("SERVER_DATA_DIR_INVALID: invalid server marker")
+	} else if err != nil {
+		return nil, err
+	} else if string(raw) == "AEL-STANDALONE-1\n" {
+		if !operator {
+			return nil, errors.New("SERVER_MIGRATION_REQUIRED")
+		}
+	} else if string(raw) != "AEL-STANDALONE-2\n" {
+		return nil, errors.New("SERVER_SCHEMA_UNSUPPORTED")
 	}
 	if err = os.MkdirAll(filepath.Join(dir, "attachments"), 0700); err != nil {
 		return nil, err

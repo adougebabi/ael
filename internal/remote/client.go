@@ -45,7 +45,13 @@ func Call(config, project string, binding Binding, method, suffix string, payloa
 		req.Header.Set("X-AEL-Protocol", "1")
 	}
 	if client == nil {
-		client = &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		client, err = NewHTTPClient(profile)
+		if err != nil {
+			return nil, err
+		}
+		if profile.CertificateAuthority != "" {
+			defer client.CloseIdleConnections()
+		}
 	}
 	capability := "remote_tasks"
 	if strings.Contains(suffix, "/plan/") {
@@ -105,6 +111,12 @@ func Call(config, project string, binding Binding, method, suffix string, payloa
 			return nil, fmt.Errorf("%s: %s", code, detail)
 		}
 		return nil, fmt.Errorf("%s: remote server rejected the request", code)
+	}
+	if raw := response.Header.Get("X-AEL-Maintenance"); raw != "" {
+		var notice map[string]any
+		if len(raw) <= 4096 && json.Unmarshal([]byte(raw), &notice) == nil && notice["mode"] != "active" {
+			result["server_maintenance"] = notice
+		}
 	}
 	observed := time.Now().UTC().Format(time.RFC3339Nano)
 	if method == http.MethodGet && cacheableRemoteRead(suffix) {

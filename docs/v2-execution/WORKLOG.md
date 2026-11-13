@@ -3,7 +3,7 @@
 > 本账本初始状态不代表任何实施已开始。只有实际执行者才能根据代码和验收结果更新状态。
 > 状态仅允许 PENDING、ACTIVE、VERIFYING、DONE、BLOCKED。
 
-当前任务: V2-20
+当前任务: V2-21
 
 | ID | 任务 | 状态 | 回执 |
 |---|---|---|---|
@@ -27,7 +27,7 @@
 | V2-17 | 发现、修复任务与外部复验闭环 | DONE | receipts/V2-17.md |
 | V2-18 | Server 与薄客户端的发行包和版本清单 | DONE | receipts/V2-18.md |
 | V2-19 | CLI 与项目资产的轻量升级 | DONE | receipts/V2-19.md |
-| V2-20 | Server 部署包、备份与安全升级 | PENDING | — |
+| V2-20 | Server 部署包、备份与安全升级 | DONE | receipts/V2-20.md |
 | V2-21 | 旧本地状态导入与单权威切换 | PENDING | — |
 | V2-22 | 打包后的全链路验收与交付核对 | PENDING | — |
 | V2-23 | 授权后的 Oracle 部署与实际双机验收 | PENDING | — |
@@ -160,3 +160,14 @@ V2-13 已 DONE，正式回执 receipts/V2-13.md，证据 evidence/V2-13/。最�
 - 最终旧协议回归定位到新增 --check 全局布尔注册误吞 context record-check 的检查 ID。已限定维护命令的布尔解析并保留原 value 参数，新增回归覆盖 context/verify 的两种赋值和 version/upgrade 的布尔用法。原正式失败与单元失败均保留，继续同一 V2-19 复验，不开始 V2-20。
 
 - V2-19 最终 PASS，回执 receipts/V2-19.md，证据 evidence/V2-19/。0.1.19 最终正式 43 升级事件、真实新旧 Local 默认 update、双 Remote 共享 CLI、原 Context/协作/证据/发现/人工/复验、独立 Server 和 Local 59 场景、全量 Go、相关 race、vet 通过。旧完整来源和新客户端缓存分离，原失败留存。检查点为包含本记录的本地提交，V2-20 当前 PENDING，提交后继续。
+
+## V2-20 当前实施
+
+基线 93f6013f835ae30d37541d328da0a03fdd39695f，开工工作区干净。V2-19 已完成正式验收、相关全量回归和本地检查点。当前唯一 ACTIVE 为 V2-20，先核对中央数据库/附件/授权锁与已有备份接缝，再接本地单实例 Compose、维护与一致恢复。V2-21—23 保持 PENDING，Oracle 实际操作留待 V2-23 明确授权。
+
+- V2-20 第一步通过开发验证，本机单实例 Compose + 官方固定 Caddy digest 的真实 HTTPS、显式公共 CA、Secure cookie、正式 CLI 建任务/上传 PNG、Server 重启后任务与图片 hash 保留，现场 /private/tmp/ael-v220-compose-development-3/summary.json。客户端 PATH 不含 Docker，临时服务和卷已清理。私有健康路径只允许原始 loopback peer/Host，公网代理访问被拒绝。CA 统一接入普通、持久重试及租约通信，未引入 insecure 开关。
+- V2-20 第二步已接管理员 session/CSRF 的 drain/quiesce/resume 状态与正式维护 CLI。复用 authorization.lock，登录写入也进入栅栏；新领取受 drain 拒绝，quiesce 将旧 API 责任置 interrupted、清 lease 并保留 unknown workspace hold，原幂等回执继续可读，resume 后旧 token 写入仍拒绝。维护单元 TestMaintenanceDrainsRevokesAndPreservesReceipts 已通过。当前还需外部维护 CLI/并发/截止与中断复验，以及全量备份恢复和升级格式保护，尚无本项 PASS 或检查点。V2-21—23 PENDING。
+
+- V2-20 外部正式维护 CLI 在真实 TLS Compose 开发分发通过 drain、deadline 后写入拒绝、quiesce、原键重放、resume 和重启后任务/图片读取，现场 /private/tmp/ael-v220-maintenance-compose/summary.json，build 93f6013-efb9df7432ad。自有容器和卷已清理。当前继续第三步中央全量备份/恢复与格式回退保护，尚未实现这两部分，也未形成 V2-20 PASS 或检查点。
+
+- V2-20 最终 PASS，回执 receipts/V2-20.md，证据 evidence/V2-20/。真实 TLS Compose、中央全量空卷恢复、旧责任失效/回执保留、真实旧新程序迁移和恢复 SIGKILL 续跑通过。最终正式分发/镜像、升级及全部相关旧协议/浏览器、Local 59 项、Go 全量、相关 race、vet 通过。恢复清除旧 session 并撤销旧项目令牌，管理员重登/重新签发。macOS arm64 与本机 linux/aarch64 实测，其他架构实机、Oracle、真实公网域名未验证。检查点为包含本记录的本地提交，下一项 V2-21 PENDING，提交后继续。

@@ -16,14 +16,14 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"time"
 )
 
 var identifier = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
 
 type Profile struct {
-	URL   string `json:"url"`
-	Token string `json:"token"`
+	CertificateAuthority string `json:"ca_pem,omitempty"`
+	URL                  string `json:"url"`
+	Token                string `json:"token"`
 }
 
 type Binding struct {
@@ -113,6 +113,14 @@ func outsideCheckout(config, project string) (string, error) {
 }
 
 func SaveProfile(config, project, name, rawURL, token string) error {
+	return SaveProfileWithAuthority(config, project, name, rawURL, token, "")
+}
+
+func SaveProfileWithAuthority(config, project, name, rawURL, token, authority string) error {
+	authority, authorityErr := canonicalAuthority(authority)
+	if authorityErr != nil {
+		return authorityErr
+	}
 	if !identifier.MatchString(name) || token == "" || len(token) > 512 || strings.ContainsAny(token, "\r\n") {
 		return errors.New("REMOTE_PROFILE_INVALID")
 	}
@@ -156,7 +164,7 @@ func SaveProfile(config, project, name, rawURL, token string) error {
 	if err != nil {
 		return errors.New("REMOTE_PROFILE_EXISTS_OR_UNAVAILABLE")
 	}
-	data, _ := json.Marshal(Profile{URL: origin, Token: token})
+	data, _ := json.Marshal(Profile{URL: origin, Token: token, CertificateAuthority: authority})
 	_, writeErr := f.Write(append(data, '\n'))
 	if writeErr == nil {
 		writeErr = f.Sync()
@@ -210,6 +218,9 @@ func LoadProfile(config, project, name string) (Profile, error) {
 	if p.URL, err = cleanURL(p.URL); err != nil {
 		return Profile{}, err
 	}
+	if err = validateAuthority(p.CertificateAuthority); err != nil {
+		return Profile{}, err
+	}
 	return p, nil
 }
 
@@ -254,7 +265,11 @@ func ReadBindingSnapshot(project string) (Binding, bool, string, error) {
 
 func request(client *http.Client, p Profile, path string, auth bool) (*http.Response, error) {
 	if client == nil {
-		client = &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		var err error
+		client, err = NewHTTPClient(p)
+		if err != nil {
+			return nil, err
+		}
 	}
 	r, err := http.NewRequest(http.MethodGet, p.URL+path, nil)
 	if err != nil {

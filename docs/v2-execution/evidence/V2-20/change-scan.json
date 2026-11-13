@@ -1,0 +1,437 @@
+{
+  "passed": true,
+  "total_additions": 0,
+  "total_deletions": 0,
+  "affected_modules": [
+    ".",
+    "assets",
+    "cmd",
+    "docs",
+    "internal",
+    "packaging",
+    "web",
+    "packaging/compose",
+    "scripts"
+  ],
+  "changes": [
+    {
+      "path": "README.md",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": true,
+      "is_test": false
+    },
+    {
+      "path": "assets/skills/ael-work/references/remote-agent.md",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": true,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/main.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/remote.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/remote_agent_operation.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/remote_runner_lease.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/standalone.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/architecture.md",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": true,
+      "is_test": false
+    },
+    {
+      "path": "docs/standalone-server.md",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": true,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/WORKLOG.md",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": true,
+      "is_test": false
+    },
+    {
+      "path": "internal/bootstrap/bootstrap.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/remote/client.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/remote/profile.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/remote/protocol.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/remote/protocol_test.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": true
+    },
+    {
+      "path": "internal/server/standalone_http.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/standalone_store.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/standalone_test.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": true
+    },
+    {
+      "path": "packaging/server.Dockerfile",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "web/package-lock.json",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "web/package.json",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/remote_tls_test.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": true
+    },
+    {
+      "path": "cmd/ael/server_health.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/server_maintenance.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/server_storage.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/server-operations.md",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": true,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-20/",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/core/remote_maintenance.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/remote/tls.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/remote/tls_test.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": true
+    },
+    {
+      "path": "internal/server/maintenance.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/maintenance_test.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": true
+    },
+    {
+      "path": "internal/server/server_backup.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/server_backup_test.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": true
+    },
+    {
+      "path": "internal/server/server_format.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/server_restore.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/standalone_health.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/standalone_health_test.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": true
+    },
+    {
+      "path": "packaging/compose/",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "scripts/server_compose_acceptance.py",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "scripts/server_storage_acceptance.py",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    }
+  ],
+  "issues": [
+    {
+      "severity": "info",
+      "message": "模块 cmd 新增了文件，建议更新 README.md",
+      "related_files": [
+        "cmd/ael/remote_tls_test.go",
+        "cmd/ael/server_health.go",
+        "cmd/ael/server_maintenance.go",
+        "cmd/ael/server_storage.go"
+      ]
+    },
+    {
+      "severity": "info",
+      "message": "模块 internal 新增了文件，建议更新 README.md",
+      "related_files": [
+        "internal/core/remote_maintenance.go",
+        "internal/remote/tls.go",
+        "internal/remote/tls_test.go",
+        "internal/server/maintenance.go",
+        "internal/server/maintenance_test.go",
+        "internal/server/server_backup.go",
+        "internal/server/server_backup_test.go",
+        "internal/server/server_format.go",
+        "internal/server/server_restore.go",
+        "internal/server/standalone_health.go",
+        "internal/server/standalone_health_test.go"
+      ]
+    },
+    {
+      "severity": "info",
+      "message": "模块 scripts 新增了文件，建议更新 README.md",
+      "related_files": [
+        "scripts/server_compose_acceptance.py",
+        "scripts/server_storage_acceptance.py"
+      ]
+    },
+    {
+      "severity": "info",
+      "message": "配置文件有变更，请确认是否需要更新文档",
+      "related_files": [
+        "web/package-lock.json",
+        "web/package.json"
+      ]
+    }
+  ],
+  "doc_sync_status": {
+    "cmd/DESIGN.md": true,
+    "internal/DESIGN.md": true,
+    "scripts/DESIGN.md": true
+  }
+}

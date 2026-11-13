@@ -1,0 +1,46 @@
+{
+  "result": "PASS",
+  "mode": "same-machine local Compose with genuine verified HTTPS",
+  "engine": {
+    "os": "linux",
+    "architecture": "aarch64"
+  },
+  "image_id": "sha256:64ca260c18f3ab53989ae96436a6d06259c331163974a2ab541a0ee61de0aeec",
+  "proxy_image_id": "sha256:6e5bf6e6409f03049c41cf4b4c29fbd27b21c8551a900bdbceef3c3a5890b9df",
+  "origin": "https://localhost:58626",
+  "private_health": "passed",
+  "public_health_denied": true,
+  "secure_login_cookie": true,
+  "task": "persistent-task",
+  "artifact": "artifact_fvHyQrBaqt9Bo_UWI-sdpDsh4e9z38hI5_IF40f46k8",
+  "image_sha256": "551f36d77a93e186e795fc916366bb2438deb63529d9027755ca2a636d2f0f1a",
+  "restart_persistence": true,
+  "client_without_docker": true,
+  "events": [
+    {
+      "case": "save explicit public CA with private profile",
+      "passed": true
+    },
+    {
+      "case": "connect external CLI through genuine TLS",
+      "passed": true
+    },
+    {
+      "case": "create actual task",
+      "passed": true
+    },
+    {
+      "case": "upload actual image bytes",
+      "passed": true
+    },
+    {
+      "case": "read persisted task after restart",
+      "passed": true
+    },
+    {
+      "case": "download persisted image after restart",
+      "passed": true
+    }
+  ],
+  "oracle_access": false
+}

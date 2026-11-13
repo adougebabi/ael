@@ -36,7 +36,7 @@ func remoteConfigDir(a args) (string, error) {
 func remoteControl(cmd string, a args) (any, error) {
 	allowed := map[string]bool{"project": true, "config-dir": true, "json": true, "verbose": true, "no-color": true}
 	if cmd == "server profile add" {
-		allowed["name"], allowed["url"], allowed["token-stdin"] = true, true, true
+		allowed["name"], allowed["url"], allowed["token-stdin"], allowed["ca-file"] = true, true, true, true
 	} else {
 		allowed["profile"], allowed["remote-project"], allowed["install-entry"] = true, true, true
 	}
@@ -65,7 +65,14 @@ func remoteControl(cmd string, a args) (any, error) {
 			return nil, core.Error("REMOTE_TOKEN_REQUIRED", "invalid token input")
 		}
 		token := strings.TrimSuffix(strings.TrimSuffix(string(raw), "\n"), "\r")
-		if err = remote.SaveProfile(config, project, a.get("name", ""), a.get("url", ""), token); err != nil {
+		authority := ""
+		if a.get("ca-file", "") != "" {
+			authority, err = remote.ReadAuthority(a.get("ca-file", ""))
+			if err != nil {
+				return nil, err
+			}
+		}
+		if err = remote.SaveProfileWithAuthority(config, project, a.get("name", ""), a.get("url", ""), token, authority); err != nil {
 			return nil, err
 		}
 		return map[string]string{"mode": "remote", "profile": a.get("name", ""), "status": "saved"}, nil

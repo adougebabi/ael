@@ -1,0 +1,51 @@
+{
+  "status": "passed",
+  "build": "93f6013-e714595cd168",
+  "commit": "93f6013f835ae30d37541d328da0a03fdd39695f",
+  "dirty": true,
+  "publication": "local_unpublished",
+  "native": "darwin-arm64",
+  "content_integrity": "verified",
+  "publisher_identity": "unverified",
+  "packages": [
+    {
+      "kind": "client",
+      "platform": "darwin-arm64",
+      "files_verified": 3
+    },
+    {
+      "kind": "client",
+      "platform": "darwin-amd64",
+      "files_verified": 3
+    },
+    {
+      "kind": "client",
+      "platform": "linux-amd64",
+      "files_verified": 3
+    },
+    {
+      "kind": "client",
+      "platform": "linux-arm64",
+      "files_verified": 3
+    },
+    {
+      "kind": "server",
+      "platform": "linux-amd64",
+      "files_verified": 3
+    },
+    {
+      "kind": "server",
+      "platform": "linux-arm64",
+      "files_verified": 3
+    },
+    {
+      "kind": "skill",
+      "platform": "all",
+      "files_verified": 10
+    }
+  ],
+  "client_without_host_tools": "passed",
+  "tamper": "rejected",
+  "legacy_install": "passed",
+  "physical_other_platform_execution": "unverified"
+}

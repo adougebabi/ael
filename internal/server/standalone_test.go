@@ -246,7 +246,7 @@ func TestStandaloneRejectsExistingDataAndSymlinks(t *testing.T) {
 		t.Fatal("existing data changed", err)
 	}
 	dir = t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "ael-server.marker"), []byte("AEL-STANDALONE-1\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "ael-server.marker"), []byte("AEL-STANDALONE-2\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	targetDir := t.TempDir()
@@ -357,7 +357,7 @@ func TestStandaloneRejectsDatabaseAndSidecarHardLinks(t *testing.T) {
 	for _, suffix := range []string{"", "-wal", "-shm", "-journal"} {
 		t.Run("database"+suffix, func(t *testing.T) {
 			dir := t.TempDir()
-			if err := os.WriteFile(filepath.Join(dir, "ael-server.marker"), []byte("AEL-STANDALONE-1\n"), 0600); err != nil {
+			if err := os.WriteFile(filepath.Join(dir, "ael-server.marker"), []byte("AEL-STANDALONE-2\n"), 0600); err != nil {
 				t.Fatal(err)
 			}
 			victimDir := t.TempDir()

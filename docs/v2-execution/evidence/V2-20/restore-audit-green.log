@@ -1,0 +1,16 @@
+=== RUN   TestCentralBackupRestorePreservesAllTablesAndImages
+--- PASS: TestCentralBackupRestorePreservesAllTablesAndImages (0.48s)
+=== RUN   TestBackupTamperAndRestoreConflictPreserveTarget
+--- PASS: TestBackupTamperAndRestoreConflictPreserveTarget (0.33s)
+=== RUN   TestFormatMigrationResumesAndBlocksOrdinaryOpen
+--- PASS: TestFormatMigrationResumesAndBlocksOrdinaryOpen (0.30s)
+=== RUN   TestRestoreAllowsEmptyVolumeAtHistoricalDataPath
+--- PASS: TestRestoreAllowsEmptyVolumeAtHistoricalDataPath (0.43s)
+=== RUN   TestRestoreResumeRejectsUnsafeMatchingFile
+=== RUN   TestRestoreResumeRejectsUnsafeMatchingFile/hardlink
+=== RUN   TestRestoreResumeRejectsUnsafeMatchingFile/permissions
+--- PASS: TestRestoreResumeRejectsUnsafeMatchingFile (0.83s)
+    --- PASS: TestRestoreResumeRejectsUnsafeMatchingFile/hardlink (0.41s)
+    --- PASS: TestRestoreResumeRejectsUnsafeMatchingFile/permissions (0.42s)
+PASS
+ok  	ael/internal/server	3.435s

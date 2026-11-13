@@ -1,0 +1,14 @@
+=== RUN   TestRestoreAllowsEmptyVolumeAtHistoricalDataPath
+    server_backup_test.go:166: historical empty volume blocked map[] SERVER_RESTORE_TARGET_INVALID
+--- FAIL: TestRestoreAllowsEmptyVolumeAtHistoricalDataPath (0.35s)
+=== RUN   TestRestoreResumeRejectsUnsafeMatchingFile
+=== RUN   TestRestoreResumeRejectsUnsafeMatchingFile/hardlink
+    server_backup_test.go:217: unsafe matching file reported restored
+=== RUN   TestRestoreResumeRejectsUnsafeMatchingFile/permissions
+    server_backup_test.go:217: unsafe matching file reported restored
+--- FAIL: TestRestoreResumeRejectsUnsafeMatchingFile (0.86s)
+    --- FAIL: TestRestoreResumeRejectsUnsafeMatchingFile/hardlink (0.43s)
+    --- FAIL: TestRestoreResumeRejectsUnsafeMatchingFile/permissions (0.43s)
+FAIL
+FAIL	ael/internal/server	1.728s
+FAIL

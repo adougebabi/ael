@@ -144,7 +144,18 @@ func lockAgentOperation(path string) (func(), error) {
 }
 
 func agentCommunicationCall(config, project string, binding remote.Binding, method, path string, body any) (map[string]any, error) {
-	client := &http.Client{Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	profile, err := remote.LoadProfile(config, project, binding.Profile)
+	if err != nil {
+		return nil, err
+	}
+	client, err := remote.NewHTTPClient(profile)
+	if err != nil {
+		return nil, err
+	}
+	client.Timeout = 5 * time.Second
+	if profile.CertificateAuthority != "" {
+		defer client.CloseIdleConnections()
+	}
 	return remote.Call(config, project, binding, method, path, body, client)
 }
 

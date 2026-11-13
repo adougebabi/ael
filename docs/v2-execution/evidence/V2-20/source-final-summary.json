@@ -1,0 +1,65 @@
+{
+  "status": "passed",
+  "build": "93f6013-e714595cd168",
+  "isolated_loopback_source": true,
+  "real_ssh_signature": true,
+  "official_release_access": false,
+  "remote_project_without_local_runtime": true,
+  "cases": [
+    {
+      "case": "empty catalog",
+      "result": "no_available_version",
+      "passed": true
+    },
+    {
+      "case": "stable platform selection",
+      "result": "available",
+      "passed": true
+    },
+    {
+      "case": "explicit prerelease",
+      "result": "available",
+      "passed": true
+    },
+    {
+      "case": "signed real asset download",
+      "result": "downloaded",
+      "passed": true
+    },
+    {
+      "case": "output collision",
+      "result": "RELEASE_OUTPUT_UNAVAILABLE",
+      "passed": true
+    },
+    {
+      "case": "missing platform",
+      "result": "RELEASE_ASSET_MISSING",
+      "passed": true
+    },
+    {
+      "case": "tampered download",
+      "result": "RELEASE_CHECKSUM_MISMATCH",
+      "passed": true
+    },
+    {
+      "case": "wrong publisher",
+      "result": "RELEASE_IDENTITY_REJECTED",
+      "passed": true
+    },
+    {
+      "case": "tampered signed manifest",
+      "result": "RELEASE_IDENTITY_REJECTED",
+      "passed": true
+    },
+    {
+      "case": "incompatible signed manifest",
+      "result": "RELEASE_PROTOCOL_UNSUPPORTED",
+      "passed": true
+    },
+    {
+      "case": "missing catalog asset",
+      "result": "RELEASE_ASSET_MISSING",
+      "passed": true
+    }
+  ]
+}

@@ -13,13 +13,14 @@ const APIProtocol = 1
 const SkillProtocol = 1
 
 type ServerMetadata struct {
-	Mode           string   `json:"mode"`
-	Protocol       int      `json:"protocol"`
-	SkillProtocol  int      `json:"skill_protocol,omitempty"`
-	OutputProtocol int      `json:"cli_output_protocol,omitempty"`
-	Version        string   `json:"version,omitempty"`
-	Build          string   `json:"build,omitempty"`
-	Capabilities   []string `json:"capabilities"`
+	Mode           string         `json:"mode"`
+	Protocol       int            `json:"protocol"`
+	SkillProtocol  int            `json:"skill_protocol,omitempty"`
+	OutputProtocol int            `json:"cli_output_protocol,omitempty"`
+	Version        string         `json:"version,omitempty"`
+	Build          string         `json:"build,omitempty"`
+	Maintenance    map[string]any `json:"maintenance,omitempty"`
+	Capabilities   []string       `json:"capabilities"`
 }
 
 // Explicit session declarations survive a machine CLI upgrade. Unknown protocols
@@ -43,6 +44,9 @@ func Metadata(client *http.Client, profile Profile) (ServerMetadata, error) {
 		return meta, err
 	}
 	defer response.Body.Close()
+	if response.StatusCode >= 500 {
+		return meta, errors.New("REMOTE_UNAVAILABLE: server metadata temporarily unavailable")
+	}
 	if response.StatusCode == http.StatusUnauthorized {
 		return meta, errors.New("AUTH_REQUIRED: server metadata access was rejected")
 	}

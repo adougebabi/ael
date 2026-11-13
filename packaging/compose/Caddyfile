@@ -1,0 +1,8 @@
+{
+	admin off
+	skip_install_trust
+}
+
+{$AEL_SITE_HOST} {
+	reverse_proxy server:7332
+}

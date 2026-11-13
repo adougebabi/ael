@@ -37,6 +37,11 @@ func standaloneCommand(cmd string, a args) (any, error) {
 	}
 	s, err := server.OpenStandalone(dir)
 	if err != nil {
+		for _, code := range []string{"SERVER_MIGRATION_REQUIRED", "SERVER_SCHEMA_UNSUPPORTED", "SERVER_RECOVERY_REQUIRED"} {
+			if strings.HasPrefix(err.Error(), code) {
+				return nil, core.Error(code, "use the explicit server storage recovery procedure before starting")
+			}
+		}
 		return nil, core.Error("SERVER_OPEN_FAILED", "cannot open the dedicated local data directory")
 	}
 	defer s.Close()
