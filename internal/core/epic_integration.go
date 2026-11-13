@@ -42,22 +42,24 @@ type IntegrationSupport struct {
 // EpicIntegration records the actual parent candidate and the exact leaf
 // states whose content was checked against it. It is not a passing check.
 type EpicIntegration struct {
-	Candidate       string                   `json:"candidate"`
-	ProjectID       string                   `json:"project_id"`
-	LocalRepository string                   `json:"local_repository,omitempty"`
-	GitHead         string                   `json:"git_head,omitempty"`
-	ToolBuild       string                   `json:"tool_build,omitempty"`
-	Files           map[string]CandidateFile `json:"files"`
-	Definition      int                      `json:"definition_revision"`
-	Plan            int                      `json:"plan_revision"`
-	PlanDigest      string                   `json:"plan_digest,omitempty"`
-	ImpactEvidence  string                   `json:"impact_evidence,omitempty"`
-	ImpactHash      string                   `json:"impact_hash,omitempty"`
-	Leaves          []IntegratedLeaf         `json:"leaves"`
-	Supporting      []IntegrationSupport     `json:"supporting,omitempty"`
-	Prepared        time.Time                `json:"prepared_at"`
-	StaleReason     string                   `json:"stale_reason,omitempty"`
-	WaitReason      string                   `json:"wait_reason,omitempty"`
+	ImpactUnknown    bool                     `json:"impact_unknown,omitempty"`
+	RemoteRepository string                   `json:"remote_repository,omitempty"`
+	Candidate        string                   `json:"candidate"`
+	ProjectID        string                   `json:"project_id"`
+	LocalRepository  string                   `json:"local_repository,omitempty"`
+	GitHead          string                   `json:"git_head,omitempty"`
+	ToolBuild        string                   `json:"tool_build,omitempty"`
+	Files            map[string]CandidateFile `json:"files"`
+	Definition       int                      `json:"definition_revision"`
+	Plan             int                      `json:"plan_revision"`
+	PlanDigest       string                   `json:"plan_digest,omitempty"`
+	ImpactEvidence   string                   `json:"impact_evidence,omitempty"`
+	ImpactHash       string                   `json:"impact_hash,omitempty"`
+	Leaves           []IntegratedLeaf         `json:"leaves"`
+	Supporting       []IntegrationSupport     `json:"supporting,omitempty"`
+	Prepared         time.Time                `json:"prepared_at"`
+	StaleReason      string                   `json:"stale_reason,omitempty"`
+	WaitReason       string                   `json:"wait_reason,omitempty"`
 }
 
 // Both candidate workspaces and attempt workspaces are normally canonicalized
@@ -767,11 +769,19 @@ func (s *Service) PrepareEpicIntegration(id string) (Next, error) {
 }
 
 func validateEpicIntegration(tx *store.Tx, parent *Task) error {
+	integration := parent.Integration
+	if integration == nil || integration.RemoteRepository != "" || fingerprintCandidateFiles(integration.Files, integration.GitHead) != integration.Candidate {
+		return Error("EPIC_INTEGRATION_STALE", "prepare the exact local parent candidate again")
+	}
+	return validateEpicIntegrationState(tx, parent)
+}
+
+func validateEpicIntegrationState(tx *store.Tx, parent *Task) error {
 	if err := noActiveEpicPlan(tx, parent.Definition.ID); err != nil {
 		return err
 	}
 	integration := parent.Integration
-	if integration == nil || integration.StaleReason != "" || integration.Candidate != parent.Candidate || integration.Definition != parent.Definition.Revision || integration.Plan != parent.Plan.Revision || integration.ProjectID == "" || integration.Files == nil || fingerprintCandidateFiles(integration.Files, integration.GitHead) != integration.Candidate {
+	if integration == nil || integration.StaleReason != "" || integration.Candidate != parent.Candidate || integration.Definition != parent.Definition.Revision || integration.Plan != parent.Plan.Revision || integration.ProjectID == "" || integration.Files == nil {
 		return Error("EPIC_INTEGRATION_STALE", "prepare the exact parent candidate again")
 	}
 	if err := epicCoverage(*parent); err != nil {

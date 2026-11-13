@@ -1,0 +1,158 @@
+[
+  {
+    "name": "remote_agent_acceptance",
+    "command": [
+      "/Users/vinson/.pyenv/versions/3.11.0/bin/python3",
+      "/Users/vinson/Documents/project/\u4e2a\u4eba/ael/scripts/remote_agent_acceptance.py",
+      "--bundle",
+      "/private/tmp/ael-v222-final-1/bundle",
+      "--out",
+      "/private/tmp/ael-v222-final-1/remote_agent_acceptance"
+    ],
+    "exit_code": 0,
+    "seconds": 19.22
+  },
+  {
+    "name": "remote_tasks_acceptance",
+    "command": [
+      "/Users/vinson/.pyenv/versions/3.11.0/bin/python3",
+      "/Users/vinson/Documents/project/\u4e2a\u4eba/ael/scripts/remote_tasks_acceptance.py",
+      "--bundle",
+      "/private/tmp/ael-v222-final-1/bundle",
+      "--out",
+      "/private/tmp/ael-v222-final-1/remote_tasks_acceptance"
+    ],
+    "exit_code": 0,
+    "seconds": 0.81
+  },
+  {
+    "name": "remote_artifacts_acceptance",
+    "command": [
+      "/Users/vinson/.pyenv/versions/3.11.0/bin/python3",
+      "/Users/vinson/Documents/project/\u4e2a\u4eba/ael/scripts/remote_artifacts_acceptance.py",
+      "--bundle",
+      "/private/tmp/ael-v222-final-1/bundle",
+      "--out",
+      "/private/tmp/ael-v222-final-1/remote_artifacts_acceptance"
+    ],
+    "exit_code": 0,
+    "seconds": 4.85
+  },
+  {
+    "name": "remote_context_acceptance",
+    "command": [
+      "/Users/vinson/.pyenv/versions/3.11.0/bin/python3",
+      "/Users/vinson/Documents/project/\u4e2a\u4eba/ael/scripts/remote_context_acceptance.py",
+      "--bundle",
+      "/private/tmp/ael-v222-final-1/bundle",
+      "--out",
+      "/private/tmp/ael-v222-final-1/remote_context_acceptance"
+    ],
+    "exit_code": 0,
+    "seconds": 14.62
+  },
+  {
+    "name": "remote_collaboration_acceptance",
+    "command": [
+      "/Users/vinson/.pyenv/versions/3.11.0/bin/python3",
+      "/Users/vinson/Documents/project/\u4e2a\u4eba/ael/scripts/remote_collaboration_acceptance.py",
+      "--bundle",
+      "/private/tmp/ael-v222-final-1/bundle",
+      "--out",
+      "/private/tmp/ael-v222-final-1/remote_collaboration_acceptance"
+    ],
+    "exit_code": 0,
+    "seconds": 41.38
+  },
+  {
+    "name": "remote_dashboard_acceptance",
+    "command": [
+      "/Users/vinson/.pyenv/versions/3.11.0/bin/python3",
+      "/Users/vinson/Documents/project/\u4e2a\u4eba/ael/scripts/remote_dashboard_acceptance.py",
+      "--bundle",
+      "/private/tmp/ael-v222-final-1/bundle",
+      "--out",
+      "/private/tmp/ael-v222-final-1/remote_dashboard_acceptance"
+    ],
+    "exit_code": 0,
+    "seconds": 18.15
+  },
+  {
+    "name": "remote_findings_acceptance",
+    "command": [
+      "/Users/vinson/.pyenv/versions/3.11.0/bin/python3",
+      "/Users/vinson/Documents/project/\u4e2a\u4eba/ael/scripts/remote_findings_acceptance.py",
+      "--bundle",
+      "/private/tmp/ael-v222-final-1/bundle",
+      "--out",
+      "/private/tmp/ael-v222-final-1/remote_findings_acceptance"
+    ],
+    "exit_code": 0,
+    "seconds": 5.96
+  },
+  {
+    "name": "remote_review_acceptance",
+    "command": [
+      "/Users/vinson/.pyenv/versions/3.11.0/bin/python3",
+      "/Users/vinson/Documents/project/\u4e2a\u4eba/ael/scripts/remote_review_acceptance.py",
+      "--bundle",
+      "/private/tmp/ael-v222-final-1/bundle",
+      "--out",
+      "/private/tmp/ael-v222-final-1/remote_review_acceptance"
+    ],
+    "exit_code": 0,
+    "seconds": 59.78
+  },
+  {
+    "name": "remote_finding_lifecycle_acceptance",
+    "command": [
+      "/Users/vinson/.pyenv/versions/3.11.0/bin/python3",
+      "/Users/vinson/Documents/project/\u4e2a\u4eba/ael/scripts/remote_finding_lifecycle_acceptance.py",
+      "--bundle",
+      "/private/tmp/ael-v222-final-1/bundle",
+      "--out",
+      "/private/tmp/ael-v222-final-1/remote_finding_lifecycle_acceptance"
+    ],
+    "exit_code": 0,
+    "seconds": 39.58
+  },
+  {
+    "name": "standalone_server_acceptance",
+    "command": [
+      "/Users/vinson/.pyenv/versions/3.11.0/bin/python3",
+      "/Users/vinson/Documents/project/\u4e2a\u4eba/ael/scripts/standalone_server_acceptance.py",
+      "--bundle",
+      "/private/tmp/ael-v222-final-1/bundle",
+      "--out",
+      "/private/tmp/ael-v222-final-1/standalone_server_acceptance"
+    ],
+    "exit_code": 0,
+    "seconds": 5.21
+  },
+  {
+    "name": "workflow_acceptance",
+    "command": [
+      "/Users/vinson/.pyenv/versions/3.11.0/bin/python3",
+      "/Users/vinson/Documents/project/\u4e2a\u4eba/ael/scripts/workflow_acceptance.py",
+      "--bundle",
+      "/private/tmp/ael-v222-final-1/bundle",
+      "--out",
+      "/private/tmp/ael-v222-final-1/workflow_acceptance"
+    ],
+    "exit_code": 0,
+    "seconds": 12.45
+  },
+  {
+    "name": "concurrency_acceptance",
+    "command": [
+      "/Users/vinson/.pyenv/versions/3.11.0/bin/python3",
+      "/Users/vinson/Documents/project/\u4e2a\u4eba/ael/scripts/concurrency_acceptance.py",
+      "--bundle",
+      "/private/tmp/ael-v222-final-1/bundle",
+      "--out",
+      "/private/tmp/ael-v222-final-1/concurrency_acceptance"
+    ],
+    "exit_code": 0,
+    "seconds": 2.03
+  }
+]

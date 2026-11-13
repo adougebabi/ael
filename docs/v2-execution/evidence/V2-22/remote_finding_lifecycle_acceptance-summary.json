@@ -1,0 +1,31 @@
+{
+  "result": "PASS",
+  "mode": "external CLI fixture with actual edits, Git commits, command tests and Chromium screenshots",
+  "actions": [
+    "scanner-role-denied-repair",
+    "one-repair-across-keys",
+    "server-restart-original-receipt",
+    "required-repair-blocks-parent",
+    "implement-b",
+    "verify-b",
+    "fail-ready",
+    "implement-c",
+    "verify-c",
+    "complete-repair",
+    "group-evolution",
+    "recurrence",
+    "prepare-existing",
+    "linked-context"
+  ],
+  "phases": {
+    "candidate-b": "b5c9779ae23469f6afcbedf4f0eb5ef67b2a974962a2413e0eac6c1eaf5e81d9",
+    "b": "b5c9779ae23469f6afcbedf4f0eb5ef67b2a974962a2413e0eac6c1eaf5e81d9",
+    "candidate-c": "108c7d024ffb6760bbca5da067d975c18025cc9634a711ada06d694763a2b9ee",
+    "c": "108c7d024ffb6760bbca5da067d975c18025cc9634a711ada06d694763a2b9ee",
+    "recurrence": {
+      "finding": "finding_ecP5VA7kp4lpzUFje70cCvmbWralFWj0mc94K-9xdLk",
+      "candidate": "53ab9cd1bcd1d763b09f088e51ed86e3f9b46d60513a09ad4a479e7fb8d0506e",
+      "repair": "WI-c822f7c5cf09cfc34834"
+    }
+  }
+}

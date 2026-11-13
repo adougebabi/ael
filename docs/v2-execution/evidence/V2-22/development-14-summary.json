@@ -1,0 +1,129 @@
+{
+  "result": "PASS",
+  "mode": "same-machine isolated real HTTP and external deterministic driver",
+  "eight_actual_modules": [
+    {
+      "leaf": "leaf-01",
+      "client": "a",
+      "source_commit": "b4247ba62a807c87992dcf04291056b70ac6aa23"
+    },
+    {
+      "leaf": "leaf-02",
+      "client": "b",
+      "source_commit": "117185c9c1d6fa02b0f446cc908aef24ebb461f2"
+    },
+    {
+      "leaf": "leaf-03",
+      "client": "a",
+      "source_commit": "591b418f16dab17db9a1fb5541d36eddf723c0eb"
+    },
+    {
+      "leaf": "leaf-04",
+      "client": "a",
+      "source_commit": "6f408a0b7d8e06052a5ff7f07d0438df17a30520"
+    },
+    {
+      "leaf": "leaf-05",
+      "client": "a",
+      "source_commit": "96577f9fdb0060b0c32376065e83057a16a572a3"
+    },
+    {
+      "leaf": "leaf-06",
+      "client": "b",
+      "source_commit": "2fce18919a8e2beb458e9352c83ac0606a32d4a4"
+    },
+    {
+      "leaf": "leaf-07",
+      "client": "a",
+      "source_commit": "c5398afcbe6be1e7ac4b5d37c421640a4713cf0d"
+    },
+    {
+      "leaf": "leaf-08",
+      "client": "b",
+      "source_commit": "c926defd26f2c2e231ed33eb09753790f74fe9ca"
+    }
+  ],
+  "one_real_failure_repaired": true,
+  "bounded_failure": {
+    "initial_failures": 2,
+    "one_limited_review": true,
+    "retained_failure_count": 3,
+    "final_state": "blocked",
+    "same_evidence_review_rejected": true
+  },
+  "human_reviews": [
+    {
+      "task": "leaf-08",
+      "result": "fail",
+      "candidate": "ccb0bbe5b5cafbcee7b056326c3257321b0389d0ed7b3b388c2123a0a6cffe8b",
+      "artifact": "artifact_5LUenj4r3Zte5eaA62DakLZvwaTJdJUysNe6Dwu1HYw",
+      "measurements": {
+        "total": "36",
+        "clipped": true,
+        "viewport": {
+          "width": 640,
+          "height": 480
+        }
+      },
+      "response_loss_replayed": true
+    },
+    {
+      "task": "leaf-08",
+      "result": "pass",
+      "candidate": "41cf4937ca588f500a4e6611c7d5461b18ac80e7b3a64fd521fa6e3fa2dd452c",
+      "artifact": "artifact_pUK6c0tgIbwvGsjnr_1XbpKaahBw5GK8cVHjFT3YGsQ",
+      "measurements": {
+        "total": "36",
+        "clipped": false,
+        "viewport": {
+          "width": 640,
+          "height": 480
+        }
+      },
+      "response_loss_replayed": false
+    },
+    {
+      "task": "eight",
+      "result": "pass",
+      "candidate": "41cf4937ca588f500a4e6611c7d5461b18ac80e7b3a64fd521fa6e3fa2dd452c",
+      "artifact": "artifact__jcnnA7G6JIfojZoUup1D0LXWkNLgBwCePOMq8m5mGg",
+      "measurements": {
+        "total": "36",
+        "clipped": false,
+        "viewport": {
+          "width": 640,
+          "height": 480
+        }
+      },
+      "response_loss_replayed": false
+    },
+    {
+      "task": "WI-e1a0fc2e79f3fa79fd5e",
+      "result": "pass",
+      "candidate": "c25c4f1d9c3efee47b80b79490d328447a21c1fd7a948ed5522e3afa4f527c81",
+      "artifact": "artifact_ppLyArjgHj-b0kGlUtke8KBBUpOTb7vfqKJXivnO9pc",
+      "measurements": {
+        "total": "36",
+        "clipped": false,
+        "viewport": {
+          "width": 640,
+          "height": 480
+        }
+      },
+      "response_loss_replayed": false
+    }
+  ],
+  "reviewer_fixture": "independent authenticated account driven by external browser automation",
+  "new_feedback": {
+    "finding": "finding_dgyrA48D-PPuCvimVujTCRzv-XEk0wwWhlbLPSmaW2M",
+    "repair": "WI-e1a0fc2e79f3fa79fd5e",
+    "resolved": true,
+    "parent_delivery_retained": true
+  },
+  "agent_smoke": {
+    "status": "not_requested"
+  },
+  "parent_fresh_checks": 9,
+  "client_without_docker": true,
+  "oracle_access": false
+}

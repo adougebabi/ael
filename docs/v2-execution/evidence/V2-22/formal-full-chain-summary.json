@@ -1,0 +1,154 @@
+{
+  "result": "PASS",
+  "mode": "same-machine isolated real HTTP and external deterministic driver",
+  "eight_actual_modules": [
+    {
+      "leaf": "leaf-01",
+      "client": "a",
+      "source_commit": "4c875f14ac4bd3ca4b926bc9cd6d9e102da10b20"
+    },
+    {
+      "leaf": "leaf-02",
+      "client": "b",
+      "source_commit": "8561c9f458940a1599b4a38191f29de615b71252"
+    },
+    {
+      "leaf": "leaf-03",
+      "client": "a",
+      "source_commit": "eda47a2ed980ba8d6452f2bd23f3886c2514ba04"
+    },
+    {
+      "leaf": "leaf-04",
+      "client": "a",
+      "source_commit": "d27537e5a35f46b59da980bb552a18326b8ed709"
+    },
+    {
+      "leaf": "leaf-05",
+      "client": "a",
+      "source_commit": "541dbafcf6f94a9b4d6e5d422babbc13e4dec4d1"
+    },
+    {
+      "leaf": "leaf-06",
+      "client": "b",
+      "source_commit": "7b82391bc8aa24fe2082f2f4ae0dbbcb6594bafd"
+    },
+    {
+      "leaf": "leaf-07",
+      "client": "a",
+      "source_commit": "d30dc12b337e2e7e036bb7994a975b32a5057067"
+    },
+    {
+      "leaf": "leaf-08",
+      "client": "b",
+      "source_commit": "065030aa4d00919a196840ca78cfb2e2e5ebcdbf"
+    }
+  ],
+  "one_real_failure_repaired": true,
+  "same_task_handoff": {
+    "task": "leaf-04",
+    "developer": "b",
+    "verifier": "a"
+  },
+  "plan_inputs": {
+    "unsplit_prepared": true,
+    "provided_eight_items_applied": true
+  },
+  "default_text_cli": true,
+  "faults": {
+    "unfinished_parent_rejected": true,
+    "same_key_claim_replayed": true,
+    "different_key_claim_rejected": true,
+    "offline_cache_non_authoritative": true,
+    "server_restart_retained_revision": true,
+    "old_candidate_report_rejected": true
+  },
+  "bounded_failure": {
+    "initial_failures": 2,
+    "one_limited_review": true,
+    "retained_failure_count": 3,
+    "final_state": "blocked",
+    "same_evidence_review_rejected": true
+  },
+  "human_reviews": [
+    {
+      "task": "leaf-08",
+      "result": "fail",
+      "candidate": "7de25a3eb0ff7d13bf48c3ff867c726fa234412d600f00da7d70e8fdb8c03d1e",
+      "artifact": "artifact_IAyn1lEYrqxHAVHNzJ0cMnxsyX2Skrw4Q0F3OmcwwM8",
+      "measurements": {
+        "total": "36",
+        "clipped": true,
+        "viewport": {
+          "width": 640,
+          "height": 480
+        }
+      },
+      "response_loss_replayed": true
+    },
+    {
+      "task": "leaf-08",
+      "result": "pass",
+      "candidate": "7e3440b6070285521f5ced7a00968dd2f65a2d253b9847a1deebdd21e32f6860",
+      "artifact": "artifact_aoEEhS7YFvqqnSJGKC6XMZ5vR0-TtezbKWQ8iO-LLa8",
+      "measurements": {
+        "total": "36",
+        "clipped": false,
+        "viewport": {
+          "width": 640,
+          "height": 480
+        }
+      },
+      "response_loss_replayed": false
+    },
+    {
+      "task": "eight",
+      "result": "pass",
+      "candidate": "7e3440b6070285521f5ced7a00968dd2f65a2d253b9847a1deebdd21e32f6860",
+      "artifact": "artifact_AkiqoJWn_RSDS1gny8Z_JA_6JSllbGv98bglYptqy2w",
+      "measurements": {
+        "total": "36",
+        "clipped": false,
+        "viewport": {
+          "width": 640,
+          "height": 480
+        }
+      },
+      "response_loss_replayed": false
+    },
+    {
+      "task": "WI-735677ce6aa7456cc167",
+      "result": "pass",
+      "candidate": "ffdbb47457ab177ff5913da0535bd5d9ee13ff84fba4a7aa916998cc0feb5edc",
+      "artifact": "artifact_SBq0x2r2I3HmTiNcfkwNO2UpQG7Vrc2Ue9HlY3LcvIs",
+      "measurements": {
+        "total": "36",
+        "clipped": false,
+        "viewport": {
+          "width": 640,
+          "height": 480
+        }
+      },
+      "response_loss_replayed": false
+    }
+  ],
+  "reviewer_fixture": "independent authenticated account driven by external browser automation",
+  "new_feedback": {
+    "finding": "finding_dI5iNb5G6DAfHBfANjddhbEA_kqvlX0teugrH8HKe_I",
+    "repair": "WI-735677ce6aa7456cc167",
+    "resolved": true,
+    "parent_delivery_retained": true
+  },
+  "agent_smoke": {
+    "status": "PASS",
+    "agent": "existing Codex CLI",
+    "configuration": "existing model, authentication and permission configuration",
+    "actual_task": {
+      "task_id": "eight",
+      "status": "completed",
+      "candidate": "7e3440b6070285521f5ced7a00968dd2f65a2d253b9847a1deebdd21e32f6860"
+    }
+  },
+  "parent_fresh_checks": 9,
+  "client_without_docker": true,
+  "oracle_access": false
+}

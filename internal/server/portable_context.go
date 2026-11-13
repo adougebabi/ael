@@ -5,6 +5,7 @@ import (
 	"ael/internal/knowledge"
 	"ael/internal/remote"
 	"ael/internal/store"
+	stdcontext "context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -364,4 +365,39 @@ func (p *portableStore) getContext(id string, artifacts *artifactStore) (map[str
 		result["check_status"] = "client_reported"
 	}
 	return result, nil
+}
+
+func portableContextBasis(tx *store.Tx, contextID string, artifacts *artifactStore) ([]core.BasisReference, error) {
+	rows, err := tx.Conn.QueryContext(stdcontext.Background(), "SELECT id,path,artifact_id,sha256,status,reason FROM portable_context_sources WHERE context_id=? ORDER BY id", contextID)
+	if err != nil {
+		return nil, err
+	}
+	type source struct{ id, path, artifact, hash, status, reason string }
+	var sources []source
+	for rows.Next() {
+		var item source
+		if err = rows.Scan(&item.id, &item.path, &item.artifact, &item.hash, &item.status, &item.reason); err != nil {
+			break
+		}
+		sources = append(sources, item)
+	}
+	if err == nil {
+		err = rows.Err()
+	}
+	_ = rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	basis := make([]core.BasisReference, 0, len(sources))
+	for _, source := range sources {
+		item, err := scanArtifact(tx.Row("SELECT "+artifactColumns+" FROM artifact_objects WHERE id=?", source.artifact))
+		if err != nil || item.Status != "finalized" || item.SHA256 != source.hash {
+			return nil, errors.New("CONTEXT_SOURCE_UNAVAILABLE")
+		}
+		if _, err = artifacts.read(item); err != nil {
+			return nil, errors.New("CONTEXT_SOURCE_UNAVAILABLE")
+		}
+		basis = append(basis, core.BasisReference{ID: source.id, Source: source.path, Version: source.hash, Status: source.status, Reason: source.reason})
+	}
+	return basis, nil
 }

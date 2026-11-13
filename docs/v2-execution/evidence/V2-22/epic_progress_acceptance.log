@@ -1,0 +1,14 @@
+
+Running 5 tests using 1 worker
+
+(node:33959) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:33959) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 tests/epic-progress.spec.ts:42:1 › 打包页面显示 1、8、30 个子任务与不同验证状态 (801ms)
+  ✓  2 tests/epic-progress.spec.ts:75:1 › 父卡到失败检查、证据及返回时保留筛选与位置 (880ms)
+  ✓  3 tests/epic-progress.spec.ts:100:1 › 展开 30 项后访问叶子再返回，保持列表和位置 (449ms)
+  ✓  4 tests/epic-progress.spec.ts:115:1 › 长进展默认折叠且可查看完整事实 (235ms)
+  ✓  5 tests/epic-progress.spec.ts:128:1 › 子任务完成及时更新汇总，取消与新增保留范围记录 (13.2s)
+
+  5 passed (16.1s)

@@ -75,6 +75,10 @@ func (h *standaloneHandler) remoteOperation(w http.ResponseWriter, principal sta
 }
 
 func standaloneTaskError(w http.ResponseWriter, err error) {
+	if code := strings.SplitN(err.Error(), ":", 2)[0]; (strings.HasPrefix(code, "EPIC_") || strings.HasPrefix(code, "PLAN_")) && standaloneID.MatchString(code) {
+		standaloneFail(w, http.StatusConflict, code)
+		return
+	}
 	if strings.Contains(err.Error(), "IMPORT_NOT_ACTIVE") {
 		standaloneFail(w, http.StatusConflict, "IMPORT_NOT_ACTIVE")
 		return
@@ -217,7 +221,15 @@ func (h *standaloneHandler) remoteTasks(w http.ResponseWriter, r *http.Request, 
 		h.remotePlan(w, r, principal, project, parts[0], parts[2], service)
 		return
 	}
+	if len(parts) == 2 && parts[1] == "integrate" && r.Method == http.MethodPost {
+		h.remoteIntegrate(w, r, principal, project, parts[0], service)
+		return
+	}
 	allowed := map[string]bool{"edit": true, "pause": true, "cancel": true, "resume": true, "link": true}
+	if len(parts) == 2 && parts[1] == "review-failure" && r.Method == http.MethodPost {
+		h.remoteFailureReview(w, r, principal, project, parts[0], service)
+		return
+	}
 	if r.Method != http.MethodPost || (len(parts) != 0 && !(len(parts) == 2 && allowed[parts[1]])) {
 		standaloneFail(w, http.StatusNotFound, "NOT_FOUND")
 		return

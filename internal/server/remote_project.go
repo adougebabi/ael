@@ -74,6 +74,7 @@ func (s *Standalone) projectService(id string) (*core.Service, error) {
 	// Pending projections are reconciled by task/operation endpoints. Opening
 	// must remain possible when a conflict needs inspection and recovery.
 	service := &core.Service{Store: db, Root: workspace, Active: true, RemoteAuthority: true, MatchRemoteCandidate: matchRemoteCandidateTx}
+	service.ValidateRemoteIntegration = func(tx *store.Tx, task *core.Task) error { return validateRemoteEpicIntegration(tx, task, id) }
 	s.projectServices[id] = service
 	return service, nil
 }

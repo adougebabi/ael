@@ -16,16 +16,17 @@ import (
 )
 
 type Service struct {
-	ToolBuild            string
-	Store                *store.Store
-	Root                 string
-	Active               bool
-	RemoteAuthority      bool
-	MatchRemoteCandidate func(*store.Tx, *Task) (bool, error)
-	remoteOperation      *RemoteOperation
-	ResolveBasis         func(Definition) ([]BasisReference, error)
-	ConstraintCheck      func(Definition) []string
-	SnapshotConstraints  func() ConstraintResolvers
+	ToolBuild                 string
+	Store                     *store.Store
+	Root                      string
+	Active                    bool
+	RemoteAuthority           bool
+	MatchRemoteCandidate      func(*store.Tx, *Task) (bool, error)
+	ValidateRemoteIntegration func(*store.Tx, *Task) error
+	remoteOperation           *RemoteOperation
+	ResolveBasis              func(Definition) ([]BasisReference, error)
+	ConstraintCheck           func(Definition) []string
+	SnapshotConstraints       func() ConstraintResolvers
 }
 
 type ConstraintResolvers struct {
@@ -1403,7 +1404,7 @@ func (s *Service) advance(tx *store.Tx, t *Task) error {
 		if t.Step != "verify" && t.Step != "delivery" {
 			return Error("EPIC_INTEGRATION_REQUIRED", "prepare and verify the parent candidate")
 		}
-		if err := validateEpicIntegration(tx, t); err != nil {
+		if err := s.validateIntegration(tx, t); err != nil {
 			if !strings.HasPrefix(err.Error(), "EPIC_") && !strings.HasPrefix(err.Error(), "PLAN_APPLY_INCOMPLETE:") {
 				return err
 			}
@@ -1423,7 +1424,10 @@ func (s *Service) advance(tx *store.Tx, t *Task) error {
 		if hasWriter(*t) {
 			return nil
 		}
-		wait, err := epicWorkspaceWait(tx, t)
+		wait, err := "", error(nil)
+		if !s.RemoteAuthority {
+			wait, err = epicWorkspaceWait(tx, t)
+		}
 		if err != nil {
 			return err
 		}
@@ -1432,8 +1436,18 @@ func (s *Service) advance(tx *store.Tx, t *Task) error {
 			return nil
 		}
 		t.Integration.WaitReason = ""
-		current, err := Fingerprint(t.CandidateWorkspace)
-		if err != nil || current != t.Candidate {
+		matches := false
+		if s.RemoteAuthority {
+			if s.MatchRemoteCandidate == nil {
+				return Error("REMOTE_OPERATION_REQUIRED", "validated remote parent candidate is required")
+			}
+			matches, err = s.MatchRemoteCandidate(tx, t)
+		} else {
+			current, readErr := Fingerprint(t.CandidateWorkspace)
+			err = readErr
+			matches = readErr == nil && current == t.Candidate
+		}
+		if err != nil || !matches {
 			t.Integration.StaleReason = "parent workspace changed before completion; prepare integration again"
 			t.EvidenceHistory = append(t.EvidenceHistory, t.Evidence...)
 			t.Evidence = nil

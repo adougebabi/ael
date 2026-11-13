@@ -54,6 +54,12 @@ func Call(config, project string, binding Binding, method, suffix string, payloa
 		}
 	}
 	capability := "remote_tasks"
+	if strings.HasSuffix(suffix, "/review-failure") {
+		capability = "remote_failure_review"
+	}
+	if strings.HasSuffix(suffix, "/integrate") {
+		capability = "remote_integration"
+	}
 	if strings.HasPrefix(suffix, "/imports") {
 		capability = "authority_imports"
 	}

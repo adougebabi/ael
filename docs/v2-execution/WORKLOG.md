@@ -3,7 +3,7 @@
 > 本账本初始状态不代表任何实施已开始。只有实际执行者才能根据代码和验收结果更新状态。
 > 状态仅允许 PENDING、ACTIVE、VERIFYING、DONE、BLOCKED。
 
-当前任务: V2-22
+当前任务: V2-23
 
 | ID | 任务 | 状态 | 回执 |
 |---|---|---|---|
@@ -29,7 +29,7 @@
 | V2-19 | CLI 与项目资产的轻量升级 | DONE | receipts/V2-19.md |
 | V2-20 | Server 部署包、备份与安全升级 | DONE | receipts/V2-20.md |
 | V2-21 | 旧本地状态导入与单权威切换 | DONE | receipts/V2-21.md |
-| V2-22 | 打包后的全链路验收与交付核对 | PENDING | — |
+| V2-22 | 打包后的全链路验收与交付核对 | DONE | receipts/V2-22.md |
 | V2-23 | 授权后的 Oracle 部署与实际双机验收 | PENDING | — |
 
 ## V2-12 暂停检查点（历史）
@@ -183,3 +183,21 @@ V2-13 已 DONE，正式回执 receipts/V2-13.md，证据 evidence/V2-13/。最�
 - V2-21 正式回归已通过迁移/浏览器和 TLS Compose，旧存储中断回归捕获新建策略文件 O_EXCL 后写入的空文件窗口，已改完整阶段文件同步后独占发布，并补中断别名恢复及既有空/改写策略拒绝测试。原强度的迁移/恢复中断复验通过。原失败保留，另已从升级前备份实际恢复并核对 120 项目及导出 hash。当前正在带完整 release 资产的最终相同快照全量回归，尚无 V2-21 PASS/检查点，后续项仍 PENDING。
 
 - V2-21 最终 PASS，回执 receipts/V2-21.md，证据 evidence/V2-21/。0.1.21 最终正式分发与真实 HTTP/浏览器、源/目标中断和回滚、TLS Compose、中央存储/发行/升级及全部相关旧协议、Local 59 项、Go 全量、相关 race、vet 通过。策略初始化中断缺陷已修复，原失败和升级前备份恢复 120 项目证据保留。检查点为包含本记录的独立本地提交。下一项 V2-22 PENDING，提交后继续。
+
+## V2-22 当前实施
+
+基线 f838a94，开工工作区干净。V2-21 已完成正式验收、回执和独立本地检查点。当前唯一 ACTIVE 为 V2-22，建立独立八叶 UI 工程的外部驱动、双客户端交接与真实 Agent 主动 CLI smoke，再完成最终打包与支持模式全量回归。V2-23 PENDING，实际 Oracle 与业务工程尚未操作。
+
+- V2-22 入口核对发现 RemoteClaimTx 仍统一拒绝 epic，Remote CLI/HTTP 也缺 task integrate 路由，现有远程 fixture 只完成叶子并保留父 open。当前先补正式失败用例与远程父收口接线，复用父计划/覆盖/必需叶子/候选/检查门禁，再运行八叶全链路；不将该缺口算作已完成。已通过官方文档和 Context7 核对真实 Codex noninteractive smoke，本机 CLI 0.144.1，尚未开始模型 smoke。
+
+- V2-22 第一小步开发验收通过，现场 /private/tmp/ael-v222-chain-development-5/summary.json。两个独立 Git checkout/CLI 配置无 Docker PATH，交替生成八个真实模块修改、Git 提交、Python 编译与逐项测试，第三叶实际失败后留在原任务修复。正式远程 task integrate 已接通，同仓库候选、必需叶子状态及全部父级映射检查重验后完成父级。输入影响未知保持 impact_unknown，按全部检查重验处理。独立复核修正 report 父级调度/领取对 fail 证据语义不一致。当前仍需人工/图片/故障/真实 Agent smoke 与最终正式分发全量回归，尚无 V2-22 PASS 或提交，V2-23 PENDING。
+
+- V2-22 第二小步开发通过，现场 /private/tmp/ael-v222-chain-development-9/summary.json。真实 Chromium 渲染同一工程并测量总数 36 与按钮裁切，独立 reviewer 账号经统一看板先 fail，外部宿主修复并重新提交候选后 pass，父级最终图片审阅 pass。人工角色由外部浏览器自动化驱动，未声称真人裁定。真实已登录 Codex CLI 0.144.1 沿用模型/认证/权限配置，主动调用正式 AEL CLI，事件记录与最终 JSON 对齐。第三小步 /private/tmp/ael-v222-chain-development-10 通过未完父拒绝、同键领取回执/不同键冲突、真实断网缓存非权威、同地址 Server 重启、已接收人工 fail 响应丢失和重放。当前 Go 全量通过。仍需结构化发现/新反馈、重复失败停止、旧证据/候选负例、正式最终分发及相关全量回归，V2-22 仍 ACTIVE、V2-23 PENDING。
+
+- V2-22 新反馈闭环开发通过，/private/tmp/ael-v222-chain-development-12/summary.json。在已完成父级后由外部宿主引入新 UI 裁切，客户端 B 通过正式 CLI 发布真实截图/观察与结构化 finding，客户端 A 授权创建独立后继修复任务（FeedbackOf 原 leaf-08、Parent 空）。外部修复、编译、命令验证和独立 reviewer 看板人工角色 pass 后以新候选/当前证据正式 revalidate，finding resolved。原父级完成时间与候选保持原事实。仍待重复失败停止/限定复核、旧证据与候选负例、显式同责任交接、预拆输入及最终正式分发完整回归，V2-22 ACTIVE。
+
+- V2-22 development-13/14 通过重复失败阈值 2、正式远程限定复核、保留计数后再次失败进入 blocked、相同证据再次复核拒绝。development-14 增补用户预拆分项应用、默认文本 CLI 和第四叶 B 实施/A 独立 checkout 接手验收。新 review-failure 复用原失败状态机与中央 finalized 附件读取；只读审查发现缺失任务和超量证据错误映射不准确，已修复并补鉴权、跨项目、CAS、跨任务/未完成/超量证据、actor 绑定、原键重放和计数保留 HTTP 测试。当前 Go 全量和 vet 通过，相关 race 正在运行。摘要和日志见 evidence/V2-22/development-14-summary.json、go-after-review.log、vet-current.log。CLI help、分发协议和 remote-tasks 文档已同步远程父集成与失败复核入口。仍待旧候选/旧证据负例、父集成边界测试和最终正式分发完整回归，未形成 V2-22 PASS/检查点，V2-23 PENDING。
+
+- V2-22 development-15 完整通过，在第三叶修复后刻意上传旧失败候选的报告，正式 submit 拒绝，随后当前报告通过并完成父级。父集成局部负例覆盖跨项目/仓库、清单变化、缺少重验映射、父观察变化和未知工作区。独立审查发现同路径输出内容回退仍可准备父候选的包含性缺口，已保留叶子输出 CandidateFile 并核对父级相同路径的内容哈希与执行位，新增 domain 正反例通过。development-16 正在跑带真实文件回退负例的全链路。之前快照的完整相关 race 已通过，日志 race-before-output-hash.log，输出哈希补丁后仍需最终完整回归。V2-22 保持 ACTIVE，V2-23 PENDING。
+
+- V2-22 最终 PASS，0.1.22 / f838a94-e5074a4d4148，正式八叶/真实 Agent 主动 CLI smoke、所有相关协议/浏览器、Local workflow/并发/父集成/停滞恢复、发行/签名源/升级、历史导入回滚、TLS Compose/备份恢复、实际迁移与恢复 SIGKILL、Go 全量/相关 race/vet 均通过。最终源码摘要与分发一致，回执 receipts/V2-22.md、证据 evidence/V2-22/。相关 race Server 包 372.365 秒并零退出码结束。检查点为包含本记录的本地独立提交，V2-23 PENDING，检查点后继续核对实际部署条件。

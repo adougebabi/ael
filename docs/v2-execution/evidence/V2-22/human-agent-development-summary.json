@@ -1,0 +1,105 @@
+{
+  "result": "PASS",
+  "mode": "same-machine isolated real HTTP and external deterministic driver",
+  "eight_actual_modules": [
+    {
+      "leaf": "leaf-01",
+      "client": "a",
+      "source_commit": "1b804c16595d5d61a8b0ad32955a54e08185e0cb"
+    },
+    {
+      "leaf": "leaf-02",
+      "client": "b",
+      "source_commit": "c5a785e39a297edd4b2ecf91e94309fffca6eefd"
+    },
+    {
+      "leaf": "leaf-03",
+      "client": "a",
+      "source_commit": "2dc337085ed9e3078d244c0c97fa4e35278faa19"
+    },
+    {
+      "leaf": "leaf-04",
+      "client": "b",
+      "source_commit": "c7a9c6bf1657f5a3ca538dac02af20e103b41c7c"
+    },
+    {
+      "leaf": "leaf-05",
+      "client": "a",
+      "source_commit": "fb1485bbe8dd83afa9ce65b576488af3a23ab281"
+    },
+    {
+      "leaf": "leaf-06",
+      "client": "b",
+      "source_commit": "f047a6711cede1c7812e2ac8a6b6b63e793ad3b1"
+    },
+    {
+      "leaf": "leaf-07",
+      "client": "a",
+      "source_commit": "13c374b9d78a5f2d7d2be1486d9d43b36e022968"
+    },
+    {
+      "leaf": "leaf-08",
+      "client": "b",
+      "source_commit": "0826bf2d66e8a65f66c4b33f123a175d69064ede"
+    }
+  ],
+  "one_real_failure_repaired": true,
+  "human_reviews": [
+    {
+      "task": "leaf-08",
+      "result": "fail",
+      "candidate": "ff4a7ca74a588a8cd05fa68ccce6e94416bf56a108a60c73bf8be806d324a748",
+      "artifact": "artifact_md73ZAo3AK46F4Vcfk36IuD9YVJKF9hPqjJafsHa5gM",
+      "measurements": {
+        "total": "36",
+        "clipped": true,
+        "viewport": {
+          "width": 640,
+          "height": 480
+        }
+      }
+    },
+    {
+      "task": "leaf-08",
+      "result": "pass",
+      "candidate": "b89d6db178f8f3f88171832938ba33f29dbfabf0e00591cee21b22d407ce8c4e",
+      "artifact": "artifact_0u5b8sGdi4ISycT1OrMOc80H215CfAA29eRiNwI0cRE",
+      "measurements": {
+        "total": "36",
+        "clipped": false,
+        "viewport": {
+          "width": 640,
+          "height": 480
+        }
+      }
+    },
+    {
+      "task": "eight",
+      "result": "pass",
+      "candidate": "b89d6db178f8f3f88171832938ba33f29dbfabf0e00591cee21b22d407ce8c4e",
+      "artifact": "artifact_igbBDvZSOtTB2nw8X1EWGnC90Rn4XAZ3Pn6KhrCGFes",
+      "measurements": {
+        "total": "36",
+        "clipped": false,
+        "viewport": {
+          "width": 640,
+          "height": 480
+        }
+      }
+    }
+  ],
+  "reviewer_fixture": "independent authenticated account driven by external browser automation",
+  "agent_smoke": {
+    "status": "PASS",
+    "agent": "existing Codex CLI",
+    "configuration": "existing model, authentication and permission configuration",
+    "actual_task": {
+      "task_id": "eight",
+      "status": "completed",
+      "candidate": "b89d6db178f8f3f88171832938ba33f29dbfabf0e00591cee21b22d407ce8c4e"
+    }
+  },
+  "parent_fresh_checks": 9,
+  "client_without_docker": true,
+  "oracle_access": false
+}

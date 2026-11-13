@@ -142,6 +142,12 @@ POST 路径依次为 `/api/v1/projects/PROJECT/findings/ID/decisions`、`/repair
 
 ## 共享机器 CLI 与项目入口
 
+远程父级集成使用 `task integrate --task EPIC --context CONTEXT --expected-revision REV --operation-id OP --idempotency-key KEY`。必需叶子先达标，最终父候选保留同仓库与输出清单证明，并将全部必需叶子检查映射到父级重新执行。准备后通过 runner next/claim 继续逐项提交，人工角色检查由看板完成。输入影响未知保留 `impact_unknown`，Git 祖先关系由外部宿主核查。完整影响声明另传 `--impact-artifact ID`，附件须与声明路径和当前候选匹配。
+
+源码输出附件通过叶子候选的内容哈希定位路径，父候选须包含匹配的内容和执行位。后续修改同一输出时，应先更新并验收受影响叶子的候选，再准备父集成。重叠修改的包含性需要可验证的当前叶子输出，宿主 Git 操作与父级检查都须实际执行。
+
+有限失败复核使用 `task review-failure --task ID --file PRIVATE_REVIEW_JSON --expected-revision REV --operation-id OP --idempotency-key KEY`，请求包含 tried、excluded、hypothesis、next、recovery 和中央 evidence 附件 ID。Server 绑定认证 actor 并读取同任务 finalized 字节，每次最多 32 引用和 64 MiB。复核保留失败次数，之后显式 resume，再次失败进入 blocked，重复证据不能授权再次复核。对应 POST 路径为 `/api/v1/projects/PROJECT/tasks/ID/integrate` 和 `/review-failure`，沿用项目 executor/admin、CAS 与原请求幂等保护。
+
 `project connect` 保存最小绑定及 API/Skill 协议要求，可用 `--install-entry` 同时安装受管轻入口。已有绑定用 `update --project PATH`，遗留离线受管入口须显式 `--migrate-entry`。项目保留 launcher、AGENTS 受管块、Skill、绑定和协议 manifest，机器级 CLI 在多个兼容项目间复用。旧二进制/锁保持可访问，Local project.yaml 的数据权威切换继续独立处理。
 
 `version --check --project PATH` 同时展示当前 CLI、项目入口和 Server 版本。旧 Server 未提供版本时标为 unreported。旧绑定的缺省 API/Skill 为 1，明确不兼容的会话声明和 Server 协议在请求前拒绝，离线缓存继续显示历史/非权威。`upgrade --source TRUSTED_JSON --version EXACT --prefix DIR --check` 核对指定安装，正式升级走成熟签名、文件哈希、内包与 executable 协议校验，项目入口不因兼容机器升级而重写。完整操作见 updating.md。

@@ -284,6 +284,9 @@ func (s *Service) chooseWorkTx(tx *store.Tx, req WorkRequest) (WorkResult, error
 	if root.Definition.Type != "epic" {
 		return WorkResult{}, Error("EPIC_REQUIRED", req.Parent)
 	}
+	if s.RemoteAuthority && root.Status == "completed" && !root.Historical {
+		return workStopped(req, "completed", "parent acceptance is complete", &root, ""), nil
+	}
 	if req.Parallel && len(req.Resources) == 0 {
 		return workStopped(req, "wait_wip", "parallel work requires explicit resource declarations", nil, ""), nil
 	}
@@ -488,6 +491,9 @@ func (s *Service) chooseWorkTx(tx *store.Tx, req WorkRequest) (WorkResult, error
 		}
 		if required == 0 {
 			return workStopped(req, "wait_children", "parent has no required leaf tasks", nil, ""), nil
+		}
+		if s.RemoteAuthority && root.Integration != nil && root.Step == "verify" {
+			return s.remoteParentWorkTx(tx, req, &root)
 		}
 		return workStopped(req, "wait_integration", "no remaining executable leaf; parent integration is still required", nil, ""), nil
 	}

@@ -1,0 +1,1 @@
+{"status": "passed", "isolated": true, "clients": 2, "server": "http://127.0.0.1:53668", "offline_cache": true, "plan": "applied and replayed"}

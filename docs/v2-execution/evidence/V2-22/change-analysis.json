@@ -1,0 +1,364 @@
+{
+  "passed": true,
+  "total_additions": 0,
+  "total_deletions": 0,
+  "affected_modules": [
+    ".",
+    "assets",
+    "cmd",
+    "docs",
+    "internal",
+    "web",
+    "scripts"
+  ],
+  "changes": [
+    {
+      "path": "README.md",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": true,
+      "is_test": false
+    },
+    {
+      "path": "assets/skills/ael-work/references/remote-agent.md",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": true,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/main.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/remote.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "docs/architecture.md",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": true,
+      "is_test": false
+    },
+    {
+      "path": "docs/remote-tasks.md",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": true,
+      "is_test": false
+    },
+    {
+      "path": "docs/v2-execution/WORKLOG.md",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": true,
+      "is_test": false
+    },
+    {
+      "path": "internal/bootstrap/bootstrap.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/core/epic.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/core/epic_integration.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/core/failure_cycle.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/core/remote_runner.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/core/service.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/core/work.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/remote/client.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/portable_candidate.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/portable_context.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/remote_project.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/remote_runner.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/remote_tasks.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/standalone_http.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "web/package-lock.json",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "web/package.json",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/remote_epic_integration_test.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": true
+    },
+    {
+      "path": "docs/v2-execution/evidence/V2-22/",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/core/remote_epic_integration.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/core/remote_epic_integration_external_test.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": true
+    },
+    {
+      "path": "internal/core/remote_epic_integration_test.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": true
+    },
+    {
+      "path": "internal/server/remote_epic_integration.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/remote_epic_integration_test.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": true
+    },
+    {
+      "path": "internal/server/remote_failure_review.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/remote_failure_review_test.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": true
+    },
+    {
+      "path": "scripts/full_chain_acceptance.py",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "scripts/full_chain_browser.mjs",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    }
+  ],
+  "issues": [
+    {
+      "severity": "info",
+      "message": "模块 cmd 新增了文件，建议更新 README.md",
+      "related_files": [
+        "cmd/ael/remote_epic_integration_test.go"
+      ]
+    },
+    {
+      "severity": "info",
+      "message": "模块 internal 新增了文件，建议更新 README.md",
+      "related_files": [
+        "internal/core/remote_epic_integration.go",
+        "internal/core/remote_epic_integration_external_test.go",
+        "internal/core/remote_epic_integration_test.go",
+        "internal/server/remote_epic_integration.go",
+        "internal/server/remote_epic_integration_test.go",
+        "internal/server/remote_failure_review.go",
+        "internal/server/remote_failure_review_test.go"
+      ]
+    },
+    {
+      "severity": "info",
+      "message": "模块 scripts 新增了文件，建议更新 README.md",
+      "related_files": [
+        "scripts/full_chain_acceptance.py"
+      ]
+    },
+    {
+      "severity": "info",
+      "message": "配置文件有变更，请确认是否需要更新文档",
+      "related_files": [
+        "web/package-lock.json",
+        "web/package.json"
+      ]
+    }
+  ],
+  "doc_sync_status": {
+    "cmd/DESIGN.md": true,
+    "internal/DESIGN.md": true,
+    "scripts/DESIGN.md": true
+  }
+}

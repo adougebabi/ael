@@ -105,9 +105,11 @@ func remoteCommand(cmd string, a args, binding remote.Binding) (any, error) {
 		"finding show":       {"finding"},
 		"doctor":             {}, "task list": {"parent", "limit", "offset", "days", "query", "board"},
 		"task show": {"task"}, "task plan": {"task"}, "next": {"task"}, "task tree": {"task"}, "task progress": {"task"},
-		"operation show":  {"idempotency-key"},
-		"artifact upload": {"context", "lease-file", "task", "file", "mime", "source", "attempt", "candidate", "operation-id", "idempotency-key", "expected-revision"},
-		"artifact list":   {"task"}, "artifact show": {"artifact"}, "artifact download": {"artifact", "out"},
+		"task integrate":      {"task", "context", "impact-artifact", "expected-revision", "operation-id", "idempotency-key"},
+		"task review-failure": {"task", "file", "expected-revision", "operation-id", "idempotency-key"},
+		"operation show":      {"idempotency-key"},
+		"artifact upload":     {"context", "lease-file", "task", "file", "mime", "source", "attempt", "candidate", "operation-id", "idempotency-key", "expected-revision"},
+		"artifact list":       {"task"}, "artifact show": {"artifact"}, "artifact download": {"artifact", "out"},
 		"artifact cancel":        {"upload", "operation-id", "idempotency-key"},
 		"artifact upload-status": {"idempotency-key"},
 		"artifact reference":     {"artifact", "task", "purpose", "candidate", "expected-revision", "operation-id", "idempotency-key"},
@@ -236,6 +238,18 @@ func remoteCommand(cmd string, a args, binding remote.Binding) (any, error) {
 		}
 		path = "/tasks/" + url.PathEscape(parent) + "/plan/" + strings.TrimPrefix(cmd, "plan ")
 		payload = inputValue
+	case "task integrate":
+		method = http.MethodPost
+		path = "/tasks/" + url.PathEscape(id) + "/integrate"
+		payload = map[string]any{"context_id": a.get("context", ""), "impact_artifact": a.get("impact-artifact", ""), "expected_revision": a.get("expected-revision", ""), "operation_id": a.get("operation-id", ""), "idempotency_key": a.get("idempotency-key", "")}
+	case "task review-failure":
+		var review core.FailureReview
+		if err = input(a.get("file", ""), &review); err != nil {
+			return nil, err
+		}
+		method = http.MethodPost
+		path = "/tasks/" + url.PathEscape(id) + "/review-failure"
+		payload = map[string]any{"review": review, "expected_revision": a.get("expected-revision", ""), "operation_id": a.get("operation-id", ""), "idempotency_key": a.get("idempotency-key", "")}
 	case "task create", "task edit", "task pause", "task cancel", "resume", "task link":
 		method = http.MethodPost
 		expected := a.get("expected-revision", "")

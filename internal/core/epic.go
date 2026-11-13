@@ -336,8 +336,25 @@ func (s *Service) summarizeEpicNext(n *Next, parent *Task) error {
 			if parent.EpicPlan != nil {
 				digest = parent.EpicPlan.Digest
 			}
-			current, err := Fingerprint(parent.CandidateWorkspace)
-			if err != nil || current != parent.Candidate || parent.Integration.Candidate != parent.Candidate || parent.Integration.Definition != parent.Definition.Revision || parent.Integration.Plan != parent.Plan.Revision || parent.Integration.PlanDigest != digest || !validSupportingLeaves(*parent, members) {
+			candidateMatches := false
+			if s.RemoteAuthority {
+				err = s.Store.Write(func(tx *store.Tx) error {
+					current, err := load(tx, parent.Definition.ID)
+					if err != nil {
+						return err
+					}
+					if RemoteRevision(current) != RemoteRevision(*parent) {
+						return Error("EPIC_INTEGRATION_STALE", "parent changed during read")
+					}
+					return s.validateIntegration(tx, &current)
+				})
+				candidateMatches = err == nil
+			} else {
+				current, readErr := Fingerprint(parent.CandidateWorkspace)
+				err = readErr
+				candidateMatches = readErr == nil && current == parent.Candidate
+			}
+			if !candidateMatches || parent.Integration.Candidate != parent.Candidate || parent.Integration.Definition != parent.Definition.Revision || parent.Integration.Plan != parent.Plan.Revision || parent.Integration.PlanDigest != digest || !validSupportingLeaves(*parent, members) {
 				n.Action = "wait_integration"
 				n.Reasons = append(n.Reasons, "parent candidate changed; prepare integration again")
 			} else {

@@ -103,3 +103,13 @@ human 检查交由项目 reviewer/admin 登录中央 Dashboard 完成。外部 A
 ## 已有 Local 项目切换
 
 已有 Local 状态通过 transfer scan/plan/export/import/verify/commit/cutover 显式迁移。先审阅来源映射并协调外部责任，未知旧执行状态阻止冻结。切换后读取 Server 当前任务、上下文和回执，再领取新的有效责任。历史 PASS 保留来源版本，新候选继续经过现行验收。异常恢复使用原导出与操作键，回滚先通过 rollback-freeze 核对中央新增事实。
+
+## 远程父级集成与有限失败复核
+
+所有必需叶子达标后，由宿主同步所需源码，在最终父候选上 capture/publish 当前上下文，再调用 `ael task integrate --task EPIC --context CONTEXT --expected-revision REV --operation-id OP --idempotency-key KEY --json`。声明完整影响文件的任务另提供 `--impact-artifact ARTIFACT_ID`。Server 校验同一仓库、不可变清单、输出附件、规范依据和工作区责任。Remote 采用 `parent_rechecked`，所有叶子的必需检查须映射到含义及配置一致的父检查，并在最终候选上重新执行。`impact_unknown` 保留输入影响未知事实。此路径的版本证明来自候选清单和重新检查，Git 祖先关系仍由宿主核查。
+
+消费 `runner next --parent EPIC` 并通过 `runner claim` 领取准备后的父级检查。宿主实际运行命令、浏览器和截图，再按原租约上传并提交。人工检查由 reviewer/admin 登录看板审阅准确候选。新增父候选观察后，重新准备集成与检查。
+
+父候选中的源码输出须与已验收叶子的内容哈希及执行位匹配。同一输出被后续工作改写时，先更新并验收受影响叶子，取得可核对的当前输出，再准备父集成。
+
+达到重复失败阈值时，保存真实调查材料并上传为同任务 finalized 附件。调用 `ael task review-failure --task ID --file PRIVATE_REVIEW_JSON --expected-revision REV --operation-id OP --idempotency-key KEY --json`。文件包含 `tried,excluded,hypothesis,next,recovery,evidence`，evidence 为中央附件 ID，actor 由认证身份确定。每次至多 32 个引用和 64 MiB 总量。成功后按返回版本显式 resume，失败次数保留。复核后再次失败进入 blocked，再次复核需要此前未审阅过的证据内容。宿主自行停止旧工作并保留现场。

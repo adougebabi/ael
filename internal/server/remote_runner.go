@@ -219,36 +219,9 @@ func (p *portableStore) claimRunner(principal standalonePrincipal, role, runnerI
 		if err := tx.Row("SELECT candidate_id FROM portable_observations WHERE task_id=? ORDER BY rowid DESC LIMIT 1", taskID).Scan(&latest); err != nil || latest != candidateID {
 			return nil, errors.New("CANDIDATE_CHANGED")
 		}
-		rows, err := tx.Conn.QueryContext(stdcontext.Background(), "SELECT id,path,artifact_id,sha256,status,reason FROM portable_context_sources WHERE context_id=? ORDER BY id", input.ContextID)
+		basis, err := portableContextBasis(tx, input.ContextID, artifacts)
 		if err != nil {
 			return nil, err
-		}
-		type source struct{ id, path, artifact, hash, status, reason string }
-		var sources []source
-		for rows.Next() {
-			var item source
-			if err = rows.Scan(&item.id, &item.path, &item.artifact, &item.hash, &item.status, &item.reason); err != nil {
-				break
-			}
-			sources = append(sources, item)
-		}
-		if err == nil {
-			err = rows.Err()
-		}
-		_ = rows.Close()
-		if err != nil {
-			return nil, err
-		}
-		basis := make([]core.BasisReference, 0, len(sources))
-		for _, source := range sources {
-			item, err := scanArtifact(tx.Row("SELECT "+artifactColumns+" FROM artifact_objects WHERE id=?", source.artifact))
-			if err != nil || item.Status != "finalized" || item.SHA256 != source.hash {
-				return nil, errors.New("CONTEXT_SOURCE_UNAVAILABLE")
-			}
-			if _, err = artifacts.read(item); err != nil {
-				return nil, errors.New("CONTEXT_SOURCE_UNAVAILABLE")
-			}
-			basis = append(basis, core.BasisReference{ID: source.id, Source: source.path, Version: source.hash, Status: source.status, Reason: source.reason})
 		}
 		token, err := standaloneRandom("lease_")
 		if err != nil {

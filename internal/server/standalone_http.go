@@ -216,7 +216,7 @@ func (h *standaloneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			standaloneFail(w, 503, "SERVER_MAINTENANCE")
 			return
 		}
-		standaloneReply(w, http.StatusOK, map[string]any{"maintenance": state.publicNotice(), "mode": "server", "protocol": 1, "skill_protocol": 1, "cli_output_protocol": 1, "version": h.version, "build": h.build, "capabilities": []string{"login", "projects", "project_roles", "revocable_tokens", "remote_tasks", "remote_plans", "operation_receipts", "artifacts", "portable_candidates", "portable_contexts", "remote_runners", "findings", "authority_imports"}})
+		standaloneReply(w, http.StatusOK, map[string]any{"maintenance": state.publicNotice(), "mode": "server", "protocol": 1, "skill_protocol": 1, "cli_output_protocol": 1, "version": h.version, "build": h.build, "capabilities": []string{"login", "projects", "project_roles", "revocable_tokens", "remote_tasks", "remote_plans", "operation_receipts", "artifacts", "portable_candidates", "portable_contexts", "remote_runners", "findings", "authority_imports", "remote_integration", "remote_failure_review"}})
 		return
 	}
 	if !strings.HasPrefix(r.URL.Path, "/api/") {

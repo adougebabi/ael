@@ -1,0 +1,34 @@
+#0 building with "orbstack" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 709B done
+#1 DONE 0.1s
+
+#2 [internal] load .dockerignore
+#2 transferring context:
+#2 transferring context: 2B done
+#2 DONE 0.2s
+
+#3 [internal] load build context
+#3 transferring context: 15.58MB 0.1s done
+#3 DONE 0.1s
+
+#4 [1/5] COPY --chown=65532:65532 ael /ael
+#4 DONE 0.1s
+
+#5 [2/5] COPY THIRD_PARTY_NOTICES.txt /THIRD_PARTY_NOTICES.txt
+#5 DONE 0.6s
+
+#6 [3/5] COPY --chown=65532:65532 --chmod=0700 data /data
+#6 DONE 0.1s
+
+#7 [4/5] COPY --chown=65532:65532 --chmod=0700 data /backup
+#7 DONE 0.1s
+
+#8 exporting to image
+#8 exporting layers
+#8 exporting layers 0.2s done
+#8 writing image sha256:652165e247e2443d87190c9c3820efcee64f0a009aef4701346cc7f69e25d985 done
+#8 naming to docker.io/library/ael-server:v222-final-amd64 done
+#8 DONE 0.2s
+{"status": "local_image_built", "tag": "ael-server:v222-final-amd64", "asset": {"kind": "server_image", "platform": "linux-amd64", "path": "ael-server-image-0.1.22-linux-amd64.tar.gz", "size": 6283413, "sha256": "009298181633118f99ccb69b0f52f6c283ed010b39f100f1205d2680de72ea5d"}, "publication": "local_unpublished"}

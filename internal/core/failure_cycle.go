@@ -210,55 +210,87 @@ func (s *Service) ReviewFailure(id string, review FailureReview) (Next, error) {
 	if err := s.active(); err != nil {
 		return Next{}, err
 	}
+	if err := validateFailureReview(review); err != nil {
+		return Next{}, err
+	}
+	return s.mutate(id, "root_cause_reviewed", func(tx *store.Tx, task *Task) error {
+		return s.reviewFailureTx(tx, task, review, func(_ *store.Tx, _ *Task, workspace, ref string) ([]byte, error) { return s.artifactAt(workspace, ref) })
+	})
+}
+
+func (s *Service) ReviewRemoteFailureTx(tx *store.Tx, id, revision string, review FailureReview, read func(*store.Tx, *Task, string, string) ([]byte, error)) (Task, error) {
+	var task Task
+	if !s.RemoteAuthority || read == nil {
+		return task, Error("REMOTE_OPERATION_REQUIRED", "validated central evidence reader is required")
+	}
+	task, err := load(tx, id)
+	if err != nil {
+		return task, err
+	}
+	if RemoteRevision(task) != revision {
+		return task, Error("REVISION_CONFLICT", "task changed before failure review")
+	}
+	if err = s.reviewFailureTx(tx, &task, review, read); err != nil {
+		return task, err
+	}
+	return task, s.save(tx, &task)
+}
+
+func (s *Service) reviewFailureTx(tx *store.Tx, t *Task, review FailureReview, read func(*store.Tx, *Task, string, string) ([]byte, error)) error {
+	if err := validateFailureReview(review); err != nil {
+		return err
+	}
+	activeKey := t.ActiveFailure
+	cycle, ok := t.FailureCycles[activeKey]
+	if !ok || !t.Paused || (cycle.State != "review_required" && cycle.State != "blocked") {
+		return Error("ROOT_CAUSE_REVIEW_NOT_EXPECTED", t.Definition.ID)
+	}
+	workspace := s.Root
+	for i := len(t.Attempts) - 1; i >= 0; i-- {
+		if t.Attempts[i].Unit == cycle.Unit && t.Attempts[i].Workspace != "" {
+			workspace = t.Attempts[i].Workspace
+			break
+		}
+	}
+	review.EvidenceHashes = map[string]string{}
+	if cycle.ReviewedEvidence == nil {
+		cycle.ReviewedEvidence = map[string]bool{}
+	}
+	newEvidence := false
+	for _, ref := range review.Evidence {
+		data, err := read(tx, t, workspace, ref)
+		if err != nil {
+			return err
+		}
+		hash := store.Hash(data)
+		review.EvidenceHashes[ref] = hash
+		if !cycle.ReviewedEvidence[hash] {
+			newEvidence = true
+		}
+	}
+	if cycle.State == "blocked" && !newEvidence {
+		return Error("ROOT_CAUSE_NEW_EVIDENCE_REQUIRED", "repeat review requires new retained evidence")
+	}
+	for _, hash := range review.EvidenceHashes {
+		cycle.ReviewedEvidence[hash] = true
+	}
+	review.At = time.Now().UTC()
+	cycle.Review = &review
+	cycle.State = "reviewed"
+	t.FailureCycles[activeKey] = cycle
+	if next := pendingFailureKey(t); next != "" {
+		activateFailure(t, next)
+	} else if t.Blocker != nil {
+		t.Blocker.Tried, t.Blocker.Recovery, t.Blocker.Next = review.Tried, review.Recovery, review.Next
+	}
+	return tx.Event(t.Definition.ID, "bounded_root_cause_review", map[string]any{"unit": cycle.Unit, "signature": cycle.Signature, "count": cycle.Count, "review": review})
+}
+
+func validateFailureReview(review FailureReview) error {
 	if strings.TrimSpace(review.Actor) == "" || strings.TrimSpace(review.Tried) == "" ||
 		strings.TrimSpace(review.Excluded) == "" || strings.TrimSpace(review.Hypothesis) == "" ||
 		strings.TrimSpace(review.Next) == "" || strings.TrimSpace(review.Recovery) == "" || len(review.Evidence) == 0 {
-		return Next{}, Error("ROOT_CAUSE_REVIEW_REQUIRED", "actor, tried, excluded, hypothesis, recovery, next and evidence are required")
+		return Error("ROOT_CAUSE_REVIEW_REQUIRED", "actor, tried, excluded, hypothesis, recovery, next and evidence are required")
 	}
-	return s.mutate(id, "root_cause_reviewed", func(tx *store.Tx, t *Task) error {
-		activeKey := t.ActiveFailure
-		cycle, ok := t.FailureCycles[activeKey]
-		if !ok || !t.Paused || (cycle.State != "review_required" && cycle.State != "blocked") {
-			return Error("ROOT_CAUSE_REVIEW_NOT_EXPECTED", id)
-		}
-		workspace := s.Root
-		for i := len(t.Attempts) - 1; i >= 0; i-- {
-			if t.Attempts[i].Unit == cycle.Unit && t.Attempts[i].Workspace != "" {
-				workspace = t.Attempts[i].Workspace
-				break
-			}
-		}
-		review.EvidenceHashes = map[string]string{}
-		if cycle.ReviewedEvidence == nil {
-			cycle.ReviewedEvidence = map[string]bool{}
-		}
-		newEvidence := false
-		for _, ref := range review.Evidence {
-			data, err := s.artifactAt(workspace, ref)
-			if err != nil {
-				return err
-			}
-			hash := store.Hash(data)
-			review.EvidenceHashes[ref] = hash
-			if !cycle.ReviewedEvidence[hash] {
-				newEvidence = true
-			}
-		}
-		if cycle.State == "blocked" && !newEvidence {
-			return Error("ROOT_CAUSE_NEW_EVIDENCE_REQUIRED", "repeat review requires new retained evidence")
-		}
-		for _, hash := range review.EvidenceHashes {
-			cycle.ReviewedEvidence[hash] = true
-		}
-		review.At = time.Now().UTC()
-		cycle.Review = &review
-		cycle.State = "reviewed"
-		t.FailureCycles[activeKey] = cycle
-		if next := pendingFailureKey(t); next != "" {
-			activateFailure(t, next)
-		} else if t.Blocker != nil {
-			t.Blocker.Tried, t.Blocker.Recovery, t.Blocker.Next = review.Tried, review.Recovery, review.Next
-		}
-		return tx.Event(id, "bounded_root_cause_review", map[string]any{"unit": cycle.Unit, "signature": cycle.Signature, "count": cycle.Count, "review": review})
-	})
+	return nil
 }

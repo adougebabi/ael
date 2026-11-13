@@ -68,13 +68,19 @@ func (s *Service) RemoteClaimTx(tx *store.Tx, input RemoteClaimInput) (Task, Att
 			return task, attempt, Error("REMOTE_HANDOFF_TARGET", "claim from the explicitly selected receiving workspace")
 		}
 	}
-	if task.Definition.Type == "epic" {
-		return task, attempt, Error("PARENT_WRITE_FORBIDDEN", "claim an executable leaf")
+	parentCheck := task.Definition.Type == "epic"
+	if parentCheck {
+		if task.Step != "verify" || task.Integration == nil {
+			return task, attempt, Error("PARENT_WRITE_FORBIDDEN", "prepare the parent integration before claiming its checks")
+		}
+		if err = s.validateIntegration(tx, &task); err != nil {
+			return task, attempt, err
+		}
 	}
 	if task.EpicMembership != nil && task.EpicMembership.Parent != input.ParentID {
 		return task, attempt, Error("PARENT_SCOPE_REQUIRED", "claim this managed leaf through its parent")
 	}
-	if task.EpicMembership == nil && input.ParentID != "" {
+	if task.EpicMembership == nil && input.ParentID != "" && !(parentCheck && input.ParentID == task.Definition.ID) {
 		return task, attempt, Error("PARENT_SCOPE_REQUIRED", "task is not a member of the requested parent")
 	}
 	if task.Status != "open" || task.Paused || task.Confirmation != nil {
@@ -125,7 +131,7 @@ func (s *Service) RemoteClaimTx(tx *store.Tx, input RemoteClaimInput) (Task, Att
 			if !check.Required {
 				continue
 			}
-			if evidence := CurrentEvidence(&task, check); evidence != nil && (evidence.Result == "pass" || (task.Definition.Goal == "report" && evidence.Result == "fail")) {
+			if remoteCheckFinished(&task, check) {
 				continue
 			}
 			if len(check.Command) > 0 && check.Method != "" && check.Method != "command" {
@@ -374,4 +380,9 @@ func (s *Service) RemoteRecoverTx(tx *store.Tx, input RemoteRecovery) (Task, err
 	}
 	err = tx.Event(input.TaskID, "remote_responsibility_recovered", map[string]string{"attempt": input.AttemptID, "from_workspace": oldWorkspace, "to_workspace": target, "mode": input.Mode, "reason": input.Reason, "host_execution_state": "unknown"})
 	return task, err
+}
+
+func remoteCheckFinished(task *Task, check Check) bool {
+	evidence := CurrentEvidence(task, check)
+	return evidence != nil && (evidence.Result == "pass" || (task.Definition.Goal == "report" && evidence.Result == "fail"))
 }
