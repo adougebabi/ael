@@ -10,6 +10,8 @@ import (
 
 func artifactError(w http.ResponseWriter, err error) {
 	switch {
+	case strings.Contains(err.Error(), "IMPORT_NOT_ACTIVE"):
+		standaloneFail(w, http.StatusConflict, "IMPORT_NOT_ACTIVE")
 	case err.Error() == "RUNNER_ISOLATION_REQUIRED":
 		standaloneFail(w, http.StatusServiceUnavailable, "RUNNER_ISOLATION_REQUIRED")
 	case errors.Is(err, sql.ErrNoRows), err.Error() == "ARTIFACT_NOT_FOUND", err.Error() == "UPLOAD_NOT_FOUND", err.Error() == "TASK_NOT_FOUND":

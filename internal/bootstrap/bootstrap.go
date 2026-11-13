@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-const Version = "0.1.20"
+const Version = "0.1.21"
 
 const DefaultPolicy = "{\"schema\":1,\"max_retries\":3,\"max_seconds\":0,\"lease_seconds\":1800,\"checks\":[],\"critical_knowledge\":[],\"delivery_requires_confirmation\":true}\n"
 
@@ -310,6 +310,10 @@ func Open(root string) (*core.Service, Report, error) {
 	}
 	s, e := store.Open(r.Data)
 	if e != nil {
+		return nil, r, e
+	}
+	if e = refuseFrozenAuthority(s); e != nil {
+		s.Close()
 		return nil, r, e
 	}
 	s.OnClose(unlock)

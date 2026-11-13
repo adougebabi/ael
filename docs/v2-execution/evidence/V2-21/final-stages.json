@@ -1,0 +1,282 @@
+[
+  {
+    "stage": "package",
+    "command": [
+      "sh",
+      "scripts/package.sh"
+    ],
+    "exit_code": 0
+  },
+  {
+    "stage": "extract",
+    "command": [
+      "tar",
+      "-xzf",
+      "/Users/vinson/Documents/project/\u4e2a\u4eba/ael/dist/ael-0.1.21-unix.tar.gz",
+      "-C",
+      "/private/tmp/ael-v221-final-4/bundle"
+    ],
+    "exit_code": 0
+  },
+  {
+    "stage": "image-arm64",
+    "command": [
+      "python3",
+      "scripts/server_image.py",
+      "--manifest",
+      "/Users/vinson/Documents/project/\u4e2a\u4eba/ael/dist/release/manifest.json",
+      "--platform",
+      "linux-arm64",
+      "--tag",
+      "ael-server:0.1.21-v2-21-final"
+    ],
+    "exit_code": 0
+  },
+  {
+    "stage": "image-amd64",
+    "command": [
+      "python3",
+      "scripts/server_image.py",
+      "--manifest",
+      "/Users/vinson/Documents/project/\u4e2a\u4eba/ael/dist/release/manifest.json",
+      "--platform",
+      "linux-amd64",
+      "--tag",
+      "ael-server:0.1.21-v2-21-final-amd64"
+    ],
+    "exit_code": 0
+  },
+  {
+    "stage": "snapshot-release",
+    "command": [
+      "python3",
+      "-c",
+      "import shutil;shutil.copytree('dist/release','/private/tmp/ael-v221-final-4/bundle/release')"
+    ],
+    "exit_code": 0
+  },
+  {
+    "stage": "authority-transfer",
+    "command": [
+      "python3",
+      "scripts/authority_transfer_acceptance.py",
+      "--binary",
+      "/private/tmp/ael-v221-final-4/bundle/ael-darwin-arm64",
+      "--source-bundle",
+      "/private/tmp/ael-v221-source-0.1.20",
+      "--out",
+      "/private/tmp/ael-v221-final-4/authority-transfer",
+      "--browser"
+    ],
+    "exit_code": 0
+  },
+  {
+    "stage": "compose",
+    "command": [
+      "python3",
+      "scripts/server_compose_acceptance.py",
+      "--bundle",
+      "/private/tmp/ael-v221-final-4/bundle",
+      "--image",
+      "ael-server:0.1.21-v2-21-final",
+      "--proxy-image",
+      "caddy@sha256:9ee998103a2bc0d4392bbe9738b4069da1562d6920b3cd8088cfd098a8270120",
+      "--out",
+      "/private/tmp/ael-v221-final-4/compose"
+    ],
+    "exit_code": 0
+  },
+  {
+    "stage": "storage-process",
+    "command": [
+      "python3",
+      "scripts/server_storage_acceptance.py",
+      "--binary",
+      "/private/tmp/ael-v221-final-4/bundle/ael-darwin-arm64",
+      "--previous-binary",
+      "/private/tmp/ael-v220-previous-ael",
+      "--expected-version",
+      "0.1.21",
+      "--out",
+      "/private/tmp/ael-v221-final-4/storage-process"
+    ],
+    "exit_code": 0
+  },
+  {
+    "stage": "package-acceptance",
+    "command": [
+      "python3",
+      "scripts/release_acceptance.py",
+      "--bundle",
+      "/private/tmp/ael-v221-final-4/bundle",
+      "--out",
+      "/private/tmp/ael-v221-final-4/package-acceptance"
+    ],
+    "exit_code": 0
+  },
+  {
+    "stage": "source-acceptance",
+    "command": [
+      "python3",
+      "scripts/release_source_acceptance.py",
+      "--bundle",
+      "/private/tmp/ael-v221-final-4/bundle",
+      "--out",
+      "/private/tmp/ael-v221-final-4/source-acceptance"
+    ],
+    "exit_code": 0
+  },
+  {
+    "stage": "client-upgrade",
+    "command": [
+      "python3",
+      "scripts/client_upgrade_acceptance.py",
+      "--release",
+      "/private/tmp/ael-v221-final-4/bundle/release",
+      "--previous-bundle",
+      "/private/tmp/ael-v219-previous-eb63016",
+      "--out",
+      "/private/tmp/ael-v221-final-4/client-upgrade"
+    ],
+    "exit_code": 0
+  },
+  {
+    "stage": "go-full",
+    "command": [
+      "go",
+      "test",
+      "./...",
+      "-count=1"
+    ],
+    "exit_code": 0
+  },
+  {
+    "stage": "vet",
+    "command": [
+      "go",
+      "vet",
+      "./..."
+    ],
+    "exit_code": 0
+  },
+  {
+    "stage": "remote_agent_acceptance",
+    "command": [
+      "python3",
+      "/Users/vinson/Documents/project/\u4e2a\u4eba/ael/scripts/remote_agent_acceptance.py",
+      "--bundle",
+      "/private/tmp/ael-v221-final-4/bundle",
+      "--out",
+      "/private/tmp/ael-v221-final-4/remote_agent_acceptance"
+    ],
+    "exit_code": 0
+  },
+  {
+    "stage": "remote_collaboration_acceptance",
+    "command": [
+      "python3",
+      "/Users/vinson/Documents/project/\u4e2a\u4eba/ael/scripts/remote_collaboration_acceptance.py",
+      "--bundle",
+      "/private/tmp/ael-v221-final-4/bundle",
+      "--out",
+      "/private/tmp/ael-v221-final-4/remote_collaboration_acceptance"
+    ],
+    "exit_code": 0
+  },
+  {
+    "stage": "remote_context_acceptance",
+    "command": [
+      "python3",
+      "/Users/vinson/Documents/project/\u4e2a\u4eba/ael/scripts/remote_context_acceptance.py",
+      "--bundle",
+      "/private/tmp/ael-v221-final-4/bundle",
+      "--out",
+      "/private/tmp/ael-v221-final-4/remote_context_acceptance"
+    ],
+    "exit_code": 0
+  },
+  {
+    "stage": "remote_artifacts_acceptance",
+    "command": [
+      "python3",
+      "/Users/vinson/Documents/project/\u4e2a\u4eba/ael/scripts/remote_artifacts_acceptance.py",
+      "--bundle",
+      "/private/tmp/ael-v221-final-4/bundle",
+      "--out",
+      "/private/tmp/ael-v221-final-4/remote_artifacts_acceptance"
+    ],
+    "exit_code": 0
+  },
+  {
+    "stage": "remote_dashboard_acceptance",
+    "command": [
+      "python3",
+      "/Users/vinson/Documents/project/\u4e2a\u4eba/ael/scripts/remote_dashboard_acceptance.py",
+      "--bundle",
+      "/private/tmp/ael-v221-final-4/bundle",
+      "--out",
+      "/private/tmp/ael-v221-final-4/remote_dashboard_acceptance"
+    ],
+    "exit_code": 0
+  },
+  {
+    "stage": "remote_findings_acceptance",
+    "command": [
+      "python3",
+      "/Users/vinson/Documents/project/\u4e2a\u4eba/ael/scripts/remote_findings_acceptance.py",
+      "--bundle",
+      "/private/tmp/ael-v221-final-4/bundle",
+      "--out",
+      "/private/tmp/ael-v221-final-4/remote_findings_acceptance"
+    ],
+    "exit_code": 0
+  },
+  {
+    "stage": "remote_review_acceptance",
+    "command": [
+      "python3",
+      "/Users/vinson/Documents/project/\u4e2a\u4eba/ael/scripts/remote_review_acceptance.py",
+      "--bundle",
+      "/private/tmp/ael-v221-final-4/bundle",
+      "--out",
+      "/private/tmp/ael-v221-final-4/remote_review_acceptance"
+    ],
+    "exit_code": 0
+  },
+  {
+    "stage": "remote_finding_lifecycle_acceptance",
+    "command": [
+      "python3",
+      "/Users/vinson/Documents/project/\u4e2a\u4eba/ael/scripts/remote_finding_lifecycle_acceptance.py",
+      "--bundle",
+      "/private/tmp/ael-v221-final-4/bundle",
+      "--out",
+      "/private/tmp/ael-v221-final-4/remote_finding_lifecycle_acceptance"
+    ],
+    "exit_code": 0
+  },
+  {
+    "stage": "standalone_server_acceptance",
+    "command": [
+      "python3",
+      "/Users/vinson/Documents/project/\u4e2a\u4eba/ael/scripts/standalone_server_acceptance.py",
+      "--bundle",
+      "/private/tmp/ael-v221-final-4/bundle",
+      "--out",
+      "/private/tmp/ael-v221-final-4/standalone_server_acceptance"
+    ],
+    "exit_code": 0
+  },
+  {
+    "stage": "ui_usability_acceptance",
+    "command": [
+      "python3",
+      "/Users/vinson/Documents/project/\u4e2a\u4eba/ael/scripts/ui_usability_acceptance.py",
+      "--bundle",
+      "/private/tmp/ael-v221-final-4/bundle",
+      "--out",
+      "/private/tmp/ael-v221-final-4/ui_usability_acceptance"
+    ],
+    "exit_code": 0
+  }
+]

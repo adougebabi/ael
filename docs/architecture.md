@@ -130,3 +130,12 @@ Remote entry update 在 projectmode 锁内复核经过验证的绑定字节 hash
 维护使用现有跨进程授权栅栏，登录也纳入共享锁。管理员 session/CSRF 持久化 drain/quiescing/quiesced/active 与 epoch，逐项目责任撤销和回执幂等。未知宿主状态和原工作区 hold 保留，截止后旧写入拒绝。
 
 中央备份由各 SQLite 一致副本、配套 workspace、完整附件状态和文件 hash 清单组成。恢复在空卷中分阶段复制，重定位服务器 outbox，保留全部中央表和历史引用。格式 marker 2 在升级写入前切换，旧程序拒绝打开。恢复清除旧 session 并撤销项目令牌，责任重新核对，账号/成员和原回执保留。Server 运维凭据、TLS 与外部 Agent 的模型/发布凭据各遵循各自授权范围。
+
+
+## V2-21 旧 Local 历史与权威移交
+
+只读事务盘点明确的 Local 实例，project/source/original ID 形成稳定映射。冻结在同一 SQLite 写事务中检查旧责任、工作区锁和投影，六张运行表的触发器兼容旧写者。私有一致恢复库与去授权清单分开保存，已导出对象可按 hash 恢复，原记录和源工作区保留。
+
+中央导入以 portable_operations 原子提交新任务、父子关系、来源映射和历史。任务创建继续采用既有政策、关系与版本规则，关系建立后再恢复历史终态。完整来源 Task 和原 RecordHistory 保存于导入账本，当前候选、证据、责任和批准重新建立。附件复用原分块/配额/类型/hash/授权与重试机制，待核验导入受到 prune 保护。当前任务页通过统一远程传输读取原历史，证据继续从中央 ID 获取。
+
+权威切换复用 profile、项目授权、协议和 projectmode binding 安装，旧 Local 写入继续冻结。回滚先对账中央范围内的新事实，持久冻结相关任务、证据、规范与发现写入，再原地释放旧 Local 和移除精确匹配的 binding。释放 journal 支持进程中断恢复，原中心历史持续可读。AEL 不据此推断宿主进程停止。

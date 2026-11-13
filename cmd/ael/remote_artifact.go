@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const remoteArtifactLimit = 10 << 20
+const remoteArtifactLimit = core.RemoteArtifactFileLimit
 const remoteArtifactChunk = 256 << 10
 
 func remoteArtifactCommand(cmd string, a args, config, project string, binding remote.Binding) (any, error) {
@@ -173,6 +173,9 @@ func remoteUploadBytes(a args, config, project string, binding remote.Binding, f
 		return agentCommunicationCall(config, project, binding, method, path, body)
 	}
 	start := map[string]any{"operation_id": op, "idempotency_key": key, "expected_revision": revision, "task_id": task, "attempt_id": a.get("attempt", ""), "candidate": a.get("candidate", ""), "filename": filename, "mime": mimeType, "size": len(data), "sha256": store.Hash(data), "source": a.get("source", "CLI")}
+	if a.get("import-id", "") != "" {
+		start["import_id"] = a.get("import-id", "")
+	}
 	if a.get("context", "") != "" {
 		start["context_id"] = a.get("context", "")
 	}

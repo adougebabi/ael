@@ -99,3 +99,7 @@ human 检查交由项目 reviewer/admin 登录中央 Dashboard 完成。外部 A
 ## 服务维护
 
 读取 server_maintenance 的 mode、epoch、deadline。draining 时保存现场并按授权释放当前责任，截止后接口拒绝有效写入。quiescing/quiesced 时等待维护完成，保留原请求与私有材料。维护后先核对协议和当前责任，查原回执，再根据当前版本处理新领取或 runner recover。unknown workspace 仍需停工确认或独立工作区声明。恢复备份会要求管理员重新签发项目令牌，旧回执可作为历史查询。宿主工作由现有 Agent 自行管理。
+
+## 已有 Local 项目切换
+
+已有 Local 状态通过 transfer scan/plan/export/import/verify/commit/cutover 显式迁移。先审阅来源映射并协调外部责任，未知旧执行状态阻止冻结。切换后读取 Server 当前任务、上下文和回执，再领取新的有效责任。历史 PASS 保留来源版本，新候选继续经过现行验收。异常恢复使用原导出与操作键，回滚先通过 rollback-freeze 核对中央新增事实。

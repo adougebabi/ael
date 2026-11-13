@@ -1,0 +1,7 @@
+--- FAIL: TestAuthorityTransferUsesBoundWorkspaceAndAllEvidenceReferences (0.01s)
+    authority_transfer_test.go:163: wrong workspace or omitted reference map[actual.png:{TaskID:same-name Ref:actual.png SHA256:cabfaf00691ae33a7a3f54ca80f536a7d0fc966856ecc5f43a581d837644ad57 Size:22 Status:available Kind:evidence} runtime:missing.png:{TaskID:same-name Ref:runtime:missing.png SHA256: Size:0 Status:missing Kind:output} runtime:result.png:{TaskID:same-name Ref:runtime:result.png SHA256:823863fa3555108c11310c462775a414ff9fd551930ba7e87719af05e60be47a Size:23 Status:available Kind:output}]
+--- FAIL: TestAuthorityTransferResumesFromSavedObjectAfterSourceDisappears (0.03s)
+    authority_transfer_test.go:181: saved verified object could not recover export TRANSFER_PLAN_STALE: rescan changed state before export
+FAIL
+FAIL	ael/internal/bootstrap	0.357s
+FAIL

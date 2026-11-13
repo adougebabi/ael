@@ -1,0 +1,11 @@
+
+Running 1 test using 1 worker
+
+(node:86952) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:86952) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 tests/authority-transfer.spec.ts:6:1 › 旧来源历史、真实图片、缺失状态和任务切换保持一致 (1.7s)
+
+  1 passed (2.6s)
+{"result": "PASS", "mode": "same-machine isolated real HTTP", "synthetic_legacy_history": true, "image_sha256": "58e39b2c7543a687927151ab15064ae09337f8dc09c89a51d42d94ba3ad8edf3", "imports": {"mac-old": {"id": "import-901fc74c026894a1ee37143157ba11cd", "task": "import-fe58dc1cebff56186a468c3141bf8867"}, "cloud-old": {"id": "import-6ef03b4215bcfd349cbc5c8add9f321d", "task": "import-eb96976f65858bbb3578528619158c48"}}, "events": ["two actual Local clones with same ID, conflicting revision, duplicate PNG and unknown historical time", "absent and unactivated imports abort safely, reject late stages and release the original Local runtime", "unknown historical responsibility rejects export despite drain acknowledgement", "actual CLI SIGKILL after central import commit, followed by exact input recovery", "formal CLI scan/plan/export/import/verify/commit/cutover, exact replay and shared live reads", "actual packaged Dashboard history, image, missing state and slow response isolation", "new central evidence prevents old Local authority rollback", "actual CLI SIGKILL after Local release and central rollback receipt, followed by journal recovery", "unchanged selected source rolls back with a durable journal while unrelated central facts remain"], "oracle_access": false}

@@ -1,0 +1,4 @@
+# ael/internal/bootstrap [ael/internal/bootstrap.test]
+internal/bootstrap/authority_transfer.go:184:27: check.Artifacts undefined (type core.OutcomeCheck has no field or method Artifacts)
+FAIL	ael/internal/bootstrap [build failed]
+FAIL

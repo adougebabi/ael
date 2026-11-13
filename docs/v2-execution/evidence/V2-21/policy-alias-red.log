@@ -1,0 +1,5 @@
+--- FAIL: TestStandalonePolicyRecoversInterruptedPublicationAlias (0.00s)
+    remote_project_policy_test.go:55: interrupted initialization left an unsafe policy alias PRIVATE_FILE_INVALID
+FAIL
+FAIL	ael/internal/server	0.591s
+FAIL

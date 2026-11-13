@@ -1,0 +1,24 @@
+
+added 59 packages, and audited 60 packages in 638ms
+
+10 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities
+
+> ael-dashboard@0.1.21 build
+> vue-tsc --noEmit && vite build
+
+vite v7.3.7 building client environment for production...
+transforming...
+✓ 90 modules transformed.
+rendering chunks...
+computing gzip size...
+../internal/server/ui/index.html                           0.36 kB │ gzip:   0.29 kB
+../internal/server/ui/assets/StandaloneApp-B6ayezEn.css    2.92 kB │ gzip:   0.81 kB
+../internal/server/ui/assets/index-oq5MtzZh.css           63.44 kB │ gzip:  12.35 kB
+../internal/server/ui/assets/StandaloneApp-DwQdIioV.js    23.27 kB │ gzip:   7.56 kB
+../internal/server/ui/assets/index-DC81FuFX.js           416.85 kB │ gzip: 149.76 kB
+✓ built in 774ms
+{"status": "packaged", "publication": "local_unpublished", "manifest": "/Users/vinson/Documents/project/\u4e2a\u4eba/ael/dist/release/manifest.json", "assets": 8}
+{"manifest":{"schema":1,"version":"0.1.21","build":"fbbf916-3911343d006b","commit":"fbbf91653a48b68189c06833260fa7892d1c49c7","dirty":true,"publication":"local_unpublished","protocols":{"api":1,"skill":1,"cli_output":1},"assets":[{"kind":"client","platform":"darwin-arm64","path":"ael-client-0.1.21-darwin-arm64.tar.gz","sha256":"a639de75a77696853f15abbe2d681024a62b9f892dba8b75dc395309b9e94805","size":5937060},{"kind":"client","platform":"darwin-amd64","path":"ael-client-0.1.21-darwin-amd64.tar.gz","sha256":"da9c30ebc3e932dde4e045652994461f713b91ab0e45a7c534ebbe5179531bca","size":6352043},{"kind":"client","platform":"linux-amd64","path":"ael-client-0.1.21-linux-amd64.tar.gz","sha256":"6cb33280e6a32c8910268caa75e6d20ad1cd7054a1b199df400aed142efa06a7","size":6257905},{"kind":"client","platform":"linux-arm64","path":"ael-client-0.1.21-linux-arm64.tar.gz","sha256":"5a38b1e3c9765a5d10a77d5c8868f66d324f7a5d8d2b50e91727bc67366575f3","size":5733851},{"kind":"server","platform":"linux-amd64","path":"ael-server-0.1.21-linux-amd64.tar.gz","sha256":"138aaf67fb3b0819f5abf1acaa3acfacef6f86cec5d9b0cd2550c526b8667039","size":6257895},{"kind":"server","platform":"linux-arm64","path":"ael-server-0.1.21-linux-arm64.tar.gz","sha256":"0f2069b30ecd73d19ec2b1dba5470cb0a70dcc9575354efa755854ef39e03435","size":5733864},{"kind":"skill","platform":"all","path":"ael-skill-0.1.21-all.tar.gz","sha256":"538dc8188f4bc6586cb33b9559dfb79da6c750c7ce474c90a1aca50a0660394c","size":37664},{"kind":"legacy","platform":"all","path":"ael-0.1.21-unix.tar.gz","sha256":"131ed6699586a1517ed40be660bacf07fd7565affb0e792482c0582acc39f526","size":28014071}]},"content_integrity":"verified","publisher_identity":"unverified","files":["ael-client-0.1.21-darwin-arm64.tar.gz","ael-client-0.1.21-darwin-amd64.tar.gz","ael-client-0.1.21-linux-amd64.tar.gz","ael-client-0.1.21-linux-arm64.tar.gz","ael-server-0.1.21-linux-amd64.tar.gz","ael-server-0.1.21-linux-arm64.tar.gz","ael-skill-0.1.21-all.tar.gz","ael-0.1.21-unix.tar.gz"]}

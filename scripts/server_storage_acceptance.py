@@ -14,6 +14,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--binary', required=True)
 parser.add_argument('--previous-binary', required=True)
 parser.add_argument('--out', required=True)
+parser.add_argument('--expected-version', default='0.1.20')
 args = parser.parse_args()
 binary, previous = Path(args.binary).resolve(), Path(args.previous_binary).resolve()
 out = Path(args.out).resolve()
@@ -64,7 +65,7 @@ def kill_when(label, values, predicate):
 
 old = cli('real old version', previous, 'version')
 current = cli('real current version', binary, 'version')
-assert old['version'] == '0.1.19' and current['version'] == '0.1.20'
+assert old['version'] == '0.1.19' and current['version'] == args.expected_version
 cli('bootstrap legacy format through old CLI', previous, 'server', 'bootstrap', '--data-dir', data, '--username', 'owner', '--password-stdin', input_text='fixture-storage-password-220\n')
 assert (data / 'ael-server.marker').read_text() == 'AEL-STANDALONE-1\n'
 # Registered but unopened projects are a supported old layout. Their quantity

@@ -75,6 +75,10 @@ func (h *standaloneHandler) remoteOperation(w http.ResponseWriter, principal sta
 }
 
 func standaloneTaskError(w http.ResponseWriter, err error) {
+	if strings.Contains(err.Error(), "IMPORT_NOT_ACTIVE") {
+		standaloneFail(w, http.StatusConflict, "IMPORT_NOT_ACTIVE")
+		return
+	}
 	if err == sql.ErrNoRows || strings.HasPrefix(err.Error(), "TASK_MISSING:") {
 		standaloneFail(w, http.StatusNotFound, "TASK_NOT_FOUND")
 		return

@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "/Users/vinson/Documents/project/个人/ael/scripts/server_storage_acceptance.py", line 86, in <module>
+    resumed = cli('resume same migration', binary, 'server', 'migrate', '--data-dir', data, '--ack-stopped')
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/vinson/Documents/project/个人/ael/scripts/server_storage_acceptance.py", line 31, in cli
+    assert result.returncode == 0, (label, result.stderr)
+AssertionError: ('resume same migration', '{"code":"SERVER_POLICY_CHANGED","error":"SERVER_POLICY_CHANGED: server storage operation incomplete; preserve its backup and recovery record"}\n')

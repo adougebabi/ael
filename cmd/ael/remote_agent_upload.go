@@ -29,7 +29,7 @@ func retainAgentUpload(a args, config, project string, binding remote.Binding, f
 	}
 	defer unlock()
 	flags := map[string]string{}
-	for _, name := range []string{"context", "task", "attempt", "candidate", "mime", "source", "operation-id", "idempotency-key", "expected-revision"} {
+	for _, name := range []string{"context", "task", "attempt", "candidate", "mime", "source", "import-id", "operation-id", "idempotency-key", "expected-revision"} {
 		if value := a.get(name, ""); value != "" {
 			flags[name] = value
 		}

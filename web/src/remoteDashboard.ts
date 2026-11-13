@@ -26,6 +26,7 @@ export function connectDashboard(project: Project | null, csrf = "", expired?: (
     let endpoint = `/api/v1/projects/${encodeURIComponent(project.id)}/dashboard/${url.pathname.slice(5)}` + url.search;
     if (url.pathname === "/api/findings") endpoint = `/api/v1/projects/${encodeURIComponent(project.id)}/findings` + url.search;
     if (url.pathname === "/api/finding") endpoint = `/api/v1/projects/${encodeURIComponent(project.id)}/findings/${encodeURIComponent(url.searchParams.get("id") || "")}`;
+    if (url.pathname === "/api/authority-import") endpoint = `/api/v1/projects/${encodeURIComponent(project.id)}/imports/${encodeURIComponent(url.searchParams.get("id") || "")}?task_id=${encodeURIComponent(url.searchParams.get("task") || "")}`;
     let payload = body;
     if (body !== undefined) {
       const input = body as Record<string, any>;

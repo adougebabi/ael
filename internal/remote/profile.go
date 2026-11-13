@@ -286,6 +286,20 @@ func request(client *http.Client, p Profile, path string, auth bool) (*http.Resp
 }
 
 func Connect(config, project, name, projectID string, client *http.Client) (Binding, error) {
+	return connect(config, project, name, projectID, client, nil)
+}
+
+// ConnectTransferred retains normal profile, protocol, project access and
+// binding checks. The caller verifies its frozen Local source under the same
+// project-mode lock as the final binding installation.
+func ConnectTransferred(config, project, name, projectID string, client *http.Client, verifyLocal func() error) (Binding, error) {
+	if verifyLocal == nil {
+		return Binding{}, errors.New("TRANSFER_FREEZE_REQUIRED")
+	}
+	return connect(config, project, name, projectID, client, verifyLocal)
+}
+
+func connect(config, project, name, projectID string, client *http.Client, verifyLocal func() error) (Binding, error) {
 	if !identifier.MatchString(name) || !identifier.MatchString(projectID) {
 		return Binding{}, errors.New("REMOTE_BINDING_INVALID")
 	}
@@ -312,16 +326,8 @@ func Connect(config, project, name, projectID string, client *http.Client) (Bind
 	if err != nil {
 		return Binding{}, errors.New("REMOTE_PROJECT_UNAVAILABLE")
 	}
-	for _, rel := range []string{".ael/project.yaml", ".ael/work-items", ".ael/records", ".ael/outcomes"} {
-		path, e := store.SafePath(root, rel)
-		if e != nil {
-			return Binding{}, errors.New("REMOTE_PROJECT_UNAVAILABLE")
-		}
-		if _, e = os.Lstat(path); e == nil {
-			return Binding{}, errors.New("LOCAL_PROJECT_EXISTS: do not switch an existing local project")
-		} else if !os.IsNotExist(e) {
-			return Binding{}, errors.New("REMOTE_PROJECT_UNAVAILABLE")
-		}
+	if err = checkConnectLocal(root, verifyLocal); err != nil {
+		return Binding{}, err
 	}
 	if err = checkCapability(client, p, "remote_tasks"); err != nil {
 		return Binding{}, err
@@ -351,16 +357,8 @@ func Connect(config, project, name, projectID string, client *http.Client) (Bind
 	if currentExists && current != wanted {
 		return Binding{}, errors.New("REMOTE_BINDING_EXISTS: existing binding was preserved")
 	}
-	for _, rel := range []string{".ael/project.yaml", ".ael/work-items", ".ael/records", ".ael/outcomes"} {
-		path, e := store.SafePath(root, rel)
-		if e != nil {
-			return Binding{}, errors.New("REMOTE_PROJECT_UNAVAILABLE")
-		}
-		if _, e = os.Lstat(path); e == nil {
-			return Binding{}, errors.New("LOCAL_PROJECT_EXISTS: do not switch an existing local project")
-		} else if !os.IsNotExist(e) {
-			return Binding{}, errors.New("REMOTE_PROJECT_UNAVAILABLE")
-		}
+	if err = checkConnectLocal(root, verifyLocal); err != nil {
+		return Binding{}, err
 	}
 	if currentExists {
 		return current, nil
@@ -393,4 +391,22 @@ func Connect(config, project, name, projectID string, client *http.Client) (Bind
 		return Binding{}, errors.New("REMOTE_PROJECT_UNAVAILABLE")
 	}
 	return wanted, nil
+}
+
+func checkConnectLocal(root string, verifyLocal func() error) error {
+	if verifyLocal != nil {
+		return verifyLocal()
+	}
+	for _, rel := range []string{".ael/project.yaml", ".ael/work-items", ".ael/records", ".ael/outcomes"} {
+		path, e := store.SafePath(root, rel)
+		if e != nil {
+			return errors.New("REMOTE_PROJECT_UNAVAILABLE")
+		}
+		if _, e = os.Lstat(path); e == nil {
+			return errors.New("LOCAL_PROJECT_EXISTS: do not switch an existing local project")
+		} else if !os.IsNotExist(e) {
+			return errors.New("REMOTE_PROJECT_UNAVAILABLE")
+		}
+	}
+	return nil
 }

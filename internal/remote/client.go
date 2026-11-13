@@ -54,6 +54,9 @@ func Call(config, project string, binding Binding, method, suffix string, payloa
 		}
 	}
 	capability := "remote_tasks"
+	if strings.HasPrefix(suffix, "/imports") {
+		capability = "authority_imports"
+	}
 	if strings.Contains(suffix, "/plan/") {
 		capability = "remote_plans"
 	}
@@ -97,7 +100,11 @@ func Call(config, project string, binding Binding, method, suffix string, payloa
 	}
 	defer response.Body.Close()
 	var result map[string]any
-	decoder := json.NewDecoder(io.LimitReader(response.Body, 2<<20))
+	responseLimit := int64(2 << 20)
+	if strings.HasPrefix(suffix, "/imports") {
+		responseLimit = 8 << 20
+	}
+	decoder := json.NewDecoder(io.LimitReader(response.Body, responseLimit))
 	decoder.UseNumber()
 	if err = decoder.Decode(&result); err != nil || result == nil {
 		return nil, errors.New("REMOTE_RESPONSE_INVALID")
@@ -140,7 +147,7 @@ func offlineRead(config string, profile Profile, binding Binding, suffix string)
 }
 
 func cacheableRemoteRead(suffix string) bool {
-	return !strings.HasPrefix(suffix, "/findings") && !strings.Contains(suffix, "/artifacts") && !strings.HasPrefix(suffix, "/repositories") && !strings.HasPrefix(suffix, "/candidates") && !strings.HasPrefix(suffix, "/observations") && !strings.HasPrefix(suffix, "/portable-operations") && !strings.HasPrefix(suffix, "/runners") && !strings.Contains(suffix, "/context")
+	return !strings.HasPrefix(suffix, "/imports") && !strings.HasPrefix(suffix, "/findings") && !strings.Contains(suffix, "/artifacts") && !strings.HasPrefix(suffix, "/repositories") && !strings.HasPrefix(suffix, "/candidates") && !strings.HasPrefix(suffix, "/observations") && !strings.HasPrefix(suffix, "/portable-operations") && !strings.HasPrefix(suffix, "/runners") && !strings.Contains(suffix, "/context")
 }
 
 // Artifact content is always fetched live: cached bytes cannot prove that the

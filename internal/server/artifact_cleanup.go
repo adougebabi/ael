@@ -287,6 +287,30 @@ func (a *artifactStore) pruneCandidates(tx *store.Tx, cutoff time.Time) ([]artif
 			dependents[dep] = append(dependents[dep], id)
 		}
 	}
+	pendingImports := map[string]bool{}
+	var hasImportTable int
+	if err = tx.Row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='authority_imports'").Scan(&hasImportTable); err != nil {
+		return nil, err
+	}
+	if hasImportTable > 0 {
+		rows, err = tx.Conn.QueryContext(context.Background(), "SELECT t.task_id FROM authority_import_tasks t JOIN authority_imports i ON i.id=t.import_id WHERE i.state!='active'")
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var id string
+			if err = rows.Scan(&id); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			pendingImports[id] = true
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, err
+		}
+	}
 	protected := func(associated map[string]bool) (bool, []string) {
 		queue := make([]string, 0, len(associated))
 		for id := range associated {
@@ -302,7 +326,7 @@ func (a *artifactStore) pruneCandidates(tx *store.Tx, cutoff time.Time) ([]artif
 			}
 			seen[id] = true
 			task, ok := tasks[id]
-			if !ok || artifactTaskProtected(task) {
+			if !ok || pendingImports[id] || artifactTaskProtected(task) {
 				return true, nil
 			}
 			revisions = append(revisions, id+":"+core.RemoteRevision(task))

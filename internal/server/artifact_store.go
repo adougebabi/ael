@@ -8,11 +8,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"image"
-	_ "image/jpeg"
-	_ "image/png"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -22,7 +18,7 @@ import (
 	"unicode/utf8"
 )
 
-const artifactFileLimit int64 = 10 << 20
+const artifactFileLimit int64 = core.RemoteArtifactFileLimit
 const artifactChunkLimit = 256 << 10
 const artifactDefaultQuota int64 = 100 << 20
 
@@ -36,6 +32,7 @@ type artifactStore struct {
 }
 
 type artifactStartInput struct {
+	ImportID         string `json:"import_id,omitempty"`
 	OperationID      string `json:"operation_id"`
 	IdempotencyKey   string `json:"idempotency_key"`
 	ExpectedRevision string `json:"expected_revision"`
@@ -111,17 +108,22 @@ func (s *Standalone) artifacts(project string, service *core.Service) (*artifact
 			return nil, err
 		}
 	}
-	_, err = service.Store.DB.Exec(`
+	err = artifactSchema(service)
+	if err != nil {
+		return nil, err
+	}
+	return a, nil
+}
+
+func artifactSchema(service *core.Service) error {
+	_, err := service.Store.DB.Exec(`
 CREATE TABLE IF NOT EXISTS artifact_uploads(id TEXT PRIMARY KEY,artifact_id TEXT NOT NULL UNIQUE,project_id TEXT NOT NULL,task_id TEXT NOT NULL,attempt_id TEXT NOT NULL,candidate TEXT NOT NULL,filename TEXT NOT NULL,mime TEXT NOT NULL,size INTEGER NOT NULL,sha256 TEXT NOT NULL,source TEXT NOT NULL,owner_id TEXT NOT NULL,uploader TEXT NOT NULL,operation_id TEXT NOT NULL,idempotency_key TEXT NOT NULL,request_hash TEXT NOT NULL,status TEXT NOT NULL,received INTEGER NOT NULL,created TEXT NOT NULL,UNIQUE(owner_id,idempotency_key));
 CREATE TABLE IF NOT EXISTS artifact_objects(id TEXT PRIMARY KEY,project_id TEXT NOT NULL,task_id TEXT NOT NULL,attempt_id TEXT NOT NULL,candidate TEXT NOT NULL,filename TEXT NOT NULL,mime TEXT NOT NULL,size INTEGER NOT NULL,sha256 TEXT NOT NULL,source TEXT NOT NULL,uploader TEXT NOT NULL,created TEXT NOT NULL,status TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS artifact_references(artifact_id TEXT NOT NULL,task_id TEXT NOT NULL,purpose TEXT NOT NULL,candidate TEXT NOT NULL,actor TEXT NOT NULL,actor_name TEXT NOT NULL,operation_id TEXT NOT NULL,idempotency_key TEXT NOT NULL,request_hash TEXT NOT NULL,created TEXT NOT NULL,PRIMARY KEY(actor,idempotency_key));
 CREATE TABLE IF NOT EXISTS portable_context_sources(context_id TEXT NOT NULL,id TEXT NOT NULL,path TEXT NOT NULL,artifact_id TEXT NOT NULL,sha256 TEXT NOT NULL,status TEXT NOT NULL,kind TEXT NOT NULL,reason TEXT NOT NULL,PRIMARY KEY(context_id,id));
 CREATE TABLE IF NOT EXISTS remote_artifact_leases(upload_id TEXT PRIMARY KEY,runner_id TEXT NOT NULL,attempt_id TEXT NOT NULL,fence INTEGER NOT NULL,token_hash TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS artifact_settings(key TEXT PRIMARY KEY,value INTEGER NOT NULL);`)
-	if err != nil {
-		return nil, err
-	}
-	return a, nil
+	return err
 }
 
 func artifactNameValid(name, mimeType string) bool {
@@ -192,7 +194,42 @@ func (a *artifactStore) objectPath(id string) (string, error) {
 	return store.SafePath(a.objects, id)
 }
 
+func verifyImportUploadState(tx *store.Tx, upload artifactUpload) error {
+	var exists int
+	if err := tx.Row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='authority_imports'").Scan(&exists); err != nil {
+		return err
+	}
+	if exists == 0 {
+		return nil
+	}
+	var id, state string
+	err := tx.Row("SELECT i.id,i.state FROM authority_import_tasks t JOIN authority_imports i ON i.id=t.import_id WHERE t.task_id=?", upload.TaskID).Scan(&id, &state)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if state == "active" {
+		return nil
+	}
+	if (state != "importing" && state != "verified") || upload.Source != "authority-import:"+id {
+		return errors.New("IMPORT_NOT_ACTIVE")
+	}
+	var declared int
+	if err = tx.Row("SELECT count(*) FROM authority_import_files WHERE import_id=? AND task_id=? AND sha256=? AND size=? AND status='available'", id, upload.TaskID, upload.SHA256, upload.Size).Scan(&declared); err != nil {
+		return err
+	}
+	if declared == 0 {
+		return errors.New("IMPORT_NOT_ACTIVE")
+	}
+	return nil
+}
+
 func (a *artifactStore) verifyUploadLease(tx *store.Tx, principal standalonePrincipal, upload artifactUpload, auth artifactLeaseInput) error {
+	if err := verifyImportUploadState(tx, upload); err != nil {
+		return err
+	}
 	var runner, attemptID, hash string
 	var fence int
 	err := tx.Row("SELECT runner_id,attempt_id,fence,token_hash FROM remote_artifact_leases WHERE upload_id=?", upload.ID).Scan(&runner, &attemptID, &fence, &hash)
@@ -221,7 +258,7 @@ func (a *artifactStore) begin(principal standalonePrincipal, in artifactStartInp
 	if !standaloneID.MatchString(in.OperationID) || !standaloneID.MatchString(in.IdempotencyKey) || in.ExpectedRevision == "" || in.TaskID == "" || !artifactNameValid(in.Filename, in.MIME) || in.Size <= 0 || in.Size > artifactFileLimit || !artifactDigest.MatchString(in.SHA256) || strings.TrimSpace(in.Source) == "" || len(in.Source) > 200 {
 		return result, errors.New("ARTIFACT_INVALID")
 	}
-	if in.MIME == "application/octet-stream" && in.RunnerID == "" {
+	if in.MIME == "application/octet-stream" && in.RunnerID == "" && in.ImportID == "" {
 		return result, errors.New("ARTIFACT_INVALID")
 	}
 	request, err := json.Marshal(struct {
@@ -241,6 +278,7 @@ func (a *artifactStore) begin(principal standalonePrincipal, in artifactStartInp
 		return result, err
 	}
 	err = a.service.Store.Write(func(tx *store.Tx) error {
+
 		existing, err := scanUpload(tx.Row("SELECT "+uploadColumns+" FROM artifact_uploads WHERE owner_id=? AND idempotency_key=?", principal.UserID, in.IdempotencyKey))
 		if err == nil {
 			if existing.RequestHash != hash {
@@ -251,6 +289,16 @@ func (a *artifactStore) begin(principal standalonePrincipal, in artifactStartInp
 		}
 		if err != sql.ErrNoRows {
 			return err
+		}
+		if in.ImportID != "" {
+			var actor, state string
+			var matched int
+			if tx.Row("SELECT actor,state FROM authority_imports WHERE id=?", in.ImportID).Scan(&actor, &state) != nil || actor != principal.UserID || state != "importing" || in.Source != "authority-import:"+in.ImportID || in.Candidate != "" || in.ContextID != "" || in.AttemptID != "" || in.RunnerID != "" || in.LeaseToken != "" || in.Fence != 0 {
+				return errors.New("ARTIFACT_INVALID")
+			}
+			if tx.Row("SELECT count(*) FROM authority_import_files WHERE import_id=? AND task_id=? AND sha256=? AND size=? AND status='available'", in.ImportID, in.TaskID, in.SHA256, in.Size).Scan(&matched) != nil || matched == 0 {
+				return errors.New("ARTIFACT_INVALID")
+			}
 		}
 		task, err := artifactTask(tx, in.TaskID)
 		if err != nil {
@@ -430,35 +478,7 @@ func (a *artifactStore) chunk(principal standalonePrincipal, id string, offset i
 }
 
 func validateArtifactBytes(data []byte, mimeType string) error {
-	if len(data) == 0 || int64(len(data)) > artifactFileLimit {
-		return errors.New("ARTIFACT_INVALID")
-	}
-	switch mimeType {
-	case "image/png", "image/jpeg":
-		config, format, err := image.DecodeConfig(bytes.NewReader(data))
-		if err != nil || config.Width <= 0 || config.Height <= 0 || int64(config.Width)*int64(config.Height) > 25_000_000 || (mimeType == "image/png" && format != "png") || (mimeType == "image/jpeg" && format != "jpeg") {
-			return errors.New("ARTIFACT_MIME_INVALID")
-		}
-		if _, decoded, err := image.Decode(bytes.NewReader(data)); err != nil || decoded != format {
-			return errors.New("ARTIFACT_MIME_INVALID")
-		}
-	case "text/plain":
-		detected := http.DetectContentType(data)
-		trimmed := strings.ToLower(strings.TrimSpace(string(data)))
-		if !utf8.Valid(data) || bytes.IndexByte(data, 0) >= 0 || !strings.HasPrefix(detected, "text/plain") || strings.HasPrefix(trimmed, "<svg") || strings.HasPrefix(trimmed, "<?xml") {
-			return errors.New("ARTIFACT_MIME_INVALID")
-		}
-	case "video/mp4":
-		if http.DetectContentType(data) != "video/mp4" {
-			return errors.New("ARTIFACT_MIME_INVALID")
-		}
-	case "application/octet-stream":
-		// Runner outputs are download-only; they are never rendered as active
-		// same-origin content. Size and hash are still verified.
-	default:
-		return errors.New("ARTIFACT_MIME_INVALID")
-	}
-	return nil
+	return core.ValidateRemoteArtifactBytes(data, mimeType)
 }
 
 func artifactFileBytes(path string, size int64, digest, mimeType string) ([]byte, error) {

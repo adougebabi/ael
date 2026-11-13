@@ -1,0 +1,10 @@
+{
+  "result": "PASS",
+  "restored_projects": 120,
+  "backup_verified": true,
+  "source_backup_sha256": "c18adb89832425484d31be72d6c790b6a9b7f3f90eb8bbf40daa1be6640fa0e9",
+  "restored_format": "AEL-STANDALONE-2",
+  "failed_source_retained": "/private/tmp/ael-v221-final-2/storage-process/data",
+  "recovery_root": "/private/tmp/ael-v221-policy-backup-recovery",
+  "credentials": "re-login and reissue project tokens"
+}

@@ -3,7 +3,7 @@
 > 本账本初始状态不代表任何实施已开始。只有实际执行者才能根据代码和验收结果更新状态。
 > 状态仅允许 PENDING、ACTIVE、VERIFYING、DONE、BLOCKED。
 
-当前任务: V2-21
+当前任务: V2-22
 
 | ID | 任务 | 状态 | 回执 |
 |---|---|---|---|
@@ -28,7 +28,7 @@
 | V2-18 | Server 与薄客户端的发行包和版本清单 | DONE | receipts/V2-18.md |
 | V2-19 | CLI 与项目资产的轻量升级 | DONE | receipts/V2-19.md |
 | V2-20 | Server 部署包、备份与安全升级 | DONE | receipts/V2-20.md |
-| V2-21 | 旧本地状态导入与单权威切换 | PENDING | — |
+| V2-21 | 旧本地状态导入与单权威切换 | DONE | receipts/V2-21.md |
 | V2-22 | 打包后的全链路验收与交付核对 | PENDING | — |
 | V2-23 | 授权后的 Oracle 部署与实际双机验收 | PENDING | — |
 
@@ -171,3 +171,15 @@ V2-13 已 DONE，正式回执 receipts/V2-13.md，证据 evidence/V2-13/。最�
 - V2-20 外部正式维护 CLI 在真实 TLS Compose 开发分发通过 drain、deadline 后写入拒绝、quiesce、原键重放、resume 和重启后任务/图片读取，现场 /private/tmp/ael-v220-maintenance-compose/summary.json，build 93f6013-efb9df7432ad。自有容器和卷已清理。当前继续第三步中央全量备份/恢复与格式回退保护，尚未实现这两部分，也未形成 V2-20 PASS 或检查点。
 
 - V2-20 最终 PASS，回执 receipts/V2-20.md，证据 evidence/V2-20/。真实 TLS Compose、中央全量空卷恢复、旧责任失效/回执保留、真实旧新程序迁移和恢复 SIGKILL 续跑通过。最终正式分发/镜像、升级及全部相关旧协议/浏览器、Local 59 项、Go 全量、相关 race、vet 通过。恢复清除旧 session 并撤销旧项目令牌，管理员重登/重新签发。macOS arm64 与本机 linux/aarch64 实测，其他架构实机、Oracle、真实公网域名未验证。检查点为包含本记录的本地提交，下一项 V2-21 PENDING，提交后继续。
+
+## V2-21 当前实施
+
+基线 fbbf916，开工工作区干净。V2-20 已完成最终验收、回执及独立本地检查点。当前唯一 ACTIVE 为 V2-21，先核对旧迁移/运行态和 Remote 绑定的可复用边界，再逐项完成显式 scan/plan/import/verify/cutover。仅操作合成 fixture，V2-22—23 PENDING。
+
+- V2-21 已接只读 Local scan/plan、稳定来源映射、六张运行表的旧版本兼容冻结触发器和可续跑私有导出/恢复备份；中央 stage/verify/commit 复用普通建任务/关系校验、portable 幂等和附件上传。历史验收留在 History/独立快照，当前候选/责任/批准清空。独立复核发现的工作区图片、输入/交付引用遗漏和已保存对象恢复问题已红绿修复；第二次复核发现历史终态父树及 verified 证据清理问题，也已补红绿测试修正。当前仅定向测试通过，原地切换 CLI 已接但未正式验收，回滚、统一看板历史细节与全链路/全量回归尚待完成。本项仍 ACTIVE，V2-22—23 PENDING。
+
+- V2-21 最新开发分发已由外部正式 CLI、真实 HTTP 和浏览器通过双 clone 冲突/重复图片/未知日期、旧 CLI 写拒绝、原地切换、中心新增结果回滚拒绝、另一来源独立回滚及两处实际 SIGKILL 续跑。未创建/未激活批次可退出，迟到 stage 受终止标记拒绝。已红绿修复来源 ID 两端不一致、冻结前确定性载荷限制、哈希计划锁遗漏与 metadata 冻结漏写，并补原上传取消和冻结分块前拒绝。现场 /private/tmp/ael-v221-development-5/summary.json。当前冻结 0.1.21 进入正式打包及相关全量回归，本项仍 ACTIVE，V2-22—23 PENDING。
+
+- V2-21 正式回归已通过迁移/浏览器和 TLS Compose，旧存储中断回归捕获新建策略文件 O_EXCL 后写入的空文件窗口，已改完整阶段文件同步后独占发布，并补中断别名恢复及既有空/改写策略拒绝测试。原强度的迁移/恢复中断复验通过。原失败保留，另已从升级前备份实际恢复并核对 120 项目及导出 hash。当前正在带完整 release 资产的最终相同快照全量回归，尚无 V2-21 PASS/检查点，后续项仍 PENDING。
+
+- V2-21 最终 PASS，回执 receipts/V2-21.md，证据 evidence/V2-21/。0.1.21 最终正式分发与真实 HTTP/浏览器、源/目标中断和回滚、TLS Compose、中央存储/发行/升级及全部相关旧协议、Local 59 项、Go 全量、相关 race、vet 通过。策略初始化中断缺陷已修复，原失败和升级前备份恢复 120 项目证据保留。检查点为包含本记录的独立本地提交。下一项 V2-22 PENDING，提交后继续。

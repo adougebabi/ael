@@ -216,7 +216,7 @@ func (h *standaloneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			standaloneFail(w, 503, "SERVER_MAINTENANCE")
 			return
 		}
-		standaloneReply(w, http.StatusOK, map[string]any{"maintenance": state.publicNotice(), "mode": "server", "protocol": 1, "skill_protocol": 1, "cli_output_protocol": 1, "version": h.version, "build": h.build, "capabilities": []string{"login", "projects", "project_roles", "revocable_tokens", "remote_tasks", "remote_plans", "operation_receipts", "artifacts", "portable_candidates", "portable_contexts", "remote_runners", "findings"}})
+		standaloneReply(w, http.StatusOK, map[string]any{"maintenance": state.publicNotice(), "mode": "server", "protocol": 1, "skill_protocol": 1, "cli_output_protocol": 1, "version": h.version, "build": h.build, "capabilities": []string{"login", "projects", "project_roles", "revocable_tokens", "remote_tasks", "remote_plans", "operation_receipts", "artifacts", "portable_candidates", "portable_contexts", "remote_runners", "findings", "authority_imports"}})
 		return
 	}
 	if !strings.HasPrefix(r.URL.Path, "/api/") {
@@ -390,6 +390,10 @@ func (h *standaloneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.HasPrefix(r.URL.Path, "/api/v1/projects/") {
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v1/projects/"), "/")
+		if len(parts) >= 2 && parts[1] == "imports" {
+			h.remoteAuthorityImports(w, r, p, parts[0], parts[2:])
+			return
+		}
 		if len(parts) == 2 && parts[1] == "reviews" {
 			h.remoteReview(w, r, p, parts[0])
 			return

@@ -1,0 +1,5 @@
+--- FAIL: TestAuthorityImportArtifactFenceHasConflictResponse (0.00s)
+    authority_import_test.go:427: import authority rejection was hidden as storage failure 500 {"code":"ARTIFACT_STORAGE_ERROR","error":"ARTIFACT_STORAGE_ERROR"}
+FAIL
+FAIL	ael/internal/server	0.762s
+FAIL

@@ -611,8 +611,8 @@ func portableDigestID(id string) bool {
 }
 
 func decodePortable(r *http.Request, target any, p *portableStore) error {
-	raw, err := io.ReadAll(io.LimitReader(r.Body, (2<<20)+1))
-	if err != nil || len(raw) > 2<<20 {
+	raw, err := io.ReadAll(io.LimitReader(r.Body, core.RemoteJSONRequestLimit+1))
+	if err != nil || len(raw) > core.RemoteJSONRequestLimit {
 		return errors.New("REMOTE_REQUEST_INVALID")
 	}
 	r.Body = io.NopCloser(bytes.NewReader(raw))

@@ -31,6 +31,7 @@ import ScopeSummary from "../components/ScopeSummary.vue";
 import CopyButton from "../components/CopyButton.vue";
 import EpicOverview from "../components/EpicOverview.vue";
 import FindingPanel from "../components/FindingPanel.vue";
+import ImportedHistory from "../components/ImportedHistory.vue";
 import { pendingReviewForTask, preservePriorWork } from "../reviewDraft";
 const props = defineProps<{ id: string }>();
 const responsibilityNames: Record<string,string> = { active:"责任有效", paused:"责任已暂停", cancelled:"任务已取消", superseded:"责任版本已失效", expired:"责任已到期", interrupted:"责任已中断", ended:"责任已结束" };
@@ -1100,6 +1101,7 @@ function checkReason(c: any) {
           </article></div>
           <p v-if="n.activity_truncated" class="secondary">这里只显示最近 100 条任务状态变化；完整记录可在下方技术记录中查看。</p>
         </section>
+        <ImportedHistory v-if="section === 'execution' && remoteProject && t.legacy?.authority_import" :key="props.id + t.legacy.authority_import" :task-id="props.id" :import-id="t.legacy.authority_import" :refresh-token="t" @artifact="openArtifact" />
         <details v-if="section === 'execution'" class="technical source-detail" :open="technicalOpen" @toggle="technicalToggle"><summary>技术记录</summary>
         <details v-if="claimed">
           <summary>高级协议结果提交</summary>

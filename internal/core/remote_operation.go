@@ -62,6 +62,10 @@ func remotePendingKey(key string) string   { return "remote-pending:" + store.Ha
 func remotePlanParentKey(id string) string { return "remote-plan-parent:" + store.Hash([]byte(id)) }
 func remotePlanTaskKey(id string) string   { return "remote-plan-task:" + store.Hash([]byte(id)) }
 
+func RemoteTaskMetadataKeys(id string) []string {
+	return []string{remotePlanTaskKey(id), remotePlanParentKey(id)}
+}
+
 func remoteVisibleTask(t Task) Task {
 	raw, _ := json.Marshal(t)
 	var result Task
