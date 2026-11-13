@@ -19,11 +19,15 @@ type RuntimeAsset struct {
 	Path     string `json:"path"`
 }
 type Bundle struct {
-	Version      string         `json:"version"`
-	Root         string         `json:"source"`
-	Assets       []RuntimeAsset `json:"platforms"`
-	Notice       string         `json:"notice"`
-	NoticeSHA256 string         `json:"notice_sha256"`
+	Client        bool           `json:"client_package,omitempty"`
+	PackageBuild  string         `json:"package_build,omitempty"`
+	PackageCommit string         `json:"package_commit,omitempty"`
+	PackageSHA256 string         `json:"package_sha256,omitempty"`
+	Version       string         `json:"version"`
+	Root          string         `json:"source"`
+	Assets        []RuntimeAsset `json:"platforms"`
+	Notice        string         `json:"notice"`
+	NoticeSHA256  string         `json:"notice_sha256"`
 }
 
 func ReadBundle(dir string) (Bundle, error) { return readBundle(dir, Version) }

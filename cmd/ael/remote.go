@@ -38,7 +38,7 @@ func remoteControl(cmd string, a args) (any, error) {
 	if cmd == "server profile add" {
 		allowed["name"], allowed["url"], allowed["token-stdin"] = true, true, true
 	} else {
-		allowed["profile"], allowed["remote-project"] = true, true
+		allowed["profile"], allowed["remote-project"], allowed["install-entry"] = true, true, true
 	}
 	for flag, value := range a.Flags {
 		if !allowed[flag] {
@@ -74,10 +74,21 @@ func remoteControl(cmd string, a args) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"mode": "remote", "online": true, "profile": binding.Profile, "project_id": binding.ProjectID}, nil
+	result := map[string]any{"mode": "remote", "online": true, "profile": binding.Profile, "project_id": binding.ProjectID}
+	if a.has("install-entry") {
+		entry, err := installRemoteEntry(project, false, false)
+		if err != nil {
+			return nil, core.Error("REMOTE_ENTRY_SETUP_PENDING", "project binding saved; complete the entry update after resolving "+err.Error())
+		}
+		result["entry"] = entry
+	}
+	return result, nil
 }
 
 func remoteCommand(cmd string, a args, binding remote.Binding) (any, error) {
+	if err := remote.CheckClientProtocols(binding); err != nil {
+		return nil, err
+	}
 	flags := map[string][]string{
 		"finding decide":     {"file", "finding", "expected-revision", "operation-id", "idempotency-key"},
 		"finding repair":     {"file", "finding", "expected-revision", "operation-id", "idempotency-key"},

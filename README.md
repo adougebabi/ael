@@ -4,11 +4,11 @@
 
 本轮通用协议实现与实测边界以 [工作流程验收](docs/workflow-acceptance-report.md) 为准，历史实现见 [原验收报告](docs/acceptance-report.md)。原始需求完整保留在 `AEL-V1-local-implementation-prompt.md`。工具分发与项目初始化已在本机项目使用；迁移器的通用验收使用完整夹具。未执行真实生产发布。
 
-## 项目内直接使用
+## 项目内直接使用（Local）
 
 0.1.8 已修正同版本分发内容冲突并完成本机升级与授权看板重启，核查见 [updating.md](docs/updating.md)。完整页面验收记录仍对应已验证的 0.1.7 构建。
 
-当前源码版本为 0.1.18；构建与隔离验收不代表已升级任何真实项目或重启实际服务。不同任务可在同一工作区并行领取；任务自身的租约和结果校验仍有效。工作台保留五个权威分组，默认展示当前工作，每组独立分页；任务完整详情分为概览、检查与验收、执行过程、规范与决策，技术记录在执行过程中按需展开。列表搜索、分页、浏览器往返与滚动位置随导航保留。
+当前源码版本为 0.1.19；构建与隔离验收不代表已升级任何真实项目或重启实际服务。不同任务可在同一工作区并行领取；任务自身的租约和结果校验仍有效。工作台保留五个权威分组，默认展示当前工作，每组独立分页；任务完整详情分为概览、检查与验收、执行过程、规范与决策，技术记录在执行过程中按需展开。列表搜索、分页、浏览器往返与滚动位置随导航保留。
 
 “规范与决策”默认查看现行规范，决策与历史资料分别浏览；分页列表不传输全文，正文按需使用本地 Markdown 阅读器打开。项目演进来自真实任务结果及明确的规范/决策记录，资料观察与进程事件在项目设置的运行诊断中保留。资料可读取、迁移已应用、工作流已激活与执行器能力分别表达。详情地址使用 `#/tasks/<id>`、`#/knowledge/<id>`、`#/evolution/<id>`，适用于内嵌离线页面。
 
@@ -35,7 +35,7 @@
 ./scripts/package.sh
 ```
 
-产物包括四个运行时、`ael-toolchain.lock`、许可证与`ael-0.1.7-unix.tar.gz`。使用适合初始化机器的二进制，例如macOS ARM64：
+产物包括四个运行时、`ael-toolchain.lock`、许可证与对应版本的 Unix 压缩包。使用适合初始化机器的二进制，例如macOS ARM64：
 
 ```sh
 ./dist/ael-darwin-arm64 init --project /path/to/project --bundle-dir ./dist
@@ -51,7 +51,28 @@
 
 安装器同时保留版本化分发资产，后续`ael init --project PATH`可自动发现。项目自带二进制也可`./ael init --project ANOTHER_PATH`，不需要全局安装。本机工具用 `ael upgrade` 升级；项目内工具用 `ael update` 更新当前目录，或 `ael update --project PATH` 指定其他项目。用户修改的启动器/受管资产冲突会拒绝覆盖。工具升级、项目更新与迁移/激活保持独立。卸载全局可执行文件不影响已初始化项目内的工具或运行资料。
 
-## 本机升级与项目更新（0.1.5）
+## Remote 轻量接入与升级（0.1.19）
+
+机器级 CLI 可以供多个兼容 Remote 项目共用。独立单平台包、签名来源配置和当前平台构建见 [发行交付](docs/distribution.md)。升级支持本地客户端压缩包、精确版本、只读检查及预览。
+
+```sh
+ael version --check --project /path/to/remote-project
+ael upgrade --source /path/to/trusted-source.json --prefix /path/to/install --check
+ael upgrade --source /path/to/trusted-source.json --version 0.1.19 --prefix /path/to/install --dry-run
+ael upgrade --source /path/to/trusted-source.json --version 0.1.19 --prefix /path/to/install
+```
+
+新安装或旧接口首次引导可直接运行新分发中的 `ael upgrade --from /path/to/client.tar.gz --prefix /path/to/install`。本地包校验报告身份未验证，显式线上来源先核对发行签名及资产 hash。当前没有默认线上发行 URL。
+
+```sh
+ael project connect --profile NAME --remote-project ID --project /path/to/project --install-entry
+ael update --project /path/to/already-connected-project --dry-run
+ael update --project /path/to/already-connected-project
+```
+
+轻入口使用机器级 CLI，项目只保存绑定、协议要求、受管入口和 Skill。兼容机器升级保留项目文件和活动会话已取得的规则。`version --check` 分别报告当前 CLI、项目入口和 Server 的实际版本/协议。旧离线入口在已连接 Remote 的工程中用 `update --migrate-entry` 显式迁移，离线二进制和锁保留。完整恢复规则见 [工具更新](docs/updating.md)。
+
+## 本机升级与 Local 项目更新（0.1.5 兼容入口）
 
 ```sh
 # 首次引导：旧版默认 JSON 无法探测默认文本的新发行包，从新分发运行一次
@@ -68,11 +89,11 @@ ael update
 ael update --project /path/to/project
 ```
 
-`upgrade` 只更新本机安装及版本化分发缓存；`update` 默认使用该已保存分发包，保留项目 ID、模式、自定义配置、业务源码与任务定义/历史。当前目录无 `.ael/project.yaml` 会准确报未接入，不自动 init，也不会改为升级本机。旧刷新命令已移除，不保留别名。
+`upgrade` 只更新本机安装及版本化分发缓存；`update` 默认使用该已保存分发包，保留项目 ID、模式、自定义配置、业务源码与任务定义/历史。Local 目录无 `.ael/project.yaml` 会准确报未接入。Remote 项目按绑定更新轻入口，首次初始化保持显式。旧刷新命令已移除，不保留别名。
 
 两者均支持 `--dry-run`。初次或更换来源可用 `--from /path/to/unpacked-distribution`（`--bundle-dir` 仍为来源参数兼容写法）；`--prefix DIR` 或 `AEL_INSTALL_PREFIX` 可选择自定义本机安装。默认安装前缀从当前受管可执行文件/PATH 推导，无法推导时为 `~/.local`。设置过 `AEL_DATA_DIR` 的项目须沿用原值，预览和结果会报告实际数据路径。
 
-目前来源是本地完整分发目录或 `AEL_BUNDLE_DIR`，没有虚构的在线发行接口。首次从本仓库 dist 安装会记住该目录；本机已安装支持输出协议 1 的客户端后，可用 `ael upgrade`，再对项目执行 `ael update`。默认 JSON 的旧客户端无法探测默认文本的新发行包，必须先直接运行新分发二进制 `upgrade --from DIR`；项目更新也应使用已升级的本机二进制或新分发二进制，而非尚未更新的旧项目入口。新版探测与委派会兼容旧版的严格参数检查，避免混用二进制和 Skill。
+Local 完整分发来源为本地目录或 `AEL_BUNDLE_DIR`，显式可信线上来源按上方 Remote 升级入口处理。首次从本仓库 dist 安装会记住该目录；本机已安装支持输出协议 1 的客户端后，可用 `ael upgrade`，再对项目执行 `ael update`。默认 JSON 的旧客户端无法探测默认文本的新发行包，必须先直接运行新分发二进制 `upgrade --from DIR`；项目更新也应使用已升级的本机二进制或新分发二进制，而非尚未更新的旧项目入口。新版探测与委派会兼容旧版的严格参数检查，避免混用二进制和 Skill。
 
 预览执行完整受管资产冲突检查，不写项目/运行库。正式项目更新拒绝运行中、未核实停止的 Attempt、工作区 fence 和待修复文件意图，生成项目外资产备份；新内核也拒绝在工具更新锁期间领取写单元。本机升级保留旧可执行文件及安装元数据、校验分发、原子替换，并保存中断恢复意图。旧服务不会自动被停止或热替换，更新后要重启对应看板/运行器。回退与限制见 [updating.md](docs/updating.md)，实测见 [update-acceptance-report.md](docs/update-acceptance-report.md)。
 

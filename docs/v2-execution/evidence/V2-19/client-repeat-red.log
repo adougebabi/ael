@@ -1,0 +1,52 @@
+=== RUN   TestClientUpgradeReusesTransactionAndPersistentCache
+--- PASS: TestClientUpgradeReusesTransactionAndPersistentCache (0.34s)
+=== RUN   TestUpgradeInterruptedReplacementRecovery
+--- PASS: TestUpgradeInterruptedReplacementRecovery (0.34s)
+=== RUN   TestUpgradePreviewInstallSourceAndIdempotence
+--- PASS: TestUpgradePreviewInstallSourceAndIdempotence (0.48s)
+=== RUN   TestUpgradeLegacyBackupAndUserProtection
+--- PASS: TestUpgradeLegacyBackupAndUserProtection (0.36s)
+=== RUN   TestUpgradeImmutableVersionAndDowngrade
+--- PASS: TestUpgradeImmutableVersionAndDowngrade (0.83s)
+=== RUN   TestMachineUpgradeRecoveryRequiresStoppedExactOwner
+    upgrade_recovery_test.go:50: stopped updater did not recover {Operation:upgrade Status:updated Target:/private/var/folders/gv/hlfcpzxj63b3813yxlrkqv6r0000gn/T/TestMachineUpgradeRecoveryRequiresStoppedExactOwner2885206008/001/bin/ael Source:/var/folders/gv/hlfcpzxj63b3813yxlrkqv6r0000gn/T/TestMachineUpgradeRecoveryRequiresStoppedExactOwner2885206008/002 Previous:{Version:0.1.19 Build:client-fixture OutputProtocol:1 APIProtocol:1 SkillProtocol:1} Available:{Version:0.1.19 Build:client-fixture OutputProtocol:1 APIProtocol:1 SkillProtocol:1} DataDir: BackupDir:/private/var/folders/gv/hlfcpzxj63b3813yxlrkqv6r0000gn/T/TestMachineUpgradeRecoveryRequiresStoppedExactOwner2885206008/001/share/ael/backups/a2eb837ace654e3f307c35800b65a30de21ba55869225ccf5f82bb33916da517-592d8137f986 Files:[bin/ael share/ael/install.sha256 share/ael/installation.json share/ael/distribution/0.1.19] RestartRequired:false Warnings:[machine CLI updated for subsequent invocations; compatible Remote projects keep their Skill and protocol active Agent sessions keep their acquired instructions; no Agent is restarted Local project updates require an explicit full offline distribution] Validation:<nil>} <nil>
+--- FAIL: TestMachineUpgradeRecoveryRequiresStoppedExactOwner (0.17s)
+=== RUN   TestMachineUpgradePermissionFailureKeepsOldExecutable
+--- PASS: TestMachineUpgradePermissionFailureKeepsOldExecutable (0.47s)
+FAIL
+FAIL	ael/internal/bootstrap	3.429s
+=== RUN   TestClientWritesNeverFallbackWhenOffline
+--- PASS: TestClientWritesNeverFallbackWhenOffline (0.01s)
+=== RUN   TestProfileRejectsMacACLOnCredentialDirectory
+--- PASS: TestProfileRejectsMacACLOnCredentialDirectory (0.00s)
+=== RUN   TestProfileRejectsMacACLOnCredentialFile
+--- PASS: TestProfileRejectsMacACLOnCredentialFile (0.01s)
+=== RUN   TestProfileAndBindingAreSeparateAndOfflineDoesNotFallback
+--- PASS: TestProfileAndBindingAreSeparateAndOfflineDoesNotFallback (0.01s)
+=== RUN   TestConnectRejectsServerWithoutRemoteTasksCapability
+--- PASS: TestConnectRejectsServerWithoutRemoteTasksCapability (0.00s)
+=== RUN   TestProfileRefusesCredentialsInsideCheckoutAndUnsafeURLs
+--- PASS: TestProfileRefusesCredentialsInsideCheckoutAndUnsafeURLs (0.00s)
+=== RUN   TestProfileRejectsCredentialFileHardLinkedIntoCheckout
+--- PASS: TestProfileRejectsCredentialFileHardLinkedIntoCheckout (0.01s)
+=== RUN   TestLegacyBindingAndSessionProtocolStayExplicit
+--- PASS: TestLegacyBindingAndSessionProtocolStayExplicit (0.00s)
+=== RUN   TestServerMetadataCompatibility
+--- PASS: TestServerMetadataCompatibility (0.00s)
+PASS
+ok  	ael/internal/remote	0.503s
+=== RUN   TestClientArchiveRejectsUnsafeEntries
+=== RUN   TestClientArchiveRejectsUnsafeEntries/../escape
+=== RUN   TestClientArchiveRejectsUnsafeEntries//absolute
+=== RUN   TestClientArchiveRejectsUnsafeEntries/directory/
+=== RUN   TestClientArchiveRejectsUnsafeEntries/ael
+--- PASS: TestClientArchiveRejectsUnsafeEntries (0.01s)
+    --- PASS: TestClientArchiveRejectsUnsafeEntries/../escape (0.00s)
+    --- PASS: TestClientArchiveRejectsUnsafeEntries//absolute (0.00s)
+    --- PASS: TestClientArchiveRejectsUnsafeEntries/directory/ (0.01s)
+    --- PASS: TestClientArchiveRejectsUnsafeEntries/ael (0.00s)
+=== RUN   TestClientPackageHashAndProtocol
+--- PASS: TestClientPackageHashAndProtocol (0.00s)
+PASS
+ok  	ael/internal/release	0.471s
+FAIL

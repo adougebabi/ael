@@ -1,0 +1,70 @@
+=== RUN   TestClientUpgradeReusesTransactionAndPersistentCache
+--- PASS: TestClientUpgradeReusesTransactionAndPersistentCache (0.48s)
+=== RUN   TestClientPackageRejectsExecutableProtocolMismatch
+=== RUN   TestClientPackageRejectsExecutableProtocolMismatch/api_protocol
+=== RUN   TestClientPackageRejectsExecutableProtocolMismatch/skill_protocol
+=== RUN   TestClientPackageRejectsExecutableProtocolMismatch/cli_output_protocol
+--- PASS: TestClientPackageRejectsExecutableProtocolMismatch (0.12s)
+    --- PASS: TestClientPackageRejectsExecutableProtocolMismatch/api_protocol (0.03s)
+    --- PASS: TestClientPackageRejectsExecutableProtocolMismatch/skill_protocol (0.05s)
+    --- PASS: TestClientPackageRejectsExecutableProtocolMismatch/cli_output_protocol (0.03s)
+=== RUN   TestRemoteEntryRecoveryAfterAGENTSWasWritten
+--- PASS: TestRemoteEntryRecoveryAfterAGENTSWasWritten (0.04s)
+=== RUN   TestRemoteEntryRecoveryPreservesLargeAGENTS
+--- PASS: TestRemoteEntryRecoveryPreservesLargeAGENTS (0.06s)
+=== RUN   TestRemoteEntryPreservesUserContentAndOfflinePayload
+--- PASS: TestRemoteEntryPreservesUserContentAndOfflinePayload (0.07s)
+=== RUN   TestUpgradeInterruptedReplacementRecovery
+--- PASS: TestUpgradeInterruptedReplacementRecovery (0.34s)
+=== RUN   TestUpgradePreviewInstallSourceAndIdempotence
+--- PASS: TestUpgradePreviewInstallSourceAndIdempotence (0.46s)
+=== RUN   TestUpgradeLegacyBackupAndUserProtection
+--- PASS: TestUpgradeLegacyBackupAndUserProtection (0.37s)
+=== RUN   TestUpgradeImmutableVersionAndDowngrade
+--- PASS: TestUpgradeImmutableVersionAndDowngrade (0.84s)
+=== RUN   TestMachineUpgradeRecoveryRequiresStoppedExactOwner
+--- PASS: TestMachineUpgradeRecoveryRequiresStoppedExactOwner (0.13s)
+=== RUN   TestMachineUpgradePermissionFailureKeepsOldExecutable
+--- PASS: TestMachineUpgradePermissionFailureKeepsOldExecutable (0.45s)
+PASS
+ok  	ael/internal/bootstrap	3.696s
+=== RUN   TestClientWritesNeverFallbackWhenOffline
+--- PASS: TestClientWritesNeverFallbackWhenOffline (0.01s)
+=== RUN   TestProfileRejectsMacACLOnCredentialDirectory
+--- PASS: TestProfileRejectsMacACLOnCredentialDirectory (0.00s)
+=== RUN   TestProfileRejectsMacACLOnCredentialFile
+--- PASS: TestProfileRejectsMacACLOnCredentialFile (0.01s)
+=== RUN   TestProfileAndBindingAreSeparateAndOfflineDoesNotFallback
+--- PASS: TestProfileAndBindingAreSeparateAndOfflineDoesNotFallback (0.01s)
+=== RUN   TestConnectRejectsServerWithoutRemoteTasksCapability
+--- PASS: TestConnectRejectsServerWithoutRemoteTasksCapability (0.01s)
+=== RUN   TestProfileRefusesCredentialsInsideCheckoutAndUnsafeURLs
+--- PASS: TestProfileRefusesCredentialsInsideCheckoutAndUnsafeURLs (0.00s)
+=== RUN   TestProfileRejectsCredentialFileHardLinkedIntoCheckout
+--- PASS: TestProfileRejectsCredentialFileHardLinkedIntoCheckout (0.01s)
+=== RUN   TestLegacyBindingAndSessionProtocolStayExplicit
+--- PASS: TestLegacyBindingAndSessionProtocolStayExplicit (0.00s)
+=== RUN   TestServerMetadataCompatibility
+--- PASS: TestServerMetadataCompatibility (0.00s)
+=== RUN   TestRemoteGETRejectsIncompatibleServerBeforeAuthoritativeRead
+--- PASS: TestRemoteGETRejectsIncompatibleServerBeforeAuthoritativeRead (0.01s)
+PASS
+ok  	ael/internal/remote	0.420s
+=== RUN   TestClientArchiveRejectsUnsafeEntries
+=== RUN   TestClientArchiveRejectsUnsafeEntries/../escape
+=== RUN   TestClientArchiveRejectsUnsafeEntries//absolute
+=== RUN   TestClientArchiveRejectsUnsafeEntries/directory/
+=== RUN   TestClientArchiveRejectsUnsafeEntries/ael
+--- PASS: TestClientArchiveRejectsUnsafeEntries (0.00s)
+    --- PASS: TestClientArchiveRejectsUnsafeEntries/../escape (0.00s)
+    --- PASS: TestClientArchiveRejectsUnsafeEntries//absolute (0.00s)
+    --- PASS: TestClientArchiveRejectsUnsafeEntries/directory/ (0.00s)
+    --- PASS: TestClientArchiveRejectsUnsafeEntries/ael (0.00s)
+=== RUN   TestClientPackageHashAndProtocol
+--- PASS: TestClientPackageHashAndProtocol (0.01s)
+PASS
+ok  	ael/internal/release	0.372s
+=== RUN   TestRemoteUpdateUsesLightEntryWithoutLocalRuntime
+--- PASS: TestRemoteUpdateUsesLightEntryWithoutLocalRuntime (0.04s)
+PASS
+ok  	ael/cmd/ael	0.367s

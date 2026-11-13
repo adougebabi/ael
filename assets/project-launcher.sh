@@ -1,6 +1,30 @@
 #!/bin/sh
 set -eu
 project_root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+if [ -e "$project_root/.ael/remote.json" ] || [ -L "$project_root/.ael/remote.json" ]; then
+ cli=${AEL_CLI:-}
+ if [ -z "$cli" ]; then
+  cli="${AEL_INSTALL_PREFIX:-$HOME/.local}/bin/ael"
+  if [ ! -x "$cli" ]; then cli=$(command -v ael || true); fi
+ fi
+ [ -n "$cli" ] && [ -x "$cli" ] && ! [ "$cli" -ef "$project_root/ael" ] || { echo 'AEL_MACHINE_CLI_REQUIRED: install AEL once or set AEL_CLI to the managed machine executable' >&2; exit 1; }
+ command_name=
+ skip_value=false
+ for argument in "$@"; do
+  if [ "$skip_value" = true ]; then skip_value=false; continue; fi
+  case "$argument" in
+   --*=*) continue ;;
+   --project|--from|--bundle-dir|--prefix|--source|--version|--channel|--config-dir) skip_value=true; continue ;;
+   --*) continue ;;
+   *) command_name=$argument; break ;;
+  esac
+ done
+ if [ "$command_name" = upgrade ]; then exec "$cli" "$@"; fi
+ for argument in "$@"; do
+  case "$argument" in --project|--project=*) exec "$cli" "$@" ;; esac
+ done
+ exec "$cli" "$@" --project "$project_root"
+fi
 lock="$project_root/.ael/toolchain.lock"
 [ -f "$lock" ] || { echo 'AEL_TOOLCHAIN_MISSING: .ael/toolchain.lock is missing' >&2; exit 1; }
 case "$(uname -s)" in Darwin) target_os=darwin ;; Linux) target_os=linux ;; *) echo 'AEL_UNSUPPORTED_PLATFORM: this bundle supports macOS and Linux' >&2; exit 1 ;; esac

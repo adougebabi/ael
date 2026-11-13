@@ -48,7 +48,10 @@ func TestOfflineReadIsExplicitlyMarkedAsStaleCache(t *testing.T) {
 		t.Fatal(err)
 	}
 	binding := Binding{Schema: 1, Profile: "central", ProjectID: "shared"}
-	online := &http.Client{Transport: transportFunc(func(*http.Request) (*http.Response, error) {
+	online := &http.Client{Transport: transportFunc(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Path == "/api/v1/meta" {
+			return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"mode":"server","protocol":1,"capabilities":["remote_tasks"]}`))}, nil
+		}
 		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"items":[{"task":{"status":"completed"}}]}`))}, nil
 	})}
 	first, err := Call(config, project, binding, http.MethodGet, "/tasks", nil, online)

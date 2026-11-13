@@ -1,6 +1,7 @@
 package main
 
 import (
+	"ael/internal/bootstrap"
 	"ael/internal/core"
 	"ael/internal/server"
 	"io"
@@ -57,7 +58,7 @@ func standaloneCommand(cmd string, a args) (any, error) {
 	if err != nil || !bootstrapped {
 		return nil, core.Error("SERVER_NOT_BOOTSTRAPPED", "bootstrap an administrator first")
 	}
-	options := server.StandaloneHTTPOptions{Origin: a.get("origin", os.Getenv("AEL_SERVER_ORIGIN")), TrustedProxies: csvValues(a.get("trusted-proxy", ""))}
+	options := server.StandaloneHTTPOptions{Version: bootstrap.Version, Build: build, Origin: a.get("origin", os.Getenv("AEL_SERVER_ORIGIN")), TrustedProxies: csvValues(a.get("trusted-proxy", ""))}
 	err = server.ListenStandalone(s, a.get("addr", "127.0.0.1:7332"), options, func(url string) {
 		_ = writeOutput(os.Stdout, map[string]string{"url": url}, a.has("json"), a.has("verbose"))
 	})

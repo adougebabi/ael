@@ -1,0 +1,22 @@
+[
+  {
+    "path": "dist/ael-darwin-arm64",
+    "sha256": "7982f8cd27acfc1b5ed2aa45169def7af2de6b56973e7abc723fcea87b456031",
+    "size": 14240562
+  },
+  {
+    "path": "dist/ael-darwin-amd64",
+    "sha256": "b4e8921cf99355685f3e581bd7e8ecef474062b1d0983dc876b151a96a456fa0",
+    "size": 15327072
+  },
+  {
+    "path": "dist/ael-linux-arm64",
+    "sha256": "c8680fb6bee41c384f1ca5033ba6fe57beb136ea324b2b27e70a5e5e89bb6f41",
+    "size": 13959330
+  },
+  {
+    "path": "dist/ael-linux-amd64",
+    "sha256": "f99e880c3c386c36954330a3c0d03f3521bb4a255aa49ea176ef27859105f353",
+    "size": 15052962
+  }
+]

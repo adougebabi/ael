@@ -436,6 +436,10 @@ func TestRunnerWorkspaceContextUsesExecutionCopyAndOriginalProfile(t *testing.T)
 	}
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/api/v1/meta" {
+			_ = json.NewEncoder(w).Encode(map[string]any{"mode": "server", "protocol": 1, "capabilities": []string{"portable_contexts"}})
+			return
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"repository": "fixture-repo", "candidate_id": candidate.ID, "validity": "current", "inputs_known": true, "sources": []any{}})
 	})
 	_, config, project, binding := runnerRecoveryFixture(t, handler)

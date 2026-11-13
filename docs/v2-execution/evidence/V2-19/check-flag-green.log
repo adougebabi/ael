@@ -1,0 +1,8 @@
+=== RUN   TestMaintenanceCheckFlagPreservesCheckIdentifiers
+--- PASS: TestMaintenanceCheckFlagPreservesCheckIdentifiers (0.00s)
+=== RUN   TestReleaseCheckBypassesRemoteBindingAndRuntime
+--- PASS: TestReleaseCheckBypassesRemoteBindingAndRuntime (0.00s)
+=== RUN   TestRemoteUpdateUsesLightEntryWithoutLocalRuntime
+--- PASS: TestRemoteUpdateUsesLightEntryWithoutLocalRuntime (0.04s)
+PASS
+ok  	ael/cmd/ael	0.393s

@@ -252,6 +252,10 @@ func TestRunnerClaimRecoveryUsesControlLayoutAndAcceptsLegacyClaims(t *testing.T
 func TestRunnerLegacyPendingRecoveryAndMismatch(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/api/v1/meta" {
+			_ = json.NewEncoder(w).Encode(map[string]any{"mode": "server", "protocol": 1, "capabilities": []string{"remote_runners"}})
+			return
+		}
 		if strings.HasSuffix(r.URL.Path, "/operations/submit-fixture") {
 			_, _ = fmt.Fprint(w, `{"found":true,"operation_id":"submit-fixture"}`)
 			return

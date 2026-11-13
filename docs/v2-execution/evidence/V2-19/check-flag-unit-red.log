@@ -1,0 +1,6 @@
+=== RUN   TestMaintenanceCheckFlagPreservesCheckIdentifiers
+    check_flag_test.go:22: check flag changed command semantics: [context record-check --check unit] -> {Words:[context record-check unit] Flags:map[check:true]}
+--- FAIL: TestMaintenanceCheckFlagPreservesCheckIdentifiers (0.00s)
+FAIL
+FAIL	ael/cmd/ael	0.468s
+FAIL

@@ -15,7 +15,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strings"
 	"time"
 )
@@ -28,9 +27,11 @@ type Profile struct {
 }
 
 type Binding struct {
-	Schema    int    `json:"schema"`
-	Profile   string `json:"profile"`
-	ProjectID string `json:"project_id"`
+	APIProtocol   int    `json:"api_protocol,omitempty"`
+	SkillProtocol int    `json:"skill_protocol,omitempty"`
+	Schema        int    `json:"schema"`
+	Profile       string `json:"profile"`
+	ProjectID     string `json:"project_id"`
 }
 
 func cleanURL(raw string) (string, error) {
@@ -213,27 +214,42 @@ func LoadProfile(config, project, name string) (Profile, error) {
 }
 
 func ReadBinding(project string) (Binding, bool, error) {
+	binding, exists, _, err := ReadBindingSnapshot(project)
+	return binding, exists, err
+}
+
+// ReadBindingSnapshot binds project setup to the exact validated input bytes.
+func ReadBindingSnapshot(project string) (Binding, bool, string, error) {
 	var b Binding
 	root, err := filepath.Abs(project)
 	if err != nil {
-		return b, false, errors.New("REMOTE_PROJECT_UNAVAILABLE")
+		return b, false, "", errors.New("REMOTE_PROJECT_UNAVAILABLE")
 	}
 	root, err = filepath.EvalSymlinks(root)
 	if err != nil {
-		return b, false, errors.New("REMOTE_PROJECT_UNAVAILABLE")
+		return b, false, "", errors.New("REMOTE_PROJECT_UNAVAILABLE")
 	}
 	path, err := store.SafePath(root, ".ael/remote.json")
 	if err != nil {
-		return b, true, errors.New("REMOTE_BINDING_INVALID")
+		return b, true, "", errors.New("REMOTE_BINDING_INVALID")
 	}
 	raw, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
-		return b, false, nil
+		return b, false, "", nil
 	}
 	if err != nil || json.Unmarshal(raw, &b) != nil || b.Schema != 1 || !identifier.MatchString(b.Profile) || !identifier.MatchString(b.ProjectID) {
-		return Binding{}, true, errors.New("REMOTE_BINDING_INVALID: local fallback is disabled")
+		return Binding{}, true, "", errors.New("REMOTE_BINDING_INVALID: local fallback is disabled")
 	}
-	return b, true, nil
+	if b.APIProtocol == 0 {
+		b.APIProtocol = APIProtocol
+	}
+	if b.SkillProtocol == 0 {
+		b.SkillProtocol = SkillProtocol
+	}
+	if err = CheckClientProtocols(b); err != nil {
+		return b, true, "", err
+	}
+	return b, true, store.Hash(raw), nil
 }
 
 func request(client *http.Client, p Profile, path string, auth bool) (*http.Response, error) {
@@ -254,23 +270,6 @@ func request(client *http.Client, p Profile, path string, auth bool) (*http.Resp
 	return response, nil
 }
 
-func checkCapability(client *http.Client, profile Profile, capability string) error {
-	response, err := request(client, profile, "/api/v1/meta", false)
-	if err != nil {
-		return err
-	}
-	defer response.Body.Close()
-	var meta struct {
-		Mode         string   `json:"mode"`
-		Protocol     int      `json:"protocol"`
-		Capabilities []string `json:"capabilities"`
-	}
-	if response.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&meta) != nil || meta.Mode != "server" || meta.Protocol != 1 || !slices.Contains(meta.Capabilities, capability) {
-		return errors.New("REMOTE_PROTOCOL_UNSUPPORTED: update the client or server")
-	}
-	return nil
-}
-
 func Connect(config, project, name, projectID string, client *http.Client) (Binding, error) {
 	if !identifier.MatchString(name) || !identifier.MatchString(projectID) {
 		return Binding{}, errors.New("REMOTE_BINDING_INVALID")
@@ -279,7 +278,10 @@ func Connect(config, project, name, projectID string, client *http.Client) (Bind
 	if err != nil {
 		return Binding{}, err
 	}
-	wanted := Binding{Schema: 1, Profile: name, ProjectID: projectID}
+	wanted := Binding{Schema: 1, Profile: name, ProjectID: projectID, APIProtocol: APIProtocol, SkillProtocol: SkillProtocol}
+	if err = CheckClientProtocols(wanted); err != nil {
+		return Binding{}, err
+	}
 	existing, exists, err := ReadBinding(project)
 	if err != nil {
 		return Binding{}, err

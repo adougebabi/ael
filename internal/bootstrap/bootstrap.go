@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-const Version = "0.1.18"
+const Version = "0.1.19"
 
 const DefaultPolicy = "{\"schema\":1,\"max_retries\":3,\"max_seconds\":0,\"lease_seconds\":1800,\"checks\":[],\"critical_knowledge\":[],\"delivery_requires_confirmation\":true}\n"
 
@@ -91,7 +91,11 @@ const begin = "<!-- AEL:BEGIN -->"
 const end = "<!-- AEL:END -->"
 
 func block(mode string) string {
-	return begin + "\nAEL project (" + mode + "). Before any AEL command, first decide whether the user's goal is a project iteration, bug fix, or other engineering change to the project itself.\nFor discussion, lookup, analysis, review, or review-only materials, even when saved to a file, work directly and communicate with the user; do not run AEL commands or create tasks or enter implementation/acceptance workflows for that request. Read relevant project files normally as needed.\nFor an authorized engineering change, use $ael-work and resume a relevant existing task first. From the project root run `./ael doctor` and `./ael task list`; load exact task rules with `./ael context --task <id>`. If the request later becomes an authorized engineering change, enter $ael-work before making that change.\nIf the user explicitly requests an AEL command or an AEL task, follow that request. Use $ael-migrate-legacy only for reviewed legacy proposals.\nDo not treat historical imports as current constraints or verified checks.\n" + end
+	text := begin + "\nAEL project (" + mode + "). Before any AEL command, first decide whether the user's goal is a project iteration, bug fix, or other engineering change to the project itself.\nFor discussion, lookup, analysis, review, or review-only materials, even when saved to a file, work directly and communicate with the user; do not run AEL commands or create tasks or enter implementation/acceptance workflows for that request. Read relevant project files normally as needed.\nFor an authorized engineering change, use $ael-work and resume a relevant existing task first. From the project root run `./ael doctor` and `./ael task list`; load exact task rules with `./ael context --task <id>`. If the request later becomes an authorized engineering change, enter $ael-work before making that change.\nIf the user explicitly requests an AEL command or an AEL task, follow that request. Use $ael-migrate-legacy only for reviewed legacy proposals.\nDo not treat historical imports as current constraints or verified checks.\n" + end
+	if mode == "remote" {
+		text = strings.ReplaceAll(text, "./ael context --task <id>", "./ael context show --task <id>")
+	}
+	return text
 }
 func Init(root string, dry, updating bool) (Report, error) {
 	root, e := Canonical(root)
@@ -176,7 +180,7 @@ func Init(root string, dry, updating bool) (Report, error) {
 			}
 		}
 	}
-	for _, file := range []string{"workflow.md", "commands.md"} {
+	for _, file := range []string{"workflow.md", "commands.md", "remote-agent.md"} {
 		b, e := assets.Files.ReadFile("skills/ael-work/references/" + file)
 		if e != nil {
 			return r, e

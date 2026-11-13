@@ -2,11 +2,13 @@ package bootstrap
 
 import (
 	"ael/internal/core"
+	"ael/internal/release"
 	"ael/internal/store"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"golang.org/x/mod/semver"
 	"io"
 	"os"
 	"os/exec"
@@ -19,46 +21,58 @@ import (
 )
 
 type UpdateOptions struct {
-	From       string
-	Prefix     string
-	DryRun     bool
-	AckStopped bool
+	From           string
+	Prefix         string
+	DryRun         bool
+	AckStopped     bool
+	ExpectedBuild  string
+	ExpectedCommit string
+	TargetVersion  string
+	Check          bool
 }
 type BinaryVersion struct {
 	Version        string `json:"version"`
 	Build          string `json:"build"`
 	OutputProtocol int    `json:"cli_output_protocol,omitempty"`
+	APIProtocol    int    `json:"api_protocol,omitempty"`
+	SkillProtocol  int    `json:"skill_protocol,omitempty"`
 }
 type UpdateReport struct {
-	Operation       string            `json:"operation"`
-	Status          string            `json:"status"`
-	Target          string            `json:"target"`
-	Source          string            `json:"source"`
-	Previous        BinaryVersion     `json:"previous"`
-	Available       BinaryVersion     `json:"available"`
-	DataDir         string            `json:"data_dir,omitempty"`
-	BackupDir       string            `json:"backup_dir,omitempty"`
-	Files           []string          `json:"files"`
-	RestartRequired bool              `json:"restart_required"`
-	Warnings        []string          `json:"warnings"`
-	Validation      *UpdateValidation `json:"validation,omitempty"`
+	ContentIntegrity  string            `json:"content_integrity,omitempty"`
+	PublisherIdentity string            `json:"publisher_identity,omitempty"`
+	Operation         string            `json:"operation"`
+	Status            string            `json:"status"`
+	Target            string            `json:"target"`
+	Source            string            `json:"source"`
+	Previous          BinaryVersion     `json:"previous"`
+	Available         BinaryVersion     `json:"available"`
+	DataDir           string            `json:"data_dir,omitempty"`
+	BackupDir         string            `json:"backup_dir,omitempty"`
+	Files             []string          `json:"files"`
+	RestartRequired   bool              `json:"restart_required"`
+	Warnings          []string          `json:"warnings"`
+	Validation        *UpdateValidation `json:"validation,omitempty"`
 }
 type UpdateValidation struct {
 	SourceSHA256 string            `json:"source_sha256"`
 	Assets       map[string]string `json:"assets"`
 }
 type installation struct {
-	Version string    `json:"version"`
-	Build   string    `json:"build"`
-	SHA256  string    `json:"sha256"`
-	Source  string    `json:"source"`
-	Bundle  string    `json:"bundle"`
-	Updated time.Time `json:"updated"`
+	ClientBundle string    `json:"client_bundle,omitempty"`
+	Version      string    `json:"version"`
+	Build        string    `json:"build"`
+	SHA256       string    `json:"sha256"`
+	Source       string    `json:"source"`
+	Bundle       string    `json:"bundle"`
+	Updated      time.Time `json:"updated"`
 }
 
 var releaseVersion = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 
 func compareVersions(a, b string) (int, error) {
+	if release.ValidVersion(a) && release.ValidVersion(b) {
+		return semver.Compare("v"+a, "v"+b), nil
+	}
 	if !releaseVersion.MatchString(a) || !releaseVersion.MatchString(b) {
 		return 0, core.Error("INVALID_RELEASE_VERSION", a+" / "+b)
 	}
@@ -177,7 +191,7 @@ func updateBundle(dir string) (Bundle, error) {
 }
 
 func validateBundleSnapshot(b Bundle) error {
-	current, e := updateBundle(b.Root)
+	current, e := rereadBundle(b)
 	if e != nil {
 		return e
 	}
@@ -188,9 +202,15 @@ func validateBundleSnapshot(b Bundle) error {
 }
 func sourceBundle(o UpdateOptions, self bool) (Bundle, error) {
 	if o.From != "" {
+		if self {
+			return machineBundle(o.From)
+		}
 		return updateBundle(o.From)
 	}
 	if from := os.Getenv("AEL_BUNDLE_DIR"); from != "" {
+		if self {
+			return machineBundle(from)
+		}
 		return updateBundle(from)
 	}
 	prefix, e := prefixPath(o.Prefix)
@@ -211,6 +231,9 @@ func sourceBundle(o UpdateOptions, self bool) (Bundle, error) {
 		if source == "" {
 			return Bundle{}, core.Error("UPDATE_SOURCE_REQUIRED", "registered source is empty; supply --from DIR")
 		}
+		if self {
+			return machineBundle(source)
+		}
 		return updateBundle(source)
 	}
 	if !os.IsNotExist(e) {
@@ -227,6 +250,11 @@ func sourceBundle(o UpdateOptions, self bool) (Bundle, error) {
 	}
 	dir := filepath.Dir(exe)
 	for _, candidate := range []string{dir, filepath.Join(dir, "..", "dist")} {
+		if self {
+			if _, err := os.Lstat(filepath.Join(candidate, "package.json")); err == nil {
+				return machineBundle(candidate)
+			}
+		}
 		if _, e := os.Stat(filepath.Join(candidate, "ael-toolchain.lock")); e == nil {
 			return updateBundle(candidate)
 		} else if !os.IsNotExist(e) {
@@ -234,25 +262,37 @@ func sourceBundle(o UpdateOptions, self bool) (Bundle, error) {
 		}
 	}
 	// Legacy managed installs already carry versioned distributions, but no registry.
+	latest, e := latestLegacyDistribution(prefix)
+	if e != nil {
+		return Bundle{}, e
+	}
+	if latest != "" {
+		return updateBundle(latest)
+	}
+	return Bundle{}, core.Error("UPDATE_SOURCE_REQUIRED", "supply an explicit distribution; Local project updates require a complete offline bundle")
+}
+
+func latestLegacyDistribution(prefix string) (string, error) {
 	entries, e := os.ReadDir(filepath.Join(prefix, "share/ael/distribution"))
 	if e != nil && !os.IsNotExist(e) {
-		return Bundle{}, e
+		return "", e
 	}
 	latest := ""
 	for _, entry := range entries {
 		if entry.IsDir() && releaseVersion.MatchString(entry.Name()) {
 			if latest == "" {
 				latest = entry.Name()
-			} else if cmp, e := compareVersions(entry.Name(), latest); e == nil && cmp > 0 {
+			} else if comparison, err := compareVersions(entry.Name(), latest); err == nil && comparison > 0 {
 				latest = entry.Name()
 			}
 		}
 	}
-	if latest != "" {
-		return updateBundle(filepath.Join(prefix, "share/ael/distribution", latest))
+	if latest == "" {
+		return "", nil
 	}
-	return Bundle{}, core.Error("UPDATE_SOURCE_REQUIRED", "run upgrade --from DISTRIBUTION to register a local release, or supply update --from DISTRIBUTION; no online release endpoint is configured")
+	return store.SafePath(prefix, "share/ael/distribution/"+latest)
 }
+
 func nativeAsset(b Bundle) (RuntimeAsset, error) {
 	platform := runtime.GOOS + "-" + runtime.GOARCH
 	for _, a := range b.Assets {
@@ -280,7 +320,7 @@ func probeBinary(path string) (BinaryVersion, error) {
 		return v, core.Error("INVALID_BINARY_VERSION", path)
 	}
 	var extra any
-	if dec.Decode(&extra) != io.EOF || !releaseVersion.MatchString(v.Version) {
+	if dec.Decode(&extra) != io.EOF || (!releaseVersion.MatchString(v.Version) && !release.ValidVersion(v.Version)) {
 		return v, core.Error("INVALID_BINARY_VERSION", path)
 	}
 	return v, nil
@@ -295,6 +335,22 @@ func sourceVersion(b Bundle) (RuntimeAsset, BinaryVersion, error) {
 		return a, BinaryVersion{}, e
 	}
 	v, e := probeBinary(p)
+	if e == nil && b.Client {
+		if comparison, err := compareVersions(v.Version, "0.1.18"); err == nil && comparison <= 0 {
+			if v.APIProtocol == 0 {
+				v.APIProtocol = 1
+			}
+			if v.SkillProtocol == 0 {
+				v.SkillProtocol = 1
+			}
+		}
+		if v.APIProtocol != 1 || v.SkillProtocol != 1 || v.OutputProtocol != 1 {
+			e = core.Error("CLIENT_PROTOCOL_UNSUPPORTED", "executable protocol differs from the client package declaration")
+		}
+	}
+	if e == nil && b.Client && v.Build != b.PackageBuild {
+		e = core.Error("BUNDLE_BUILD_MISMATCH", "executable differs from client package metadata")
+	}
 	if e == nil && v.Version != b.Version {
 		e = core.Error("BUNDLE_VERSION_MISMATCH", v.Version+" != "+b.Version)
 	}

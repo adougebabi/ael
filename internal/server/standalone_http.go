@@ -1,6 +1,7 @@
 package server
 
 import (
+	"ael/internal/bootstrap"
 	"bytes"
 	"crypto/subtle"
 	"encoding/hex"
@@ -18,12 +19,16 @@ import (
 )
 
 type StandaloneHTTPOptions struct {
+	Version        string
+	Build          string
 	Origin         string
 	TrustedProxies []string
 }
 
 type standaloneHandler struct {
 	server  *Standalone
+	version string
+	build   string
 	origin  *url.URL
 	proxies []netip.Prefix
 	mu      sync.Mutex
@@ -35,7 +40,11 @@ func (s *Standalone) Handler(options StandaloneHTTPOptions) (http.Handler, error
 	if err != nil || origin.Host == "" || origin.User != nil || (origin.Scheme != "http" && origin.Scheme != "https") || origin.Path != "" || origin.RawQuery != "" || origin.Fragment != "" {
 		return nil, errors.New("INVALID_SERVER_ORIGIN")
 	}
-	h := &standaloneHandler{server: s, origin: origin, logins: map[string][]time.Time{}}
+	version := options.Version
+	if version == "" {
+		version = bootstrap.Version
+	}
+	h := &standaloneHandler{server: s, version: version, build: options.Build, origin: origin, logins: map[string][]time.Time{}}
 	for _, value := range options.TrustedProxies {
 		prefix, err := netip.ParsePrefix(value)
 		if err != nil {
@@ -198,7 +207,7 @@ func (h *standaloneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.URL.Path == "/api/v1/meta" && r.Method == http.MethodGet {
-		standaloneReply(w, http.StatusOK, map[string]any{"mode": "server", "protocol": 1, "capabilities": []string{"login", "projects", "project_roles", "revocable_tokens", "remote_tasks", "remote_plans", "operation_receipts", "artifacts", "portable_candidates", "portable_contexts", "remote_runners", "findings"}})
+		standaloneReply(w, http.StatusOK, map[string]any{"mode": "server", "protocol": 1, "skill_protocol": 1, "cli_output_protocol": 1, "version": h.version, "build": h.build, "capabilities": []string{"login", "projects", "project_roles", "revocable_tokens", "remote_tasks", "remote_plans", "operation_receipts", "artifacts", "portable_candidates", "portable_contexts", "remote_runners", "findings"}})
 		return
 	}
 	if !strings.HasPrefix(r.URL.Path, "/api/") {

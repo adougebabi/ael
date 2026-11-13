@@ -117,6 +117,10 @@ func TestRunnerWorkspaceChainRecoversAcceptedReceipt(t *testing.T) {
 	}
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/api/v1/meta" {
+			_ = json.NewEncoder(w).Encode(map[string]any{"mode": "server", "protocol": 1, "capabilities": []string{"remote_runners"}})
+			return
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"found": true, "operation_id": "submit-fixture", "next": core.Next{Task: &core.Task{Definition: core.Definition{ID: "task"}, Attempts: []core.Attempt{{ID: lease.AttemptID, Executor: cfg.RunnerID, Input: chain.CurrentCandidate, Candidate: candidate.ID, Status: "pass"}}}}})
 	})
 	_, config, _, _ := runnerRecoveryFixture(t, handler)

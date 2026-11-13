@@ -258,7 +258,14 @@ func releaseAsset(release RemoteRelease, name string) (RemoteAsset, error) {
 }
 
 func (source Source) Check(ctx context.Context, kind, platform, channel string) (Selection, error) {
+	return source.CheckVersion(ctx, kind, platform, channel, "")
+}
+
+func (source Source) CheckVersion(ctx context.Context, kind, platform, channel, version string) (Selection, error) {
 	result := Selection{Status: "no_available_version", PublisherIdentity: "unverified"}
+	if version != "" && !ValidVersion(version) {
+		return result, core.Error("INVALID_RELEASE_VERSION", "use an exact semantic version")
+	}
 	if channel != "stable" && channel != "prerelease" {
 		return result, core.Error("RELEASE_CHANNEL_INVALID", "select stable or prerelease")
 	}
@@ -272,11 +279,14 @@ func (source Source) Check(ctx context.Context, kind, platform, channel string) 
 	}
 	candidates := []RemoteRelease{}
 	for _, release := range releases {
-		version := strings.TrimPrefix(release.Tag, "v")
-		if release.Draft || !ValidVersion(version) {
+		candidateVersion := strings.TrimPrefix(release.Tag, "v")
+		if version != "" && candidateVersion != version {
 			continue
 		}
-		pre := semver.Prerelease("v"+version) != "" || release.Prerelease
+		if release.Draft || !ValidVersion(candidateVersion) {
+			continue
+		}
+		pre := semver.Prerelease("v"+candidateVersion) != "" || release.Prerelease
 		if channel == "stable" && pre {
 			continue
 		}

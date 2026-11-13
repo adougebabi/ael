@@ -112,3 +112,12 @@ finding_history 在中央项目 SQLite 中追加裁定、修复关联和复验�
 发行层独立于项目初始化与远程绑定，release verify/check/download 在本地数据库打开前处理。独立 CLI、Linux Server、Skill 资源和兼容四平台离线包共用 manifest，记录完整 commit、build、源码 dirty、发布状态、协议及字节 hash。Hash 校验和发布身份各自返回事实。在线选择仅用用户显式来源的真实资产 URL，并先通过成熟 OpenSSH 或 Cosign 验证器绑定固定发行身份，再接收兼容的 released 清单。客户端不安装验证器、不管理签名私钥，也不执行下载内容。
 
 Server 镜像从 scratch 打包现有静态程序和 Dashboard，保留 notice，以非特权 UID/GID 和专用空数据卷运行。非 loopback 监听要求实际 Origin；既有 Host/Origin、身份、项目权限、CSRF、限流和可信代理守卫继续生效。本地未发布构建、CI build artifact、草稿及公开发布分别标明。手动工作流将产物构建和签名与显式授权的发布 job 分开，已公开版本拒绝覆盖，预发布元数据与 SemVer 一致。实际 Oracle 部署仍待对应授权任务。
+
+
+## V2-19 机器升级、轻入口与固定协议
+
+Upgrade 接受独立客户端目录/压缩包与旧完整分发，复用原 intent、不可变缓存、备份、锁和 CopyAtomic。单平台缓存独立放在 clients/<version>，安装来源固定到持久缓存，旧四平台 distribution 及 Local 默认来源登记保留，client_bundle 单独记录单平台缓存，使旧版 Local 调用者继续使用原完整包。在线来源经签名选中后，version/build/commit 与内包及 executable 探针重新绑定，明确版本查询读取目标 prefix 的实际安装。0.1.19 声明 API/Skill/CLI 输出协议，0.1.18 的已知旧包保留协议 1 兼容。
+
+Remote Binding 追加可选 API/Skill 要求，旧数据按协议 1 读取。Meta 报告单个 Server 实例的 version/build 与协议。客户端所有读写先核对服务协议，断网缓存仍非权威。外部会话可声明其已取得的协议，工具不能自动改成其他协议。机器升级保留项目规则和外部宿主生命周期。
+
+Remote entry update 在 projectmode 锁内复核经过验证的绑定字节 hash，使用现有安全路径、资产 hash 和项目外备份。独立文件意图处理部分替换与冲突，全部文件到达目标后写受管 manifest，Remote 模式始终不打开 Local task 数据库。AGENTS 只替换受管块，用户正文保留，旧离线入口需显式迁移且原 payload 保留。恢复日志有预先检查的容量边界，活动会话继续原规则，入口更新提示后续会话生效。Local 旧 outbox、维护事务与完整包校验继续原路径。

@@ -24,7 +24,7 @@ native = platform.system().lower() + '-' + {'arm64': 'arm64', 'aarch64': 'arm64'
 binary = bundle / ('ael-' + native)
 with tempfile.TemporaryDirectory(prefix='ael-release-acceptance-') as directory:
     root = Path(directory)
-    env = dict(os.environ, AEL_DATA_DIR=str(root / 'unused-runtime'), AEL_INSTALL_PREFIX=str(root / 'unused-install'), HOME=str(root / 'home'))
+    env = dict(os.environ, AEL_DATA_DIR=str(root / 'unused-runtime'), AEL_INSTALL_PREFIX=str(root / 'unused-install'))
     def run(executable, *values, expected=True, extra_env=None):
         result = subprocess.run([str(executable), *values], env=dict(env, **(extra_env or {})), cwd=root, text=True, capture_output=True, timeout=120)
         assert (result.returncode == 0) == expected, (values, result.stdout, result.stderr)

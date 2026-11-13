@@ -1,6 +1,6 @@
 # 外部 Agent → AEL Client → Server
 
-现有 Agent 负责宿主执行，所有命令带 `--project PATH --json`。先 profile add/token-stdin、project connect，再 repository register、knowledge index。中间文件放项目外私有目录，不进 Git。每个写请求使用稳定 operation_id/idempotency_key，修改请求必须换键；网络结果未知先查原回执，不回退本地。
+现有 Agent 负责宿主执行，项目通信命令带 `--project PATH --json`。机器级 upgrade 使用安装 prefix 参数。先 profile add/token-stdin、project connect，再 repository register、knowledge index。中间文件放项目外私有目录，不进 Git。每个写请求使用稳定 operation_id/idempotency_key，修改请求必须换键；网络结果未知先查原回执，不回退本地。
 
 1. `runner register --file PRIVATE_JSON --operation-id OP --idempotency-key KEY`：文件含 id、workspace_id、checkout_id、repository、version、capabilities（例如 development、model、scenario）、expected_revision:"absent"。可选 alias 和 machine 提供客户端别名与设备声明，未提供时使用 runner ID 并显示设备未声明。这是身份/能力声明，不是 OS 隔离证明。
 2. `task show --task ID` / `next --task ID` 取得 revision、next_action、current_step；父范围先 `runner next --runner ID --parent EPIC` 查询合法后继，再 claim，不凭查询直接工作。人工责任保持 wait_human；父级叶子与集成条件继续生效。
@@ -85,3 +85,12 @@ human 检查交由项目 reviewer/admin 登录中央 Dashboard 完成。外部 A
 共同请求为 finding_id、expected_revision、expected_task_revision、reason、operation_id、idempotency_key。repair 可带 occurrence_id，关联还需 repair_task_id、expected_repair_revision、repair_check_id。revalidate 带 repair_task_id、expected_repair_revision、candidate_id、evidence_sha256。版本和值从 finding show 的 revision、source_task_revision、repair_task 与 repair_evidence_sha256 获取。
 
 新候选上的同位置问题保留独立 finding ID，通过明确修复关系追溯旧版本。旧失败与截图保留，重试沿用原请求与键。源码快照可由宿主选定后另存 .bin，再用租约附件上传并绑定原候选路径；AEL 不执行该内容。只验收执行提交使用实际 runtime 文本报告，检查和最终报告目标继续执行原规则。
+
+
+## CLI、项目入口与会话协议
+
+先用 `ael version --check --project PATH --json` 核对实际 CLI、项目 Skill/入口及 Server 协议。新连接可加 `project connect --install-entry`，或在连接后显式 `ael update --project PATH` 安装轻入口，随后 `./ael` 复用机器级 CLI。旧离线入口需要 `update --migrate-entry`，二进制和锁保留，数据权威切换单独协调。
+
+当前 API/Skill 协议均为 1，旧绑定按 1 兼容读取。会话可声明 AEL_API_PROTOCOL=1、AEL_SKILL_PROTOCOL=1，保留已经取得的规则。机器级 upgrade 保留各项目 Skill，活动 Agent 继续使用原上下文。显式项目入口更新为后续会话使用，不终止宿主进程。服务不兼容时读写均给出明确提示，断网缓存继续标为非权威。
+
+版本查询 `upgrade --source TRUSTED_JSON --version EXACT --check --prefix DIR` 使用真实签名清单和目标安装，dry-run 不下载资产。正式升级才下载并验证包、暂存和原子切换。updater 自身中断可用原包 `upgrade --from ORIGINAL --prefix DIR --ack-stopped` 恢复，仍核对其停止身份。该参数的安装恢复与任务责任恢复各自使用对应原始记录。

@@ -11,7 +11,7 @@ sh scripts/package.sh
 
 第一条构建当前平台客户端、同架构 Linux Server 与 Skill 包。第二条保留原四平台离线工具链、锁、Unix 包和安装接口，同时输出 `dist/release/manifest.json` 及独立包。`RELEASE_PUBLICATION` 默认为 `local_unpublished`。构建会记录完整源 commit、dirty、build、平台、协议、大小和 SHA-256。本地带改动产物如实显示 dirty。`released` 要求干净 checkout。
 
-独立客户端包包含 `ael`、notice、说明和文件清单。Server 包包含同一 AEL 程序和嵌入的 Dashboard，启动使用 `server` 子命令。Skill 包保存分发 Skill 及结果/评估/计划协议示例。兼容离线包仍使用原 `upgrade --from` 和项目 `update`，单平台包的安装属于轻量升级入口。
+独立客户端包包含 `ael`、notice、说明和文件清单。Server 包包含同一 AEL 程序和嵌入的 Dashboard，启动使用 `server` 子命令。Skill 包保存分发 Skill 及结果/评估/计划协议示例。兼容离线包仍使用原 `upgrade --from` 和项目 `update`，单平台包以 `upgrade --from CLIENT_ARCHIVE` 安装到机器级缓存，Remote 项目复用该 CLI，具体版本与恢复语义见 updating.md。
 
 ```sh
 dist/ael-darwin-arm64 release verify --manifest dist/release/manifest.json --json
@@ -83,3 +83,5 @@ ael release download --source /absolute/path/source.json --kind client --platfor
 本轮只验证本地等价构建和工作流配置，未 dispatch 工作流、改真实 Release、push、tag 或部署 Oracle。当前没有产品默认在线发行 URL，必须使用真实已核实的显式来源。
 
 签名和 Actions 的配置依据来自官方文档。[Cosign](https://github.com/sigstore/cosign/blob/v3.1.4/doc/cosign_verify-blob.md) · [GitHub workflow syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax)
+
+0.1.19 可用 `upgrade --source TRUSTED_JSON --version EXACT --prefix DIR --check` 核对实际目标安装和签名发行，正式升级对下载与内包执行完整校验。`release download` 保持只下载的独立入口。

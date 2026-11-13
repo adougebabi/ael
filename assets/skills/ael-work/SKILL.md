@@ -9,11 +9,11 @@ description: 在已初始化的 AEL 工程执行已授权的项目迭代、修�
 - 用户明确要求执行某项 AEL 命令、操作或继续某个 AEL 任务时，按明确要求处理；单独的命令或任务查询不因此自动创建新任务。
 - 如果请求后续转为已授权的工程变更，在首次实际修改项目之前进入 AEL 流程；不能因只读工作中发现问题就自行扩大授权。目的不明确时先继续可做的只读工作，仅在确有必要时澄清，不默认创建任务。
 
-进入工程工作流程后，从项目根使用 `./ael`，运行 doctor 和 task list，核对真实项目、数据路径、工具版本及知识健康。复用相关的既有目标与已验证步骤，只为已授权的工程工作创建任务；不逐步请求继续，不自行发明后续需求。
+进入工程工作流程后，Local 从项目根使用 `./ael`。Remote 可用机器级 `ael --project PATH`，已安装轻入口时可用 `./ael`。运行 doctor 和 task list，核对真实项目、数据路径、工具版本及知识健康。复用相关的既有目标与已验证步骤，只为已授权的工程工作创建任务；不逐步请求继续，不自行发明后续需求。
 
 唯一流程来源：[通用工程协议 v1.0](references/workflow.md)。开始时读取第 1—4 节和当前责任节点；W1 界定工作、W2 分析、W3 执行、W4 验证/回退、W5 交付及知识回写按需读取相应章节。项目原文是契约来源，索引和看板是投影；历史、决策、任务与证据保持身份区别。
 
-实际命令：[命令与恢复](references/commands.md)，机器数据结构以 `./ael help --json` 为准。需要读取字段、调用脚本或保存结果时，命令明确追加 `--json`；默认输出供人阅读。
+实际命令：[命令与恢复](references/commands.md)，机器数据结构以当前 CLI 的 `ael help --json` 为准，项目入口可使用 `./ael help --json`。需要读取字段、调用脚本或保存结果时，命令明确追加 `--json`；默认输出供人阅读。
 
 远程 authority 使用 [外部 Agent 通信协议](references/remote-agent.md)：已有 Agent 自行编辑、测试、截图和管理宿主；AEL 只接收并校验。先登记客户端，准备候选/context，再 runner claim；每次 submit 消费 next_action。断网按 operation_file 调用 runner retry，未知工作区使用 runner recover 明确接收方与停工/独立工作区决定。远程不使用下述本地 claim/verify/loop 命令；不需要客户端 Docker，不启动其他 Agent。run/resume-result/recover-claim 已退出，不能用于恢复新模式。默认只上传选定依据与证据，不上传整个代码库、HOME、聊天或凭据。
 
@@ -33,3 +33,10 @@ Attached 长步骤可在 claim 绑定本次宿主的可靠常驻 owner-pid；未
 ## 工具发行
 
 独立当前平台 CLI、Server 和 Skill 资源按发行 manifest 分发。外部 Agent 可用 `ael release check --source TRUSTED_SOURCE_JSON` 查询已核实来源，用 `ael release download --source TRUSTED_SOURCE_JSON --out NEW_FILE` 下载。默认没有线上源，结果明确无已配置来源。在线下载先验证固定发布身份，再核对清单与字节哈希。`ael release verify --manifest FILE` 只校验本地内容，publisher_identity 保持独立状态。CLI 使用无需 Docker，Server 镜像由服务端维护者管理。下载内容的安装/升级按用户授权和现行安装入口执行。
+
+
+## 工具与会话版本
+
+`ael version --check --project PATH --json` 分别读取 CLI、项目入口和 Server 版本/协议。当前支持 API 1、Skill 1。旧绑定缺省按 1 兼容，活动会话可用 AEL_API_PROTOCOL/AEL_SKILL_PROTOCOL 明确保留已取得的协议声明。遇到不支持的声明先核对匹配工具，CLI 不把它静默解释为新协议。
+
+`ael upgrade --source TRUSTED_JSON --version EXACT --prefix DIR --check` 只读核对安装与签名发行，`--dry-run` 预览，正式执行先验证下载与内包。当前没有默认在线源。机器级升级为后续 CLI 调用生效，兼容 Remote 项目继续使用原入口和 Skill。显式 `ael update --project PATH` 更新轻入口时保留用户文件和旧离线 payload，并提示后续会话使用新资源。Local update 仍使用完整包及原 writer/维护规则。

@@ -1,0 +1,40 @@
+=== RUN   TestClientArchiveRejectsUnsafeEntries
+=== RUN   TestClientArchiveRejectsUnsafeEntries/../escape
+=== RUN   TestClientArchiveRejectsUnsafeEntries//absolute
+=== RUN   TestClientArchiveRejectsUnsafeEntries/directory/
+=== RUN   TestClientArchiveRejectsUnsafeEntries/ael
+--- PASS: TestClientArchiveRejectsUnsafeEntries (0.01s)
+    --- PASS: TestClientArchiveRejectsUnsafeEntries/../escape (0.00s)
+    --- PASS: TestClientArchiveRejectsUnsafeEntries//absolute (0.01s)
+    --- PASS: TestClientArchiveRejectsUnsafeEntries/directory/ (0.00s)
+    --- PASS: TestClientArchiveRejectsUnsafeEntries/ael (0.00s)
+=== RUN   TestClientPackageHashAndProtocol
+--- PASS: TestClientPackageHashAndProtocol (0.00s)
+=== RUN   TestClientArchiveVerifiesFooterAndRejectsTrailingPayload
+--- PASS: TestClientArchiveVerifiesFooterAndRejectsTrailingPayload (0.02s)
+PASS
+ok  	ael/internal/release	0.347s
+=== RUN   TestClientUpgradeReusesTransactionAndPersistentCache
+--- PASS: TestClientUpgradeReusesTransactionAndPersistentCache (0.14s)
+=== RUN   TestClientPackageRejectsExecutableProtocolMismatch
+=== RUN   TestClientPackageRejectsExecutableProtocolMismatch/api_protocol
+=== RUN   TestClientPackageRejectsExecutableProtocolMismatch/skill_protocol
+=== RUN   TestClientPackageRejectsExecutableProtocolMismatch/cli_output_protocol
+--- PASS: TestClientPackageRejectsExecutableProtocolMismatch (0.08s)
+    --- PASS: TestClientPackageRejectsExecutableProtocolMismatch/api_protocol (0.02s)
+    --- PASS: TestClientPackageRejectsExecutableProtocolMismatch/skill_protocol (0.03s)
+    --- PASS: TestClientPackageRejectsExecutableProtocolMismatch/cli_output_protocol (0.02s)
+=== RUN   TestRemoteEntryRecoveryAfterAGENTSWasWritten
+--- PASS: TestRemoteEntryRecoveryAfterAGENTSWasWritten (0.04s)
+=== RUN   TestRemoteEntryRecoveryPreservesLargeAGENTS
+--- PASS: TestRemoteEntryRecoveryPreservesLargeAGENTS (0.05s)
+=== RUN   TestRemoteEntryPreservesUserContentAndOfflinePayload
+--- PASS: TestRemoteEntryPreservesUserContentAndOfflinePayload (0.07s)
+=== RUN   TestUpgradeCheckReadsSelectedPrefixAndRefusesDowngrade
+--- PASS: TestUpgradeCheckReadsSelectedPrefixAndRefusesDowngrade (0.27s)
+PASS
+ok  	ael/internal/bootstrap	0.958s
+=== RUN   TestRemoteUpdateUsesLightEntryWithoutLocalRuntime
+--- PASS: TestRemoteUpdateUsesLightEntryWithoutLocalRuntime (0.05s)
+PASS
+ok  	ael/cmd/ael	0.506s

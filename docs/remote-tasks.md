@@ -138,3 +138,10 @@ ael finding revalidate --finding ID --file PRIVATE_JSON --json
 POST 路径依次为 `/api/v1/projects/PROJECT/findings/ID/decisions`、`/repair`、`/revalidations`。Dashboard 提供裁定、创建/关联、精确复验、历史及版本发现往返。复验表单冻结审阅版本，错误或响应丢失保留原请求和输入。
 
 正式隔离验收使用 `python3 scripts/remote_finding_lifecycle_acceptance.py --bundle dist --out NEW_PRIVATE_DIR`。实际修改、Git 提交、命令、浏览器、截图由外部测试宿主执行。源码字节可由宿主保存为租约保护的 .bin 附件，binding 仍使用原候选路径；Server 下载按固定内容处理。
+
+
+## 共享机器 CLI 与项目入口
+
+`project connect` 保存最小绑定及 API/Skill 协议要求，可用 `--install-entry` 同时安装受管轻入口。已有绑定用 `update --project PATH`，遗留离线受管入口须显式 `--migrate-entry`。项目保留 launcher、AGENTS 受管块、Skill、绑定和协议 manifest，机器级 CLI 在多个兼容项目间复用。旧二进制/锁保持可访问，Local project.yaml 的数据权威切换继续独立处理。
+
+`version --check --project PATH` 同时展示当前 CLI、项目入口和 Server 版本。旧 Server 未提供版本时标为 unreported。旧绑定的缺省 API/Skill 为 1，明确不兼容的会话声明和 Server 协议在请求前拒绝，离线缓存继续显示历史/非权威。`upgrade --source TRUSTED_JSON --version EXACT --prefix DIR --check` 核对指定安装，正式升级走成熟签名、文件哈希、内包与 executable 协议校验，项目入口不因兼容机器升级而重写。完整操作见 updating.md。

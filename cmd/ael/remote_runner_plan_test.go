@@ -497,7 +497,8 @@ func TestRunnerSubmissionRecoversDroppedUploadAndSubmitResponses(t *testing.T) {
 	var observedKey, artifactKey, protocolError string
 	var stored []byte
 	starts, chunks, finalizes, submits := 0, 0, 0, 0
-	accepted, dropLookup := false, false
+	accepted := false
+	lookupDrops := 0
 	receipt := func() map[string]any {
 		return map[string]any{"operation_id": "submit-fixture", "next": core.Next{Task: &core.Task{Definition: core.Definition{ID: "task"}, Attempts: []core.Attempt{{ID: lease.AttemptID, Executor: cfg.RunnerID, Input: chain.CurrentCandidate, Candidate: candidate.ID, Status: "pass"}}}}}
 	}
@@ -519,8 +520,8 @@ func TestRunnerSubmissionRecoversDroppedUploadAndSubmitResponses(t *testing.T) {
 				_ = json.NewEncoder(w).Encode(map[string]any{"found": true, "result": map[string]any{"operation_id": observedKey, "attempt_id": lease.AttemptID, "candidate_id": candidate.ID}})
 			}
 		case strings.Contains(r.URL.Path, "/operations/"):
-			if dropLookup {
-				dropLookup = false
+			if lookupDrops > 0 {
+				lookupDrops--
 				drop()
 				return
 			}
@@ -595,7 +596,10 @@ func TestRunnerSubmissionRecoversDroppedUploadAndSubmitResponses(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"id": "artifact-fixture", "sha256": store.Hash(stored)})
 		case strings.HasSuffix(r.URL.Path, "/submit"):
 			submits++
-			accepted, dropLookup = true, true
+			accepted = true
+			// The protocol GET reuses the meta connection. Drop the fresh retry as
+			// well, so this fixture still observes an unavailable receipt lookup.
+			lookupDrops = 2
 			drop()
 		default:
 			http.Error(w, `{"code":"UNEXPECTED"}`, http.StatusNotFound)
@@ -628,7 +632,7 @@ func TestRunnerSubmissionRecoversDroppedUploadAndSubmitResponses(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if protocolError != "" || starts != 4 || chunks != 2 || finalizes != 2 || submits != 1 || !bytes.Equal(stored, data) {
+	if lookupDrops != 0 || protocolError != "" || starts != 4 || chunks != 2 || finalizes != 2 || submits != 1 || !bytes.Equal(stored, data) {
 		t.Fatalf("recovery differed: error=%q starts=%d chunks=%d finalizes=%d submits=%d bytes=%d", protocolError, starts, chunks, finalizes, submits, len(stored))
 	}
 }

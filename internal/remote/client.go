@@ -17,6 +17,9 @@ var responseCode = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}$`)
 // Call contacts only the configured server and never falls back to a local
 // authority. Client file paths are resolved before this function is called.
 func Call(config, project string, binding Binding, method, suffix string, payload any, client *http.Client) (map[string]any, error) {
+	if err := CheckClientProtocols(binding); err != nil {
+		return nil, err
+	}
 	profile, err := LoadProfile(config, project, binding.Profile)
 	if err != nil {
 		return nil, err
@@ -44,39 +47,46 @@ func Call(config, project string, binding Binding, method, suffix string, payloa
 	if client == nil {
 		client = &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	}
-	if method != http.MethodGet {
-		capability := "remote_tasks"
-		if strings.Contains(suffix, "/plan/") {
-			capability = "remote_plans"
+	capability := "remote_tasks"
+	if strings.Contains(suffix, "/plan/") {
+		capability = "remote_plans"
+	}
+	if strings.HasPrefix(suffix, "/findings") {
+		capability = "findings"
+	}
+	if strings.HasPrefix(suffix, "/artifacts") {
+		capability = "artifacts"
+	}
+	if strings.HasPrefix(suffix, "/repositories") || strings.HasPrefix(suffix, "/candidates") {
+		capability = "portable_candidates"
+	}
+	if strings.HasPrefix(suffix, "/contexts") {
+		capability = "portable_contexts"
+	}
+	if strings.HasPrefix(suffix, "/runners") {
+		capability = "remote_runners"
+	}
+	if method == http.MethodGet {
+		_, err = Metadata(client, profile)
+	} else {
+		err = checkCapability(client, profile, capability)
+	}
+	if err != nil {
+		if method == http.MethodGet && strings.HasPrefix(err.Error(), "REMOTE_UNAVAILABLE:") {
+			if cached, ok := offlineRead(config, profile, binding, suffix); ok {
+				return cached, nil
+			}
 		}
-		if strings.HasPrefix(suffix, "/findings") {
-			capability = "findings"
-		}
-		if strings.HasPrefix(suffix, "/artifacts") {
-			capability = "artifacts"
-		}
-		if strings.HasPrefix(suffix, "/repositories") || strings.HasPrefix(suffix, "/candidates") {
-			capability = "portable_candidates"
-		}
-		if strings.HasPrefix(suffix, "/contexts") {
-			capability = "portable_contexts"
-		}
-		if strings.HasPrefix(suffix, "/runners") {
-			capability = "remote_runners"
-		}
-		if err = checkCapability(client, profile, capability); err != nil {
-			return nil, err
-		}
+		return nil, err
 	}
 	response, err := client.Do(req)
 	if err != nil {
-		if method == http.MethodGet && cacheableRemoteRead(suffix) {
-			if cached, cacheErr := readCache(config, profile, binding, suffix); cacheErr == nil {
-				cached.Data["mode"], cached.Data["online"], cached.Data["authoritative"] = "remote", false, false
-				cached.Data["cached_at"] = cached.ObservedAt
-				return cached.Data, nil
+		if method == http.MethodGet {
+			if cached, ok := offlineRead(config, profile, binding, suffix); ok {
+				return cached, nil
 			}
 		}
+
 		return nil, errors.New("REMOTE_UNAVAILABLE: server unreachable; local fallback is disabled")
 	}
 	defer response.Body.Close()
@@ -104,6 +114,19 @@ func Call(config, project string, binding Binding, method, suffix string, payloa
 	return result, nil
 }
 
+func offlineRead(config string, profile Profile, binding Binding, suffix string) (map[string]any, bool) {
+	if !cacheableRemoteRead(suffix) {
+		return nil, false
+	}
+	cached, err := readCache(config, profile, binding, suffix)
+	if err != nil {
+		return nil, false
+	}
+	cached.Data["mode"], cached.Data["online"], cached.Data["authoritative"] = "remote", false, false
+	cached.Data["cached_at"] = cached.ObservedAt
+	return cached.Data, true
+}
+
 func cacheableRemoteRead(suffix string) bool {
 	return !strings.HasPrefix(suffix, "/findings") && !strings.Contains(suffix, "/artifacts") && !strings.HasPrefix(suffix, "/repositories") && !strings.HasPrefix(suffix, "/candidates") && !strings.HasPrefix(suffix, "/observations") && !strings.HasPrefix(suffix, "/portable-operations") && !strings.HasPrefix(suffix, "/runners") && !strings.Contains(suffix, "/context")
 }
@@ -111,11 +134,17 @@ func cacheableRemoteRead(suffix string) bool {
 // Artifact content is always fetched live: cached bytes cannot prove that the
 // original still exists or that the caller remains authorized.
 func ArtifactContent(config, project string, binding Binding, id string, client *http.Client) ([]byte, error) {
+	if err := CheckClientProtocols(binding); err != nil {
+		return nil, err
+	}
 	if binding.Schema != 1 || !identifier.MatchString(binding.ProjectID) || !identifier.MatchString(id) {
 		return nil, errors.New("REMOTE_REQUEST_INVALID")
 	}
 	profile, err := LoadProfile(config, project, binding.Profile)
 	if err != nil {
+		return nil, err
+	}
+	if _, err = Metadata(client, profile); err != nil {
 		return nil, err
 	}
 	response, err := request(client, profile, "/api/v1/projects/"+binding.ProjectID+"/artifacts/"+id+"/content", true)

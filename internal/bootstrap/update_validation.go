@@ -12,6 +12,9 @@ import (
 
 func validationPaths(b Bundle) []string {
 	out := []string{"ael", "AGENTS.md", ".ael/project.yaml", ".ael/assets.json", ".ael/toolchain.lock", ".ael/THIRD_PARTY_NOTICES.txt", ".ael/.gitignore", ".agents/skills/ael-work/SKILL.md", ".agents/skills/ael-migrate-legacy/SKILL.md", ".agents/skills/ael-work/references/workflow.md", ".agents/skills/ael-work/references/commands.md"}
+	if cmp, err := compareVersions(b.Version, "0.1.19"); err == nil && cmp >= 0 {
+		out = append(out, ".agents/skills/ael-work/references/remote-agent.md")
+	}
 	for _, a := range b.Assets {
 		out = append(out, filepath.Join(".ael/bin", a.Platform, "ael"))
 	}
@@ -47,7 +50,11 @@ func validateOwnAssets(root string, b Bundle, config Config) (*UpdateValidation,
 		}
 		wanted[".agents/skills/"+name+"/SKILL.md"] = body
 	}
-	for _, name := range []string{"workflow.md", "commands.md"} {
+	referenceNames := []string{"workflow.md", "commands.md"}
+	if cmp, err := compareVersions(b.Version, "0.1.19"); err == nil && cmp >= 0 {
+		referenceNames = append(referenceNames, "remote-agent.md")
+	}
+	for _, name := range referenceNames {
 		body, e := assets.Files.ReadFile("skills/ael-work/references/" + name)
 		if e != nil {
 			return nil, e

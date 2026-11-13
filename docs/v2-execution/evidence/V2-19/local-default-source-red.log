@@ -1,0 +1,9 @@
+=== RUN   TestClientUpgradeRetainsDefaultLocalDistribution
+    client_package_test.go:119: single-platform upgrade lost default Local source: {Client:false PackageBuild: PackageCommit: PackageSHA256: Version: Root:/private/var/folders/gv/hlfcpzxj63b3813yxlrkqv6r0000gn/T/TestClientUpgradeRetainsDefaultLocalDistribution4002294424/001/share/ael/clients/0.1.19 Assets:[] Notice: NoticeSHA256:} open /private/var/folders/gv/hlfcpzxj63b3813yxlrkqv6r0000gn/T/TestClientUpgradeRetainsDefaultLocalDistribution4002294424/001/share/ael/clients/0.1.19/toolchain.lock: no such file or directory
+--- FAIL: TestClientUpgradeRetainsDefaultLocalDistribution (0.78s)
+=== RUN   TestFullDistributionWithAdditionalPackageJSONRemainsSupported
+    client_package_test.go:130: valid legacy lock was misclassified {ContentIntegrity: PublisherIdentity: Operation:upgrade Status: Target:/private/var/folders/gv/hlfcpzxj63b3813yxlrkqv6r0000gn/T/TestFullDistributionWithAdditionalPackageJSONRemainsSupported3949371429/002/bin/ael Source: Previous:{Version: Build: OutputProtocol:0 APIProtocol:0 SkillProtocol:0} Available:{Version: Build: OutputProtocol:0 APIProtocol:0 SkillProtocol:0} DataDir: BackupDir: Files:[] RestartRequired:false Warnings:[local installation only; run update in each initialized project to update its pinned toolchain release source is local; no online update endpoint is configured] Validation:<nil>} CLIENT_PACKAGE_INVALID: invalid package metadata
+--- FAIL: TestFullDistributionWithAdditionalPackageJSONRemainsSupported (0.00s)
+FAIL
+FAIL	ael/internal/bootstrap	1.130s
+FAIL

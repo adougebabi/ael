@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"ael/internal/core"
+	"ael/internal/release"
 	"ael/internal/store"
 	"encoding/json"
 	"os"
@@ -86,6 +87,9 @@ func installedHash(prefix string) (string, error) {
 }
 func distributionLock(b Bundle) []byte {
 	text := "version " + b.Version + "\n"
+	if b.Client {
+		text += "client_metadata " + b.PackageSHA256 + "\n"
+	}
 	for _, a := range b.Assets {
 		text += a.Platform + " " + a.SHA256 + " " + filepath.ToSlash(a.Path) + "\n"
 	}
@@ -93,6 +97,9 @@ func distributionLock(b Bundle) []byte {
 	return []byte(text + "notice " + hash + " " + filepath.ToSlash(b.Notice) + "\n")
 }
 func installedBundlePath(prefix string, b Bundle) (string, error) {
+	if b.Client {
+		return store.SafePath(prefix, "share/ael/clients/"+b.Version)
+	}
 	return store.SafePath(prefix, "share/ael/distribution/"+b.Version)
 }
 func sameDistribution(a, b Bundle) bool {
@@ -108,7 +115,7 @@ func checkDistribution(prefix string, b Bundle) error {
 	} else if e != nil {
 		return e
 	}
-	old, e := updateBundle(dest)
+	old, e := machineBundle(dest)
 	if e != nil {
 		return core.Error("INSTALLED_BUNDLE_CONFLICT", dest+": "+e.Error())
 	}
@@ -156,10 +163,16 @@ func installDistribution(prefix string, b Bundle) (string, error) {
 	if e = store.CopyAtomic(filepath.Join(b.Root, b.Notice), notice, 0644); e != nil {
 		return "", e
 	}
-	if e = store.Atomic(filepath.Join(stage, "ael-toolchain.lock"), distributionLock(b), 0644); e != nil {
+	if b.Client {
+		for _, name := range []string{"package.json", "README.md"} {
+			if e = store.CopyAtomic(filepath.Join(b.Root, name), filepath.Join(stage, name), 0644); e != nil {
+				return "", e
+			}
+		}
+	} else if e = store.Atomic(filepath.Join(stage, "ael-toolchain.lock"), distributionLock(b), 0644); e != nil {
 		return "", e
 	}
-	staged, e := updateBundle(stage)
+	staged, e := machineBundle(stage)
 	if e != nil {
 		return "", e
 	}
@@ -172,6 +185,31 @@ func installDistribution(prefix string, b Bundle) (string, error) {
 	return dest, nil
 }
 func Upgrade(o UpdateOptions) (UpdateReport, error) {
+	if o.From != "" {
+		info, err := os.Stat(o.From)
+		if err != nil {
+			return UpdateReport{}, err
+		}
+		if info.Mode().IsRegular() {
+			stage, err := os.MkdirTemp("", "ael-client-install-")
+			if err != nil {
+				return UpdateReport{}, err
+			}
+			defer os.RemoveAll(stage)
+			if _, err = release.ExtractClientPackage(o.From, stage); err != nil {
+				return UpdateReport{}, err
+			}
+			source := o.From
+			o.From = stage
+			result, err := upgrade(o)
+			result.Source = source
+			return result, err
+		}
+	}
+	return upgrade(o)
+}
+
+func upgrade(o UpdateOptions) (UpdateReport, error) {
 	r := UpdateReport{Operation: "upgrade", Files: []string{}, Warnings: []string{"local installation only; run update in each initialized project to update its pinned toolchain", "release source is local; no online update endpoint is configured"}}
 	if os.Getenv("AEL_MANAGED_CHILD") == "1" {
 		return r, core.Error("MANAGED_CHILD_FORBIDDEN", "a managed task child cannot replace its host tool")
@@ -184,7 +222,12 @@ func Upgrade(o UpdateOptions) (UpdateReport, error) {
 	if e = metadataPreflight(prefix); e != nil {
 		return r, e
 	}
-	if e = noUpdateLock(prefix, "share/ael/upgrade.lock"); e != nil {
+	unlock, e := lockInstalledUpgrade(prefix, o.DryRun || o.Check)
+	if e != nil {
+		return r, e
+	}
+	defer unlock()
+	if e = prepareUpgradeRecovery(prefix, o.AckStopped && !o.DryRun && !o.Check); e != nil {
 		return r, e
 	}
 	b, e := sourceBundle(o, true)
@@ -192,11 +235,22 @@ func Upgrade(o UpdateOptions) (UpdateReport, error) {
 		return r, e
 	}
 	r.Source = b.Root
+	if (o.ExpectedBuild != "" && o.ExpectedBuild != b.PackageBuild) || (o.ExpectedCommit != "" && o.ExpectedCommit != b.PackageCommit) {
+		return r, core.Error("BUNDLE_SOURCE_MISMATCH", "client package differs from the selected signed release")
+	}
+	if b.Client {
+		r.Warnings = []string{"machine CLI applies to subsequent invocations; compatible Remote project instructions stay pinned", "active Agents keep their acquired instructions and are not restarted", "Local updates use the retained complete distribution; select --from to change it"}
+	}
+	if o.TargetVersion != "" && o.TargetVersion != b.Version {
+		return r, core.Error("UPGRADE_VERSION_MISMATCH", "source does not match the requested version")
+	}
 	native, version, e := sourceVersion(b)
 	if e != nil {
 		return r, e
 	}
 	r.Available = version
+	r.ContentIntegrity = "verified"
+	r.PublisherIdentity = "unverified"
 	pending, pendingErr := readUpgradeIntent(prefix)
 	if pendingErr != nil && !os.IsNotExist(pendingErr) {
 		return r, pendingErr
@@ -218,6 +272,9 @@ func Upgrade(o UpdateOptions) (UpdateReport, error) {
 			return r, e
 		}
 	}
+	if current != "" && !recovering && r.Previous.Version == b.Version && current != native.SHA256 {
+		return r, core.Error("DISTRIBUTION_VERSION_CONFLICT", "the installed version already has different executable bytes")
+	}
 	if recovering {
 		r.Previous = pending.Previous
 		r.BackupDir = pending.BackupDir
@@ -228,14 +285,37 @@ func Upgrade(o UpdateOptions) (UpdateReport, error) {
 	}
 	destination, _ := installedBundlePath(prefix, b)
 	_, cachedErr := os.Stat(destination)
-	if in, err := readInstallation(prefix); !recovering && cachedErr == nil && err == nil && current == native.SHA256 && in.Version == version.Version && in.Build == version.Build && in.Source == b.Root && in.Bundle == destination {
+	registeredSource := b.Root
+	if b.Client {
+		registeredSource = destination
+	}
+	priorInstallation, priorError := readInstallation(prefix)
+	expectedBundle := destination
+	expectedClientBundle := ""
+	if b.Client {
+		expectedClientBundle = destination
+		expectedBundle, e = retainedLocalDistribution(prefix, destination)
+		if e != nil {
+			return r, e
+		}
+	}
+
+	if !recovering && cachedErr == nil && priorError == nil && current == native.SHA256 && priorInstallation.Version == version.Version && priorInstallation.Build == version.Build && priorInstallation.Source == registeredSource && priorInstallation.Bundle == expectedBundle && priorInstallation.ClientBundle == expectedClientBundle {
 		r.Status = "up_to_date"
 		if o.DryRun {
 			r.Status = "preview"
 		}
 		return r, nil
 	}
-	r.Files = []string{"bin/ael", "share/ael/install.sha256", "share/ael/installation.json", "share/ael/distribution/" + b.Version}
+	if o.Check {
+		r.Status = "update_available"
+		return r, nil
+	}
+	cachePath := "share/ael/distribution/" + b.Version
+	if b.Client {
+		cachePath = "share/ael/clients/" + b.Version
+	}
+	r.Files = []string{"bin/ael", "share/ael/install.sha256", "share/ael/installation.json", cachePath}
 	if o.DryRun {
 		r.Status = "preview"
 		return r, nil
@@ -308,7 +388,21 @@ func Upgrade(o UpdateOptions) (UpdateReport, error) {
 	if e != nil {
 		return r, e
 	}
-	in := installation{Version: version.Version, Build: version.Build, SHA256: native.SHA256, Source: b.Root, Bundle: installed, Updated: time.Now().UTC()}
+	sourceRoot := b.Root
+	if b.Client {
+		sourceRoot = installed
+		r.Warnings = []string{"machine CLI updated for subsequent invocations; compatible Remote projects keep their Skill and protocol", "active Agent sessions keep their acquired instructions; no Agent is restarted", "Local project updates retain their previous complete distribution source"}
+	}
+	in := installation{Version: version.Version, Build: version.Build, SHA256: native.SHA256, Source: sourceRoot, Bundle: installed, Updated: time.Now().UTC()}
+	if b.Client {
+		retained, err := retainedLocalDistribution(prefix, installed)
+		if err != nil {
+			return r, err
+		}
+		in.Bundle = retained
+		in.ClientBundle = installed
+	}
+
 	intent := upgradeIntent{State: "installing", PreviousHash: current, Previous: r.Previous, Next: in, BackupDir: r.BackupDir}
 	if recovering {
 		intent.PreviousHash = pending.PreviousHash

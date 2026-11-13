@@ -12,7 +12,7 @@
 
 `ael upgrade` 升级本机 AEL；`ael update` 更新当前已接入项目。0.1.5 起不再提供旧刷新命令或别名。初始化新项目仍使用 `init`。
 
-## 常用操作
+## Local 常用操作
 
 ```sh
 ael upgrade --dry-run
@@ -38,15 +38,15 @@ ael update --project /path/to/initialized-project
 
 从分发目录运行会自动识别相邻的 `ael-toolchain.lock`。也可显式用 `--from DIR`，自定义安装用 `--prefix DIR`。临时目录测试不会改默认安装或业务工程。
 
-## 版本从哪里来
+## Local 分发来源
 
 本机升级会把完整四平台包保存在 `<prefix>/share/ael/distribution/<version>/`，并登记已验证的本地来源。后续 `upgrade` 读取登记来源；`update` 默认读取已保存的分发。若没有登记来源，可以显式 `--from DIR`，或先安装本机版本。`AEL_BUNDLE_DIR` 可指定完整包，`AEL_INSTALL_PREFIX` 可指定安装位置。
 
-目前没有在线 release endpoint；命令不会假装查询过互联网最新版。源码开发者重新构建登记的 dist 目录后，可 `ael upgrade` 再 `ael update`。同版本不同 payload 会被本机不可变分发缓存拒绝，应发布新的版本号。
+默认没有内置在线发行来源。显式可信来源的签名升级按下方当前客户端流程处理。源码开发者重新构建登记的 dist 目录后，可 `ael upgrade` 再 `ael update`。同版本不同 payload 会被本机不可变分发缓存拒绝，应发布新的版本号。
 
-当前项目有自己的锁定运行时，所以本机升级不会自动升级所有项目。`update` 只检查当前目录或显式 `--project`，不扫描其他项目、不自动初始化或切换控制器。新包与当前程序不同，项目更新会委派给新包自身的程序执行，并校验实际安装结果。
+Local 项目有自己的锁定运行时，使用明确的项目 update。兼容 Remote 项目共用机器 CLI。`update` 只检查当前目录或显式 `--project`，不扫描其他项目、不自动初始化或切换控制器。新包与当前程序不同，项目更新会委派给新包自身的程序执行，并校验实际安装结果。
 
-## 预览、保护与恢复
+## Local 预览、保护与恢复
 
 两条命令都返回 operation、目标、来源、原版本、目标版本、文件及备份路径。`--dry-run` 完成可机械核查的来源/受管资产/运行状态检查，不替换文件，不初始化运行库。它不是外部环境已经验证或未来写入一定成功的证明。
 
@@ -68,3 +68,36 @@ ael update --project /path/to/initialized-project
 本机升级备份旧可执行文件、install.sha256 与安装元数据，旧版本分发保留。中断状态记录在 `<prefix>/share/ael/upgrade-intent.json`；确认旧 updater 已停止、检查 lock owner 后，使用同一份 `--from` 包重试完成记录。未知存活进程或包不一致时拒绝恢复，不盲目抢锁。需要回退时恢复相匹配的旧可执行文件/安装标记，项目则恢复受管资产及匹配运行数据备份；命令没有隐式自动降级或通用 rollback。
 
 如原运行服务使用 `AEL_DATA_DIR`，须沿用原值。运行库按 canonical checkout 绑定，不会从另一进程的环境自动猜测数据位置。
+
+
+## 当前单平台 CLI 与 Remote 入口
+
+0.1.19 的 `upgrade` 复用既有备份、缓存、意图和原子可执行文件替换，支持独立客户端目录或 tar.gz。CLI 包的内层文件 hash、声明 version/build/协议与实际 `version --json` 探测匹配。0.1.18 独立包的 API/Skill 缺省字段沿用已支持的协议 1。旧四平台包继续供 Local init/update 使用。
+
+```sh
+ael upgrade --from /absolute/client.tar.gz --prefix /absolute/install --version 0.1.19 --check
+ael upgrade --from /absolute/client.tar.gz --prefix /absolute/install --version 0.1.19 --dry-run
+ael upgrade --from /absolute/client.tar.gz --prefix /absolute/install --version 0.1.19
+```
+
+单平台缓存位于 `<prefix>/share/ael/clients/<version>`。安装登记指向已校验的持久缓存，原压缩包删除后仍可查询和重试。完整离线缓存保留在 `distribution/<version>`，登记中的旧 Bundle 来源继续供新旧 Local update 使用，单平台来源另记 client_bundle。同版本不同内容、用户改过的已安装程序及降级继续拒绝。`upgrade --check` 只读指定 prefix 的实际安装，支持 up_to_date、update_available、install_available 等明确结果。
+
+```sh
+ael upgrade --source /absolute/trusted-source.json --prefix /absolute/install --check
+ael upgrade --source /absolute/trusted-source.json --prefix /absolute/install --version 0.1.19 --dry-run
+ael upgrade --source /absolute/trusted-source.json --prefix /absolute/install --version 0.1.19
+```
+
+Source 配置与成熟签名验证器沿用 distribution.md。`--version` 是精确 SemVer，预发布还需 `--channel prerelease`。在线 check/dry-run 核对签名清单及目标安装版本，返回 asset_downloaded=false。正式升级继续下载、检查大小/hash、验证内包并探测 executable。签名外层与内包 version/build/commit 及协议必须匹配。显式本地来源的 publisher_identity 为 unverified，签名线上来源为 verified，内容完整性单独记录。
+
+真实 updater 中断后，`upgrade --from 原包 --prefix 原安装 --ack-stopped` 检查其 PID/启动身份。活跃或未知 owner 继续受拒绝，dry-run 不清理旧锁。通过核对的已停止 updater 才能清理自身锁并用准确意图继续。旧可执行文件和安装元数据备份仍可运行/恢复。该流程只处理 AEL 安装事务，外部 Agent 继续使用自己的宿主生命周期。
+
+Remote 项目可选 `project connect --install-entry`，或连接后显式 `update --project PATH`。新建轻入口包含 launcher、AGENTS 受管块、ael-work 及三个引用文档，没有项目内四平台二进制或 Local task 数据库。launcher 使用 AEL_CLI、AEL_INSTALL_PREFIX/bin/ael、默认用户安装或 PATH 中的机器 CLI，并拒绝递归调用自身。
+
+已连接 Remote 且遗留受管离线入口时，先 `update --project PATH --dry-run --migrate-entry`，再明确执行 `--migrate-entry`。旧 launcher/受管资产先备份，`.ael/bin` 和 toolchain.lock 保留。已有 Local project.yaml 继续需要独立的数据权威切换，轻入口更新保持该边界。
+
+Remote update 保留 AGENTS 受管块外的用户原文，受管块/Skill/launcher 被用户改过时报告 ASSET_CONFLICT。项目外备份复用原资产备份逻辑。中断文件意图保存到 `.ael/remote-entry-update.json`，逐个 hash 核对，全部目标完成后提交受管 manifest。恢复需相同 CLI 资产及同一已校验绑定，用户并发编辑保留。恢复日志限制 16 MiB，在任何项目文件替换前校验其可读性，AGENTS 输入以 12 MiB 为读取上限。
+
+`version --check --project PATH` 报告当前 CLI、项目入口及 Server 元数据。旧 Server 没有上报版本时明确标为 unreported。Remote 读写均先核对服务协议，离线历史缓存仍标为非权威。会话可用 AEL_API_PROTOCOL/AEL_SKILL_PROTOCOL 明确声明已取得的协议，当前支持 1，旧绑定缺省按 1 读取。机器升级保留项目 Skill 和活动会话规则，显式更新项目入口为后续会话生效，不停止 Agent、修改模型配置或接管构建环境。
+
+正式隔离验收入口为 `python3 scripts/client_upgrade_acceptance.py --release RELEASE_DIR --previous-bundle OLD_FULL_BUNDLE --out NEW_PRIVATE_DIR`。其旧版来源须为真实已构建分发。实际外部宿主由测试夹具驱动，真实 updater kill 与权限错误在本机发生。完整多机 Agent 验收仍按后续授权任务执行。

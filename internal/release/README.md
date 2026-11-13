@@ -11,3 +11,5 @@ CLI 入口为 `release verify --manifest FILE`、`release check --source FILE` �
 原四平台 `bootstrap.Bundle` 与安装器继续使用原接口。新模块的下载与完整性校验不改项目配置、数据库或运行任务。
 
 依赖 Go 标准库、官方 golang.org/x/mod/semver，以及已有 core 错误与 store 安全路径/hash。主调用方为 cmd/ael 的发行命令。完整操作示例和签名配置见 docs/distribution.md，测试以 `go test ./internal/release` 运行。
+
+V2-19 增加 CheckVersion 的精确版本选择，以及 ReadClientPackage/ExtractClientPackage 的单平台四文件格式校验。解包拒绝链接、目录、重复项、越界和超量字节。bootstrap 复用这些函数进入已有安装事务，实际可执行文件的版本/build/协议还需经版本探针核对。
