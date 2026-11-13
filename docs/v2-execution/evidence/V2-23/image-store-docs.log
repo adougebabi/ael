@@ -1,0 +1,132 @@
+### ImageSummary.Id: Configuration digest vs manifest digests
+
+Source: https://github.com/docker/docs/blob/main/_vendor/github.com/moby/moby/api/docs/v1.56.yaml
+
+The `Id` field description in the API spec explicitly states that the image ID (`Id`) shown by `docker image inspect` is a content-addressable digest calculated from the image's **configuration** (the OCI config blob, including layer digests). It contrasts this with `RepoDigests`, which hold digests of **image manifests** that reference the image. This directly answers the question: the inspect `Id` = configuration digest, not the OCI manifest digest.
+
+```yaml
+      Id:
+        description: |
+          ID is the content-addressable ID of an image.
+
+          This identifier is a content-addressable digest calculated from the
+          image's configuration (which includes the digests of layers used by
+          the image).
+
+          Note that this digest differs from the `RepoDigests` below, which
+          holds digests of image manifests that reference the image.
+        type: "string"
+        x-nullable: false
+        example: "sha256:ec3f0931a6e6b6855d76b2d7b0be30e81860baccd891b2e243280bf1cd8ad710"
+...
+      RepoDigests:
+        description: |
+          List of content-addressable digests of locally available image manifests
+          that the image is referenced from. Multiple manifests can refer to the
+          same image.
+
+          These digests are usually only available if the image was either pulled
+          from a registry, or if the image was pushed to a registry, which is when
+          the manifest is generated and its digest calculated.
+```
+
+--------------------------------
+
+### OCI image index digest versus per-platform manifest digests
+
+Source: https://github.com/docker/docs/blob/main/data/cli/buildx/docker_buildx_imagetools_inspect.yaml
+
+Docker buildx imagetools inspect output showing that a multi-platform image's top-level digest is the OCI image index (application/vnd.oci.image.index.v1+json) digest, while each entry in the `manifests` array carries its own platform-specific manifest digest. This distinguishes the index digest reported by docker save/load from the underlying platform manifest digest you must dereference to continue the verification chain.
+
+```console
+$ docker buildx imagetools inspect crazymax/buildkit:attest --format "{{json .Manifest}}"
+
+{
+  "schemaVersion": 2,
+  "mediaType": "application/vnd.oci.image.index.v1+json",
+  "digest": "sha256:7007b387ccd52bd42a050f2e8020e56e64622c9269bf7bbe257b326fe99daf19",
+  "size": 855,
+  "manifests": [
+    {
+      "mediaType": "application/vnd.oci.image.manifest.v1+json",
+      "digest": "sha256:fbd10fe50b4b174bb9ea273e2eb9827fa8bf5c88edd8635a93dc83e0d1aecb55",
+      "size": 673,
+      "platform": {
+        "architecture": "amd64",
+        "os": "linux"
+      }
+    },
+    {
+      "mediaType": "application/vnd.oci.image.manifest.v1+json",
+      "digest": "sha256:a9de632c16998489fd63fbca42a03431df00639cfb2ecb8982bf9984b83c5b2b",
+      "size": 839,
+      "annotations": {
+        "vnd.docker.reference.digest": "sha256:fbd10fe50b4b174bb9ea273e2eb9827fa8bf5c88edd8635a93dc83e0d1aecb55",
+        "vnd.docker.reference.type": "attestation-manifest"
+      },
+      "platform": {
+        "architecture": "unknown",
+        "os": "unknown"
+      }
+    }
+  ]
+}
+```
+
+--------------------------------
+
+### Concrete OCI image layout directory tree (blobs/sha256 + index.json + manifest.json)
+
+Source: https://github.com/docker/docs/blob/main/content/manuals/build/exporters/_index.md
+
+Shows the actual filesystem layout of an OCI-exported image tarball: `blobs/sha256/` containing content-addressed layer blobs, `index.json` for the OCI manifest index, `manifest.json` for backwards-compatible Docker save, and `oci-layout` identifying the layout version.
+
+```markdown
+$ docker buildx build --output type=oci,dest=./image.tar .
+[+] Building 0.8s (7/7) FINISHED
+ ...
+ => exporting to oci image format                                                                     0.0s
+ => exporting layers                                                                                  0.0s
+ => exporting manifest sha256:c1ef01a0a0ef94a7064d5cbce408075730410060e253ff8525d1e5f7e27bc900        0.0s
+ => exporting config sha256:eadab326c1866dd247efb52cb715ba742bd0f05b6a205439f107cf91b3abc853          0.0s
+ => sending tarball                                                                                   0.0s
+$ mkdir -p out && tar -C out -xf ./image.tar
+$ tree out
+out
+├── blobs
+│   └── sha256
+│       ├── 9b18e9b68314027565b90ff6189d65942c0f7986da80df008b8431276885218e
+│       ├── c78795f3c329dbbbfb14d0d32288dea25c3cd12f31bd0213be694332a70c7f13
+│       ├── d1cf38078fa218d15715e2afcf71588ee482352d697532cf316626164699a0e2
+│       ├── e84fa1df52d2abdfac52165755d5d1c7621d74eda8e12881f6b0d38a36e01775
+│       └── fe9e23793a27fe30374308988283d40047628c73f91f577432a0d05ab0160de7
+├── index.json
+├── manifest.json
+└── oci-layout
+```
+
+--------------------------------
+
+### Image load/save without a platform parameter preserves the full multi-platform image
+
+Source: https://github.com/docker/docs/blob/main/content/manuals/engine/release-notes/28.md
+
+Engine 28.0 release note for the Docker API (POST /images/{name}/load and GET /images/{name}/get, which back docker image load and docker image save). It states that passing no platform parameter results in loading/saving the full multi-platform image, i.e. the image index and all its platform variants are preserved.
+
+```markdown
+- `POST /images/{name}/load` and `GET /images/{name}/get` now supports a `platform` parameter (JSON encoded OCI Platform type) that lets you specify a platform to load/save. Not passing this parameter results in loading/saving the full multi-platform image. [moby/moby#48295](https://github.com/moby/moby/pull/48295)
+```
+
+--------------------------------
+
+### containerd image store > Classic image store
+
+Source: https://github.com/docker/docs/blob/main/content/manuals/desktop/features/containerd.md
+
+The classic image store is Docker's legacy storage backend, replaced by the
+containerd image store. It doesn't support image indices or manifest lists, so
+you can't load multi-platform images locally or build images with attestations.
+
+Most users have no reason to use the classic image store. It's available for
+cases where you need to match older behavior or have compatibility
+requirements.

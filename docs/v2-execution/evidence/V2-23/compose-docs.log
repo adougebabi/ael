@@ -1,0 +1,136 @@
+### Use `-p` to specify a project name
+
+Source: https://github.com/docker/compose/blob/v5.6.1/docs/reference/compose.md
+
+### Use `-p` to specify a project name
+
+Each configuration has a project name. Compose sets the project name using
+the following mechanisms, in order of precedence:
+- The `-p` command line flag
+- The `COMPOSE_PROJECT_NAME` environment variable
+- The top level `name:` variable from the config file (or the last `name:`
+from a series of config files specified using `-f`)
+- The `basename` of the project directory containing the config file (or
+containing the first config file specified using `-f`)
+- The `basename` of the current directory if no config file is specified
+Project names must contain only lowercase letters, decimal digits, dashes,
+and underscores, and must begin with a lowercase letter or decimal digit. If
+the `basename` of the project directory or current directory violates this
+constraint, you must use one of the other mechanisms.
+
+--------------------------------
+
+### Options
+
+Source: https://github.com/docker/compose/blob/v5.6.1/docs/reference/compose_up.md
+
+| `--no-color`                   | `bool`        |          | Produce monochrome output                                                                                                                           |
+| `--no-deps`                    | `bool`        |          | Don't start linked services                                                                                                                         |
+| `--no-log-prefix`              | `bool`        |          | Don't print prefix in logs                                                                                                                          |
+| `--no-recreate`                | `bool`        |          | If containers already exist, don't recreate them. Incompatible with --force-recreate.                                                               |
+| `--no-start`                   | `bool`        |          | Don't start the services after creating them                                                                                                        |
+| `--pull`                       | `string`      | `policy` | Pull image before running ("always"\|"missing"\|"never")                                                                                            |
+| `--quiet-build`                | `bool`        |          | Suppress the build output                                                                                                                           |
+| `--quiet-pull`                 | `bool`        |          | Pull without printing progress information                                                                                                          |
+| `--remove-orphans`             | `bool`        |          | Remove containers for services not defined in the Compose file                                                                                      |
+| `-V`, `--renew-anon-volumes`   | `bool`        |          | Recreate anonymous volumes instead of retrieving data from the previous containers                                                                  |
+| `--scale`                      | `stringArray` |          | Scale SERVICE to NUM instances. Overrides the `scale` setting in the Compose file if present.                                                       |
+| `-t`, `--timeout`              | `int`         | `0`      | Use this timeout in seconds for container shutdown when attached or when containers are already running                                             |
+| `--timestamps`                 | `bool`        |          | Show timestamps                                                                                                                                     |
+| `--wait`                       | `bool`        |          | Wait for services to be running\|healthy. Implies detached mode.                                                                                    |
+| `--wait-timeout`               | `int`         | `0`      | Maximum duration in seconds to wait for the project to be running\|healthy                                                                          |
+| `-w`, `--watch`                | `bool`        |          | Watch source code and rebuild/refresh containers when files are updated.                                                                            |
+| `-y`, `--yes`                  | `bool`        |          | Assume "yes" as answer to all prompts and run non-interactively                                                                                     |
+
+--------------------------------
+
+### Specify a project name with -p for ps and logs
+
+Source: https://github.com/docker/compose/blob/v5.6.1/docs/reference/compose.md
+
+Use the -p flag to set the project name, which takes precedence over COMPOSE_PROJECT_NAME, the config file's name:, and directory basenames. Project names must contain only lowercase letters, digits, dashes, and underscores, and begin with a lowercase letter or digit.
+
+```console
+$ docker compose -p my_project ps -a
+NAME                 SERVICE    STATUS     PORTS
+my_project_demo_1    demo       running
+
+$ docker compose -p my_project logs
+demo_1  | PING localhost (127.0.0.1): 56 data bytes
+demo_1  | 64 bytes from 127.0.0.1: seq=0 ttl=64 time=0.095 ms
+```
+
+--------------------------------
+
+### Manually map ports with docker compose run --publish/-p
+
+Source: https://github.com/docker/compose/blob/v5.6.1/docs/reference/compose_run.md
+
+Specify manual port mappings with `--publish` or `-p`, just as when using `docker run`, instead of relying on the service's configured ports.
+
+```console
+$ docker compose run --publish 8080:80 -p 2022:22 -p 127.0.0.1:2021:21 web python manage.py shell
+```
+
+--------------------------------
+
+### Load a Compose project and start services with NewComposeService
+
+Source: https://github.com/docker/compose/blob/v5.6.1/docs/sdk.md
+
+Creates a Docker CLI, initializes a Compose service via compose.NewComposeService, loads a project from compose.yaml, and starts it with service.Up. Requires the docker/compose v5 API and compose packages.
+
+```go
+package main
+
+import (
+	"context"
+	"log"
+
+	"github.com/docker/cli/cli/command"
+	"github.com/docker/cli/cli/flags"
+
+	"github.com/docker/compose/v5/pkg/api"
+	"github.com/docker/compose/v5/pkg/compose"
+)
+
+func main() {
+	ctx := context.Background()
+
+	dockerCLI, err := command.NewDockerCli()
+	if err != nil {
+		log.Fatalf("Failed to create docker CLI: %v", err)
+	}
+	err = dockerCLI.Initialize(&flags.ClientOptions{})
+	if err != nil {
+		log.Fatalf("Failed to initialize docker CLI: %v", err)
+	}
+
+	// Create a new Compose service instance
+	service, err := compose.NewComposeService(dockerCLI)
+	if err != nil {
+		log.Fatalf("Failed to create compose service: %v", err)
+	}
+
+	// Load the Compose project from a compose file
+	project, err := service.LoadProject(ctx, api.ProjectLoadOptions{
+		ConfigPaths: []string{"compose.yaml"},
+		ProjectName: "my-app",
+	})
+	if err != nil {
+		log.Fatalf("Failed to load project: %v", err)
+	}
+
+	// Start the services defined in the Compose file
+	err = service.Up(ctx, project, api.UpOptions{
+		Create: api.CreateOptions{},
+		Start:  api.StartOptions{},
+	})
+	if err != nil {
+		log.Fatalf("Failed to start services: %v", err)
+	}
+
+	log.Printf("Successfully started project: %s", project.Name)
+}
+
+```

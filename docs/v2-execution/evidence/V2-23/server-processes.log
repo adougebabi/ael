@@ -1,0 +1,2 @@
+USER                PID                 COMMAND             COMMAND
+65532               1413353             ael                 /ael server start --data-dir /data --addr 0.0.0.0:7332 --origin https://ael.adoumi.site --trusted-proxy 172.31.240.1/32

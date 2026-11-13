@@ -1,0 +1,454 @@
+{
+  "authoritative": true,
+  "blocking_reasons": [],
+  "board": "completed",
+  "cache_saved": true,
+  "current_step": "verify",
+  "definition_revision": 1,
+  "health": {
+    "candidate": "b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92",
+    "contact_state": "no_executor",
+    "healthy_long": false,
+    "last_contact": "2026-11-13T07:50:34.235428253Z",
+    "last_progress_at": "2026-11-13T07:50:34.236877907Z",
+    "last_progress_kind": "check",
+    "last_progress_summary": "Actual external Chromium observation {\"total\": \"8\", \"clipped\": false, \"viewport\": {\"width\": 640, \"height\": 480}}",
+    "no_progress": false,
+    "threshold_seconds": 1800
+  },
+  "mode": "remote",
+  "next_action": "completed",
+  "observed_at": "2026-11-13T08:10:35.200012Z",
+  "online": true,
+  "plan_revision": 1,
+  "projection_status": "ready",
+  "revision": "580a6f36b1ff3c1d32a786a543a7bcfebf83f187c21c2b0a6348e1cbe5c7e74f",
+  "task": {
+    "applicable_knowledge": [
+      {
+        "id": "source:spec/rules.md",
+        "reason": "scope or explicit reference",
+        "source": "spec/rules.md",
+        "status": "current",
+        "version": "3fdeab2f4569fb7797bcd3743aac30a422288b758c190338c243f5ce548d776c"
+      }
+    ],
+    "approvals": [],
+    "attempts": [
+      {
+        "candidate_version": "4ec402d73182c94406008944bb842150e08b4068c51924437f10cbcac2e4d4ab",
+        "definition_revision": 1,
+        "ended": "2026-11-13T07:43:30.292730065Z",
+        "executor": "mac-pilot",
+        "fence": 1,
+        "id": "AT-c4b7d4b81495ad260199",
+        "input_version": "4ec402d73182c94406008944bb842150e08b4068c51924437f10cbcac2e4d4ab",
+        "last_contact": "2026-11-13T07:43:26.342142316Z",
+        "lease_until": "2026-11-13T08:13:26.342142316Z",
+        "outputs": [],
+        "pid": 0,
+        "plan_revision": 1,
+        "reason": "Existing external Agent completed define",
+        "session": "",
+        "started": "2026-11-13T07:43:24.496421491Z",
+        "status": "pass",
+        "unit": "define",
+        "workspace": ""
+      },
+      {
+        "candidate_version": "a2cf79c074a3b50e83d6098c8264d167710c3d23a1c9719b8c8cb5dcf5e02ec6",
+        "definition_revision": 1,
+        "ended": "2026-11-13T07:44:44.979514867Z",
+        "executor": "mac-pilot",
+        "fence": 2,
+        "id": "AT-ced7412cab49d82530d6",
+        "input_version": "4ec402d73182c94406008944bb842150e08b4068c51924437f10cbcac2e4d4ab",
+        "last_contact": "2026-11-13T07:44:39.606467541Z",
+        "lease_until": "2026-11-13T08:14:39.606467541Z",
+        "outputs": [
+          "artifact_fohfZ9I5NI-xm0Tb9xQyILO4vkyAlK52TB9ram3pIKQ",
+          "artifact_JcvVtgkjJtbf49KZsAyAvW92PH39cRJyStds8CxGYbQ"
+        ],
+        "pid": 0,
+        "plan_revision": 1,
+        "reason": "Existing external Agent completed execute",
+        "session": "",
+        "started": "2026-11-13T07:43:49.465214505Z",
+        "status": "pass",
+        "unit": "execute",
+        "workspace": ""
+      },
+      {
+        "candidate_version": "a2cf79c074a3b50e83d6098c8264d167710c3d23a1c9719b8c8cb5dcf5e02ec6",
+        "definition_revision": 1,
+        "ended": "2026-11-13T07:45:21.987041781Z",
+        "executor": "mac-pilot",
+        "fence": 3,
+        "id": "AT-fb6ea6a88bd6668ecdf7",
+        "input_version": "a2cf79c074a3b50e83d6098c8264d167710c3d23a1c9719b8c8cb5dcf5e02ec6",
+        "last_contact": "2026-11-13T07:45:15.242699006Z",
+        "lease_until": "2026-11-13T08:15:15.242699006Z",
+        "outputs": [
+          "artifact_jzoj-rLulKZg5YFfEFh-I5bgCcBgTdjOn6U-HdZb8KI"
+        ],
+        "pid": 0,
+        "plan_revision": 1,
+        "reason": "Existing external Agent completed check:two",
+        "session": "",
+        "started": "2026-11-13T07:45:05.997491914Z",
+        "status": "pass",
+        "unit": "check:two",
+        "workspace": ""
+      },
+      {
+        "candidate_version": "a2cf79c074a3b50e83d6098c8264d167710c3d23a1c9719b8c8cb5dcf5e02ec6",
+        "definition_revision": 1,
+        "ended": "2026-11-13T07:47:46.779488925Z",
+        "executor": "mac-reviewer",
+        "fence": 4,
+        "id": "AT-6eb8a3cac5494b35acb8",
+        "input_version": "a2cf79c074a3b50e83d6098c8264d167710c3d23a1c9719b8c8cb5dcf5e02ec6",
+        "last_contact": "2026-11-13T07:47:46.778641437Z",
+        "lease_until": "2026-11-13T08:17:46.778641437Z",
+        "outputs": [
+          "artifact_Sgfct8hNOph90CIsBK8eWAfccNwgfIjw9RBhK78bKss"
+        ],
+        "pid": 0,
+        "plan_revision": 1,
+        "reason": "Actual external Chromium observation {\"total\": \"8\", \"clipped\": true, \"viewport\": {\"width\": 640, \"height\": 480}}",
+        "session": "",
+        "started": "2026-11-13T07:47:46.778641437Z",
+        "status": "fail",
+        "unit": "check:layout",
+        "workspace": ""
+      },
+      {
+        "candidate_version": "b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92",
+        "definition_revision": 1,
+        "ended": "2026-11-13T07:49:14.708972658Z",
+        "executor": "mac-pilot",
+        "fence": 5,
+        "id": "AT-3018ec8a137d4cd8fc15",
+        "input_version": "a2cf79c074a3b50e83d6098c8264d167710c3d23a1c9719b8c8cb5dcf5e02ec6",
+        "last_contact": "2026-11-13T07:49:07.970099041Z",
+        "lease_until": "2026-11-13T08:19:07.970099041Z",
+        "outputs": [
+          "artifact_6KqB4A8Y-jHn9HkOnt2nts_Ng8Lag2DFMT4jV0kKeUw",
+          "artifact_95ONaXEZKeXIyuTuNMnG7hJYqsjULQvN7ZUBmC7LGu8"
+        ],
+        "pid": 0,
+        "plan_revision": 1,
+        "reason": "Existing external Agent completed execute",
+        "session": "",
+        "started": "2026-11-13T07:48:48.804168674Z",
+        "status": "pass",
+        "unit": "execute",
+        "workspace": ""
+      },
+      {
+        "candidate_version": "b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92",
+        "definition_revision": 1,
+        "ended": "2026-11-13T07:49:50.22168215Z",
+        "executor": "mac-pilot",
+        "fence": 6,
+        "id": "AT-ae80e8946145bdf77714",
+        "input_version": "b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92",
+        "last_contact": "2026-11-13T07:49:43.643259665Z",
+        "lease_until": "2026-11-13T08:19:43.643259665Z",
+        "outputs": [
+          "artifact_7lSjMKLFnOncPYUpsxe-6oI4tIg_eYfUfWwo672sWVQ"
+        ],
+        "pid": 0,
+        "plan_revision": 1,
+        "reason": "Existing external Agent completed check:two",
+        "session": "",
+        "started": "2026-11-13T07:49:33.221359124Z",
+        "status": "pass",
+        "unit": "check:two",
+        "workspace": ""
+      },
+      {
+        "candidate_version": "b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92",
+        "definition_revision": 1,
+        "ended": "2026-11-13T07:50:34.236877907Z",
+        "executor": "mac-reviewer",
+        "fence": 7,
+        "id": "AT-50d11f87e74f6ead1939",
+        "input_version": "b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92",
+        "last_contact": "2026-11-13T07:50:34.235428253Z",
+        "lease_until": "2026-11-13T08:20:34.235428253Z",
+        "outputs": [
+          "artifact_CpOYYtITrtLQ1UBfSpOBGNh41qw2JhTGji9r0KgXWLU"
+        ],
+        "pid": 0,
+        "plan_revision": 1,
+        "reason": "Actual external Chromium observation {\"total\": \"8\", \"clipped\": false, \"viewport\": {\"width\": 640, \"height\": 480}}",
+        "session": "",
+        "started": "2026-11-13T07:50:34.235428253Z",
+        "status": "pass",
+        "unit": "check:layout",
+        "workspace": ""
+      }
+    ],
+    "candidate": "b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92",
+    "candidate_workspace": "",
+    "completed": "2026-11-13T07:50:34.236918348Z",
+    "confirmation": null,
+    "context_attempt": "AT-ae80e8946145bdf77714",
+    "created": "2026-11-13T07:39:54.133295303Z",
+    "current_step": "verify",
+    "definition": {
+      "acceptance": [
+        "module two",
+        "layout readable"
+      ],
+      "checks": [
+        {
+          "artifacts": [
+            "runtime:report.json"
+          ],
+          "command": [
+            "python3",
+            "checks.py",
+            "two"
+          ],
+          "covers": [
+            "module two"
+          ],
+          "id": "two",
+          "kind": "functional",
+          "method": "command",
+          "required": true,
+          "timeout_seconds": 0
+        },
+        {
+          "artifacts": null,
+          "command": null,
+          "covers": [
+            "layout readable"
+          ],
+          "id": "layout",
+          "kind": "ui",
+          "method": "human",
+          "required": true,
+          "timeout_seconds": 0
+        }
+      ],
+      "definition_revision": 1,
+      "dependencies": [
+        "oracle-one"
+      ],
+      "environment": "",
+      "feedback_of": "",
+      "goal": "verified",
+      "id": "oracle-two",
+      "knowledge": [
+        "source:spec/rules.md"
+      ],
+      "max_retries": 3,
+      "max_seconds": 0,
+      "non_goals": [
+        "publishing",
+        "business project changes"
+      ],
+      "original_request": "Implement two modules and readable sum UI, then check final integrated candidate.",
+      "parent": "oracle-parent",
+      "preset": "",
+      "priority": 0,
+      "risk": null,
+      "scope": [
+        "module_two.py",
+        "screen.html"
+      ],
+      "source": "",
+      "target": "",
+      "title": "Oracle module two",
+      "type": "bug",
+      "ui": true,
+      "ux": false
+    },
+    "definition_hash": "9594fc7d0b7a1ca357f697eb1230e754335e724565386615331f85f2dc98309a",
+    "delivery": null,
+    "epic_membership": {
+      "parent": "oracle-parent",
+      "required": true
+    },
+    "evidence": [
+      {
+        "acceptance_revision": 1,
+        "artifact_hashes": {
+          "artifact_7lSjMKLFnOncPYUpsxe-6oI4tIg_eYfUfWwo672sWVQ": "3ac33345bfa7d5a27705b32490e99e89a21ec2e1d74cf8aa91f8ae5b6e41d7de",
+          "checks.py": "a7920c657fa72984342282811deae9aeafeae0e55ee7114218a71ad3a3f0ab96"
+        },
+        "artifacts": [
+          "artifact_7lSjMKLFnOncPYUpsxe-6oI4tIg_eYfUfWwo672sWVQ"
+        ],
+        "at": "2026-11-13T07:49:50.22168107Z",
+        "candidate": "b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92",
+        "check": "two",
+        "config_hash": "c33e94a01a7904e7423d5d5f4c3a80118d296db1c5cb4211c6c5c8f68b9691a8",
+        "environment": "remote-runner",
+        "executor": "mac-pilot",
+        "inputs": [
+          "checks.py"
+        ],
+        "plan_revision": 1,
+        "reason": "Existing external Agent completed check:two",
+        "result": "pass",
+        "source": "remote-command:mac-pilot"
+      },
+      {
+        "acceptance_revision": 1,
+        "artifact_hashes": {
+          "artifact_CpOYYtITrtLQ1UBfSpOBGNh41qw2JhTGji9r0KgXWLU": "59c2766de929039a2e98fc18322eb2e1f19cda5ca7c537a7c423740c900d8205"
+        },
+        "artifacts": [
+          "artifact_CpOYYtITrtLQ1UBfSpOBGNh41qw2JhTGji9r0KgXWLU"
+        ],
+        "at": "2026-11-13T07:50:34.235428253Z",
+        "candidate": "b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92",
+        "check": "layout",
+        "comparison": {
+          "actual": {
+            "artifact_id": "artifact_CpOYYtITrtLQ1UBfSpOBGNh41qw2JhTGji9r0KgXWLU",
+            "candidate": "b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92",
+            "sha256": "59c2766de929039a2e98fc18322eb2e1f19cda5ca7c537a7c423740c900d8205",
+            "source": "external-host Chromium through actual Lucky Dashboard",
+            "uploader": "mac-agent"
+          },
+          "baseline": {
+            "artifact_id": "",
+            "candidate": "",
+            "sha256": "",
+            "source": "",
+            "uploader": ""
+          }
+        },
+        "config_hash": "29fb92421deb3fd2a84aa422091ae639b00038eb6c286be90e5bdd6c47c3159d",
+        "environment": "human remote review",
+        "executor": "mac-reviewer",
+        "plan_revision": 1,
+        "reason": "Actual external Chromium observation {\"total\": \"8\", \"clipped\": false, \"viewport\": {\"width\": 640, \"height\": 480}}",
+        "result": "pass",
+        "source": "human:mac-reviewer"
+      }
+    ],
+    "evidence_history": [
+      {
+        "acceptance_revision": 1,
+        "artifact_hashes": {
+          "artifact_jzoj-rLulKZg5YFfEFh-I5bgCcBgTdjOn6U-HdZb8KI": "9b2812f0ea4a3832a63879cdbfb693aa1c9d8448656b46fb5071057dd239ab1e",
+          "checks.py": "a7920c657fa72984342282811deae9aeafeae0e55ee7114218a71ad3a3f0ab96"
+        },
+        "artifacts": [
+          "artifact_jzoj-rLulKZg5YFfEFh-I5bgCcBgTdjOn6U-HdZb8KI"
+        ],
+        "at": "2026-11-13T07:45:21.987040821Z",
+        "candidate": "a2cf79c074a3b50e83d6098c8264d167710c3d23a1c9719b8c8cb5dcf5e02ec6",
+        "check": "two",
+        "config_hash": "c33e94a01a7904e7423d5d5f4c3a80118d296db1c5cb4211c6c5c8f68b9691a8",
+        "environment": "remote-runner",
+        "executor": "mac-pilot",
+        "inputs": [
+          "checks.py"
+        ],
+        "plan_revision": 1,
+        "reason": "Existing external Agent completed check:two",
+        "result": "pass",
+        "source": "remote-command:mac-pilot"
+      },
+      {
+        "acceptance_revision": 1,
+        "artifact_hashes": {
+          "artifact_Sgfct8hNOph90CIsBK8eWAfccNwgfIjw9RBhK78bKss": "3649c664b63c79c92e70224ee06fec2aba04cddfbb50d2808acd4698801aa368"
+        },
+        "artifacts": [
+          "artifact_Sgfct8hNOph90CIsBK8eWAfccNwgfIjw9RBhK78bKss"
+        ],
+        "at": "2026-11-13T07:47:46.778641437Z",
+        "candidate": "a2cf79c074a3b50e83d6098c8264d167710c3d23a1c9719b8c8cb5dcf5e02ec6",
+        "check": "layout",
+        "comparison": {
+          "actual": {
+            "artifact_id": "artifact_Sgfct8hNOph90CIsBK8eWAfccNwgfIjw9RBhK78bKss",
+            "candidate": "a2cf79c074a3b50e83d6098c8264d167710c3d23a1c9719b8c8cb5dcf5e02ec6",
+            "sha256": "3649c664b63c79c92e70224ee06fec2aba04cddfbb50d2808acd4698801aa368",
+            "source": "external-host Chromium through actual Lucky Dashboard",
+            "uploader": "mac-agent"
+          },
+          "baseline": {
+            "artifact_id": "",
+            "candidate": "",
+            "sha256": "",
+            "source": "",
+            "uploader": ""
+          }
+        },
+        "config_hash": "29fb92421deb3fd2a84aa422091ae639b00038eb6c286be90e5bdd6c47c3159d",
+        "environment": "human remote review",
+        "executor": "mac-reviewer",
+        "plan_revision": 1,
+        "reason": "Actual external Chromium observation {\"total\": \"8\", \"clipped\": true, \"viewport\": {\"width\": 640, \"height\": 480}}",
+        "recovery": "Correct the measured button clipping in the source and rerun the same candidate-bound checks.",
+        "result": "fail",
+        "source": "human:mac-reviewer"
+      }
+    ],
+    "evidence_progress": {
+      "at": "2026-11-13T07:50:34.236877907Z",
+      "candidate": "b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92",
+      "check_conclusions": {
+        "layout\u0000a2cf79c074a3b50e83d6098c8264d167710c3d23a1c9719b8c8cb5dcf5e02ec6\u000029fb92421deb3fd2a84aa422091ae639b00038eb6c286be90e5bdd6c47c3159d": "d9ade7674f143ed45aec178178a9785086bee7e916aac003b24a2419b75a62d5",
+        "layout\u0000b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92\u000029fb92421deb3fd2a84aa422091ae639b00038eb6c286be90e5bdd6c47c3159d": "fd531d86ae239c960fbcf036258ad4f2f0805c1bdeac51b96fcaa71efdf6bea1",
+        "two\u0000a2cf79c074a3b50e83d6098c8264d167710c3d23a1c9719b8c8cb5dcf5e02ec6\u0000c33e94a01a7904e7423d5d5f4c3a80118d296db1c5cb4211c6c5c8f68b9691a8": "cd45aab7d06ce3f13df4baae75c2c24fcd9605ca46fa6f14d7e83e543954c47b",
+        "two\u0000b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92\u0000c33e94a01a7904e7423d5d5f4c3a80118d296db1c5cb4211c6c5c8f68b9691a8": "de5687361ac295598dab17c7a04ecbb857ecb0dbb6c6fc09ac16399dafe7ee84"
+      },
+      "kind": "check",
+      "seen_artifacts": {
+        "02822ce21c663eb023ef696a60288e9f7dc50571779c71d5f4266a4810e5f2c8": true,
+        "429742c307cb3002da4f9ed9f3604d9c1cb065b05135067f6fa864ac7d25ac34": true,
+        "7bfa017d4d1bce8e7b555efe69fae399b4a041f22b15fad2d21650e3c2d2c379": true
+      },
+      "summary": "Actual external Chromium observation {\"total\": \"8\", \"clipped\": false, \"viewport\": {\"width\": 640, \"height\": 480}}",
+      "unit": "check:layout"
+    },
+    "failure": "",
+    "failure_cycles": {
+      "check:layout": {
+        "count": 1,
+        "failure_evidence": {
+          "3649c664b63c79c92e70224ee06fec2aba04cddfbb50d2808acd4698801aa368": true
+        },
+        "failure_input": "a2cf79c074a3b50e83d6098c8264d167710c3d23a1c9719b8c8cb5dcf5e02ec6",
+        "last_failure_at": "2026-11-13T07:47:46.779488925Z",
+        "last_reason": "Actual external Chromium observation {\"total\": \"8\", \"clipped\": true, \"viewport\": {\"width\": 640, \"height\": 480}}",
+        "signature": "bd3551d774d13821164fe1f7f588703e250e4289b2fca6e192fa0f1d2475bd72",
+        "state": "resolved",
+        "unit": "check:layout"
+      }
+    },
+    "feedback": [],
+    "historical": false,
+    "knowledge_outcome": {
+      "artifacts": null,
+      "reason": "Fixture specification read and retained",
+      "status": "unchanged"
+    },
+    "paused": false,
+    "plan": {
+      "approved": true,
+      "preset": "fast",
+      "reason": "small explicit change",
+      "revision": 1,
+      "steps": [
+        "define",
+        "execute",
+        "verify"
+      ]
+    },
+    "policy_hash": "f81062153a7fd48fe21d6e69db545aa418368c48791cb17e657cea7e0318fe05",
+    "result": "verified",
+    "status": "completed",
+    "updated": "2026-11-13T07:50:34.237065349Z"
+  }
+}

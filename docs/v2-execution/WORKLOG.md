@@ -3,7 +3,7 @@
 > 本账本初始状态不代表任何实施已开始。只有实际执行者才能根据代码和验收结果更新状态。
 > 状态仅允许 PENDING、ACTIVE、VERIFYING、DONE、BLOCKED。
 
-当前任务: V2-23
+当前任务: COMPLETE
 
 | ID | 任务 | 状态 | 回执 |
 |---|---|---|---|
@@ -30,7 +30,7 @@
 | V2-20 | Server 部署包、备份与安全升级 | DONE | receipts/V2-20.md |
 | V2-21 | 旧本地状态导入与单权威切换 | DONE | receipts/V2-21.md |
 | V2-22 | 打包后的全链路验收与交付核对 | DONE | receipts/V2-22.md |
-| V2-23 | 授权后的 Oracle 部署与实际双机验收 | PENDING | — |
+| V2-23 | 授权后的 Oracle 部署与本机 Agent 验收 | DONE | receipts/V2-23.md |
 
 ## V2-12 暂停检查点（历史）
 
@@ -201,3 +201,17 @@ V2-13 已 DONE，正式回执 receipts/V2-13.md，证据 evidence/V2-13/。最�
 - V2-22 development-15 完整通过，在第三叶修复后刻意上传旧失败候选的报告，正式 submit 拒绝，随后当前报告通过并完成父级。父集成局部负例覆盖跨项目/仓库、清单变化、缺少重验映射、父观察变化和未知工作区。独立审查发现同路径输出内容回退仍可准备父候选的包含性缺口，已保留叶子输出 CandidateFile 并核对父级相同路径的内容哈希与执行位，新增 domain 正反例通过。development-16 正在跑带真实文件回退负例的全链路。之前快照的完整相关 race 已通过，日志 race-before-output-hash.log，输出哈希补丁后仍需最终完整回归。V2-22 保持 ACTIVE，V2-23 PENDING。
 
 - V2-22 最终 PASS，0.1.22 / f838a94-e5074a4d4148，正式八叶/真实 Agent 主动 CLI smoke、所有相关协议/浏览器、Local workflow/并发/父集成/停滞恢复、发行/签名源/升级、历史导入回滚、TLS Compose/备份恢复、实际迁移与恢复 SIGKILL、Go 全量/相关 race/vet 均通过。最终源码摘要与分发一致，回执 receipts/V2-22.md、证据 evidence/V2-22/。相关 race Server 包 372.365 秒并零退出码结束。检查点为包含本记录的本地独立提交，V2-23 PENDING，检查点后继续核对实际部署条件。
+
+## V2-23 实际部署条件核对
+
+V2-22 已 DONE，本地检查点 f2c6edb，开始核对时工作区干净。已完整读取 V2-23 与当前运维说明，正式可用分发为 /private/tmp/ael-v222-final-1/bundle，0.1.22 / f838a94-e5074a4d4148。当前唯一 ACTIVE 为 V2-23。尚未提供 Oracle 目标/可用访问方式、域名或私人入口、两端现有 Agent 接入信息和该目标的具体部署授权，已向用户一次性请求这些必要条件。此前本机 Docker/TLS/恢复证据保留为 V2-22，A23-01—05 尚无实际双机证据。当前仅完成前置核对，未连接实际 Oracle 或操作业务工程。
+
+- V2-23 用户已提供 Oracle 129.154.48.38、~/.ssh/oracle.key，并明确 sudo -i 可获 root。SSH/sudo 实测通过，Ubuntu 24.04.5 ARM64，Docker 29.9.2 / Compose 5.6.1，磁盘余量 168 GB。用户进一步将范围改为本机单 Agent，取消云电脑/双客户端实机要求，任务正文已同步并保留原版本。正式 ARM64 镜像上传 hash 核对后在 /opt/ael-v2 独立部署，0.1.22 / f838a94-e5074a4d4148，健康和未授权 401 已经实际通过。Docker containerd inspect ID 对应 OCI manifest 8301b9ec…，原本机 ID 为其 config 49b64fce…，两者从同一已验证导出归档逐层核对。
+
+- 初始私人入口用本轮 Caddy/SSH 隧道完成标准 TLS 链与主机名校验。用户随后明确要求沿用既有 Lucky，本轮 Caddy 已进入撤下步骤，后端改为 Oracle 127.0.0.1:17332，独立数据卷保留。已请求 Lucky 最终完整 HTTPS 地址以配置准确 Host/Origin。实际 Agent 子项/父级、最终入口图片、断线恢复及 Oracle 备份恢复尚待完成。本机 0.1.22 CLI 安装在 /Users/vinson/.local/share/ael-oracle-v2，独立凭据配置 /Users/vinson/.config/ael-oracle-v2，原全局 0.1.17 保持原安装。
+
+- Lucky 模式后端已实际就绪，Oracle 127.0.0.1:17332 → AEL 容器 7332，健康检查通过，正式版本 0.1.22，未授权项目读取 401。Lucky 的实际 network_mode=host，可直接访问该地址。当前 AEL 单容器运行，原 Lucky/derper 仍 Up 8 days，本轮 Caddy 容器及旧隧道已撤下，代理数据卷保留。等待用户提供 Lucky 完整 HTTPS 地址后绑定正式 Origin 并继续实际 Agent 与恢复验收。证据 evidence/V2-23/lucky-backend-check.log、compose.lucky.yaml。
+
+- 用户已配置 https://ael.adoumi.site，Server Origin 已绑定该准确地址。Lucky 公网入口经系统 TLS 校验通过，meta 版本/构建匹配，未授权项目读取 401，跨站/Agent 管理写入/公网 healthz 均 403。本机正式 profile 为 oracle-public。额外 codex exec 沿用宿主 read-only 配置，创建 fixture 受拒，失败原文保留；当前已获写入授权的 Mac Codex 会话接手隔离工程，使用正式 CLI/外部通信脚本完成两项计划应用和第一叶真实编码/编译/命令验收。第二叶真实截图测得总数 8 与按钮裁切，独立 reviewer 账号已经由公网 Dashboard 记录 fail，正在按同任务实施责任修复并复验。未改额外 CLI 会话的只读策略。
+
+- V2-23 最终 PASS。按用户明确修订的单客户端范围，当前 Mac Codex 会话通过 https://ael.adoumi.site → 既有 Lucky → Oracle AEL Server，完成两叶实际源码/Git/编译/命令、UI 失败修复复验及父级三项检查收口。终态候选 b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92。真实服务停止后缓存非权威/领取拒绝、同卷重启、旧 0.1.21 CLI、正式维护备份和 Oracle 独立空卷恢复均通过。恢复实例任务/图片 SHA 一致，旧令牌 401，主服务 active，核验容器已结束。回执 receipts/V2-23.md，证据 evidence/V2-23/。产品源码保持 V2-22 正式快照，当前修改为部署记录、验证及文档。本地检查点为包含本记录的独立提交，V2-00—23 全部 DONE，当前任务 COMPLETE，本轮结束。

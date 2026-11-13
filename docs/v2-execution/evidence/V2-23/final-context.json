@@ -1,0 +1,146 @@
+{
+  "actor": "mac-agent",
+  "authoritative": true,
+  "candidate_id": "b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92",
+  "capture_stability_proven": false,
+  "check_status": "not_recorded",
+  "checkout_id": "mac-checkout",
+  "checks": [],
+  "commit": "e0b6fccac89f8a6938680cf7d61d69a8f88a8c1f",
+  "created_at": "2026-11-13T08:05:55.493930564Z",
+  "definition_revision": 1,
+  "finding_sources": [],
+  "id": "context_Wc8p1BpFyqspFubQ3kvRIv9loLBrJrNmp907yrGRxH4",
+  "impact_unknown": false,
+  "input_equivalence_proven": false,
+  "inputs_known": false,
+  "inventory_count": 1,
+  "inventory_hash": "c81acfa7acd6f05e6ab5c35878899f6333fca625c542c55f99c8d47fe78f4c49",
+  "inventory_origin": "client_attested",
+  "inventory_unverified": false,
+  "mode": "remote",
+  "observation_id": "observation_4h8wOdsoLxn-p0529zJQtFQm6G2okGsTwcSzlceuCa0",
+  "observed_at": "2026-11-13T08:05:57.655927Z",
+  "online": true,
+  "operation_id": "557ecf0d86b444ed9f0816927e350fac",
+  "plan_revision": 2,
+  "policy_hash": "f81062153a7fd48fe21d6e69db545aa418368c48791cb17e657cea7e0318fe05",
+  "repository": "oracle-pilot",
+  "runner_id": "mac-pilot",
+  "sources": [
+    {
+      "artifact_id": "artifact_JbkMgGxGpDm_T96JGgkoo2xijYyPH5PpCVawOJdCi10",
+      "content": "# Oracle pilot\nmodule_one.value() returns 3; module_two.value() returns 5. Build both Python modules. screen.html loads build/data.js, lists the two values, and Calculate total must show 8 without clipping. A human-role reviewer will first reject a deliberately clipped 50px baseline, then inspect the corrected candidate. Publishing is outside this fixture.\n",
+      "id": "source:spec/rules.md",
+      "kind": "spec",
+      "origin": "spec/rules.md",
+      "path": "spec/rules.md",
+      "reason": "scope or explicit reference",
+      "sha256": "3fdeab2f4569fb7797bcd3743aac30a422288b758c190338c243f5ce548d776c",
+      "status": "current"
+    }
+  ],
+  "task_definition": {
+    "acceptance": [
+      "module one",
+      "module two",
+      "layout readable"
+    ],
+    "checks": [
+      {
+        "affected_tasks": [
+          "oracle-one"
+        ],
+        "artifacts": [
+          "runtime:report.json"
+        ],
+        "command": [
+          "python3",
+          "checks.py",
+          "one"
+        ],
+        "covers": [
+          "module one"
+        ],
+        "id": "one",
+        "kind": "functional",
+        "method": "command",
+        "required": true,
+        "timeout_seconds": 0
+      },
+      {
+        "affected_tasks": [
+          "oracle-two"
+        ],
+        "artifacts": [
+          "runtime:report.json"
+        ],
+        "command": [
+          "python3",
+          "checks.py",
+          "two"
+        ],
+        "covers": [
+          "module two"
+        ],
+        "id": "two",
+        "kind": "functional",
+        "method": "command",
+        "required": true,
+        "timeout_seconds": 0
+      },
+      {
+        "affected_tasks": [
+          "oracle-two"
+        ],
+        "artifacts": null,
+        "command": null,
+        "covers": [
+          "layout readable"
+        ],
+        "id": "layout",
+        "kind": "ui",
+        "method": "human",
+        "required": true,
+        "timeout_seconds": 0
+      }
+    ],
+    "definition_revision": 1,
+    "dependencies": null,
+    "environment": "",
+    "feedback_of": "",
+    "goal": "verified",
+    "id": "oracle-parent",
+    "knowledge": [
+      "source:spec/rules.md"
+    ],
+    "max_retries": 3,
+    "max_seconds": 0,
+    "non_goals": null,
+    "parent": "",
+    "preset": "",
+    "priority": 0,
+    "risk": null,
+    "scope": [
+      "module_one.py",
+      "module_two.py",
+      "screen.html"
+    ],
+    "source": "",
+    "target": "",
+    "title": "Oracle real Agent pilot",
+    "type": "epic",
+    "ui": false,
+    "ux": false
+  },
+  "task_id": "oracle-parent",
+  "task_revision": "62faf37369fa5bf250450e547e72316f0628f7daa22b6d76ab7b80f5d0b4f041",
+  "usable_for_context": false,
+  "usable_for_current_work": false,
+  "validity": "stale",
+  "validity_reasons": [
+    "task is terminal, paused or awaiting a decision"
+  ],
+  "workspace_id": "mac-workspace",
+  "workspace_matches": true
+}

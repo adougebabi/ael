@@ -1,0 +1,654 @@
+{
+  "authoritative": true,
+  "blocking_reasons": [],
+  "board": "completed",
+  "cache_saved": true,
+  "current_step": "verify",
+  "definition_revision": 1,
+  "health": {
+    "candidate": "b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92",
+    "contact_state": "no_executor",
+    "healthy_long": false,
+    "last_contact": "2026-11-13T07:53:19.523413799Z",
+    "last_progress_at": "2026-11-13T07:53:19.524667571Z",
+    "last_progress_kind": "check",
+    "last_progress_summary": "Actual external Chromium observation {\"total\": \"8\", \"clipped\": false, \"viewport\": {\"width\": 640, \"height\": 480}}",
+    "no_progress": false,
+    "threshold_seconds": 1800
+  },
+  "mode": "remote",
+  "next_action": "completed",
+  "observed_at": "2026-11-13T08:10:38.494629Z",
+  "online": true,
+  "plan_revision": 2,
+  "projection_status": "ready",
+  "revision": "62faf37369fa5bf250450e547e72316f0628f7daa22b6d76ab7b80f5d0b4f041",
+  "task": {
+    "applicable_knowledge": [
+      {
+        "id": "source:spec/rules.md",
+        "reason": "scope or explicit reference",
+        "source": "spec/rules.md",
+        "status": "current",
+        "version": "3fdeab2f4569fb7797bcd3743aac30a422288b758c190338c243f5ce548d776c"
+      }
+    ],
+    "approvals": [],
+    "attempts": [
+      {
+        "candidate_version": "b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92",
+        "definition_revision": 1,
+        "ended": "2026-11-13T07:52:04.695417232Z",
+        "executor": "mac-pilot",
+        "fence": 1,
+        "id": "AT-343c130adaa6779d4bbc",
+        "input_version": "b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92",
+        "last_contact": "2026-11-13T07:51:59.488559446Z",
+        "lease_until": "2026-11-13T08:21:59.488559446Z",
+        "outputs": [
+          "artifact_oCFxP2dSQr2bLaKOaVAv7lhdM0A7XeOQbkSpTprYY8o"
+        ],
+        "pid": 0,
+        "plan_revision": 2,
+        "reason": "Existing external Agent completed check:one",
+        "session": "",
+        "started": "2026-11-13T07:51:51.735602229Z",
+        "status": "pass",
+        "unit": "check:one",
+        "workspace": ""
+      },
+      {
+        "candidate_version": "b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92",
+        "definition_revision": 1,
+        "ended": "2026-11-13T07:52:37.296574604Z",
+        "executor": "mac-pilot",
+        "fence": 2,
+        "id": "AT-30f34a65db0ed2ac2978",
+        "input_version": "b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92",
+        "last_contact": "2026-11-13T07:52:31.795902402Z",
+        "lease_until": "2026-11-13T08:22:31.795902402Z",
+        "outputs": [
+          "artifact_0lD0bazkR7O5sTDxkQumbtLhn7qrvjLh-p0NTF4RZ4Y"
+        ],
+        "pid": 0,
+        "plan_revision": 2,
+        "reason": "Existing external Agent completed check:two",
+        "session": "",
+        "started": "2026-11-13T07:52:23.403621225Z",
+        "status": "pass",
+        "unit": "check:two",
+        "workspace": ""
+      },
+      {
+        "candidate_version": "b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92",
+        "definition_revision": 1,
+        "ended": "2026-11-13T07:53:19.524667571Z",
+        "executor": "mac-reviewer",
+        "fence": 3,
+        "id": "AT-9ee7affd300a9e2587e2",
+        "input_version": "b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92",
+        "last_contact": "2026-11-13T07:53:19.523413799Z",
+        "lease_until": "2026-11-13T08:23:19.523413799Z",
+        "outputs": [
+          "artifact_stgyj2SnlSLSsm5Jom8C1a5A5IHPCUfgNh1H-JT6hlo"
+        ],
+        "pid": 0,
+        "plan_revision": 2,
+        "reason": "Actual external Chromium observation {\"total\": \"8\", \"clipped\": false, \"viewport\": {\"width\": 640, \"height\": 480}}",
+        "session": "",
+        "started": "2026-11-13T07:53:19.523413799Z",
+        "status": "pass",
+        "unit": "check:layout",
+        "workspace": ""
+      }
+    ],
+    "candidate": "b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92",
+    "candidate_workspace": "",
+    "completed": "2026-11-13T07:53:19.525923903Z",
+    "confirmation": null,
+    "context_attempt": "AT-30f34a65db0ed2ac2978",
+    "created": "2026-11-13T07:38:58.471408464Z",
+    "current_step": "verify",
+    "definition": {
+      "acceptance": [
+        "module one",
+        "module two",
+        "layout readable"
+      ],
+      "checks": [
+        {
+          "affected_tasks": [
+            "oracle-one"
+          ],
+          "artifacts": [
+            "runtime:report.json"
+          ],
+          "command": [
+            "python3",
+            "checks.py",
+            "one"
+          ],
+          "covers": [
+            "module one"
+          ],
+          "id": "one",
+          "kind": "functional",
+          "method": "command",
+          "required": true,
+          "timeout_seconds": 0
+        },
+        {
+          "affected_tasks": [
+            "oracle-two"
+          ],
+          "artifacts": [
+            "runtime:report.json"
+          ],
+          "command": [
+            "python3",
+            "checks.py",
+            "two"
+          ],
+          "covers": [
+            "module two"
+          ],
+          "id": "two",
+          "kind": "functional",
+          "method": "command",
+          "required": true,
+          "timeout_seconds": 0
+        },
+        {
+          "affected_tasks": [
+            "oracle-two"
+          ],
+          "artifacts": null,
+          "command": null,
+          "covers": [
+            "layout readable"
+          ],
+          "id": "layout",
+          "kind": "ui",
+          "method": "human",
+          "required": true,
+          "timeout_seconds": 0
+        }
+      ],
+      "definition_revision": 1,
+      "dependencies": null,
+      "environment": "",
+      "feedback_of": "",
+      "goal": "verified",
+      "id": "oracle-parent",
+      "knowledge": [
+        "source:spec/rules.md"
+      ],
+      "max_retries": 3,
+      "max_seconds": 0,
+      "non_goals": null,
+      "parent": "",
+      "preset": "",
+      "priority": 0,
+      "risk": null,
+      "scope": [
+        "module_one.py",
+        "module_two.py",
+        "screen.html"
+      ],
+      "source": "",
+      "target": "",
+      "title": "Oracle real Agent pilot",
+      "type": "epic",
+      "ui": false,
+      "ux": false
+    },
+    "definition_hash": "69fb0e809967836d10dff0affe111bf8f886b96e61f868fc5434ba3cb1b0edf0",
+    "delivery": null,
+    "epic_plan": {
+      "changes": [
+        {
+          "acceptance": [
+            "module one"
+          ],
+          "action": "create",
+          "deliverables": [
+            "module_one.py"
+          ],
+          "dependencies": null,
+          "goal": "verified",
+          "key": "one",
+          "order": 1,
+          "required": true,
+          "scope": [
+            "module_one.py"
+          ],
+          "task_id": "oracle-one",
+          "title": "Oracle module one"
+        },
+        {
+          "acceptance": [
+            "module two",
+            "layout readable"
+          ],
+          "action": "create",
+          "deliverables": [
+            "module_two.py",
+            "screen.html"
+          ],
+          "dependencies": [
+            "oracle-one"
+          ],
+          "goal": "verified",
+          "key": "two",
+          "order": 2,
+          "required": true,
+          "scope": [
+            "module_two.py",
+            "screen.html"
+          ],
+          "task_id": "oracle-two",
+          "title": "Oracle module two"
+        }
+      ],
+      "digest": "a9515e624b7da44ebf11c460662738d5d4ac3f8e8b4e6e02c8482bfaaf702385",
+      "proposal": {
+        "coverage": [
+          {
+            "acceptance": "module one",
+            "integration": "Rerun exact command on final parent",
+            "leaves": [
+              "one"
+            ]
+          },
+          {
+            "acceptance": "module two",
+            "integration": "Rerun exact command on final parent",
+            "leaves": [
+              "two"
+            ]
+          },
+          {
+            "acceptance": "layout readable",
+            "integration": "Review final candidate image",
+            "leaves": [
+              "two"
+            ]
+          }
+        ],
+        "id": "oracle-plan",
+        "input_hash": "247a0d7db1e552f4363ca1c7c95da1ac011ad333c044765e5500cf7479869d6b",
+        "leaves": [
+          {
+            "basis": [
+              "spec/rules.md"
+            ],
+            "capabilities": [
+              "development"
+            ],
+            "definition": {
+              "acceptance": [
+                "module one"
+              ],
+              "checks": [
+                {
+                  "artifacts": [
+                    "runtime:report.json"
+                  ],
+                  "command": [
+                    "python3",
+                    "checks.py",
+                    "one"
+                  ],
+                  "covers": [
+                    "module one"
+                  ],
+                  "id": "one",
+                  "kind": "functional",
+                  "method": "command",
+                  "required": true,
+                  "timeout_seconds": 0
+                }
+              ],
+              "definition_revision": 0,
+              "dependencies": null,
+              "environment": "",
+              "feedback_of": "",
+              "goal": "verified",
+              "id": "oracle-one",
+              "knowledge": [
+                "source:spec/rules.md"
+              ],
+              "max_retries": 0,
+              "max_seconds": 0,
+              "non_goals": [
+                "publishing",
+                "business project changes"
+              ],
+              "parent": "",
+              "preset": "",
+              "priority": 0,
+              "risk": null,
+              "scope": [
+                "module_one.py"
+              ],
+              "source": "",
+              "target": "",
+              "title": "Oracle module one",
+              "type": "bug",
+              "ui": false,
+              "ux": false
+            },
+            "deliverables": [
+              "module_one.py"
+            ],
+            "depends_on": null,
+            "key": "one",
+            "milestone": "",
+            "order": 1,
+            "required": true,
+            "source_ids": [
+              "one"
+            ]
+          },
+          {
+            "basis": [
+              "spec/rules.md"
+            ],
+            "capabilities": [
+              "development"
+            ],
+            "definition": {
+              "acceptance": [
+                "module two",
+                "layout readable"
+              ],
+              "checks": [
+                {
+                  "artifacts": [
+                    "runtime:report.json"
+                  ],
+                  "command": [
+                    "python3",
+                    "checks.py",
+                    "two"
+                  ],
+                  "covers": [
+                    "module two"
+                  ],
+                  "id": "two",
+                  "kind": "functional",
+                  "method": "command",
+                  "required": true,
+                  "timeout_seconds": 0
+                },
+                {
+                  "artifacts": null,
+                  "command": null,
+                  "covers": [
+                    "layout readable"
+                  ],
+                  "id": "layout",
+                  "kind": "ui",
+                  "method": "human",
+                  "required": true,
+                  "timeout_seconds": 0
+                }
+              ],
+              "definition_revision": 0,
+              "dependencies": [
+                "oracle-one"
+              ],
+              "environment": "",
+              "feedback_of": "",
+              "goal": "verified",
+              "id": "oracle-two",
+              "knowledge": [
+                "source:spec/rules.md"
+              ],
+              "max_retries": 0,
+              "max_seconds": 0,
+              "non_goals": [
+                "publishing",
+                "business project changes"
+              ],
+              "parent": "",
+              "preset": "",
+              "priority": 0,
+              "risk": null,
+              "scope": [
+                "module_two.py",
+                "screen.html"
+              ],
+              "source": "",
+              "target": "",
+              "title": "Oracle module two",
+              "type": "bug",
+              "ui": true,
+              "ux": false
+            },
+            "deliverables": [
+              "module_two.py",
+              "screen.html"
+            ],
+            "depends_on": null,
+            "key": "two",
+            "milestone": "",
+            "order": 2,
+            "required": true,
+            "source_ids": [
+              "two"
+            ]
+          }
+        ],
+        "parent": "oracle-parent",
+        "parent_revision": 1,
+        "request": "Implement two modules and readable sum UI, then check final integrated candidate.",
+        "user_items": [
+          {
+            "description": "Implement module one",
+            "existing_task_id": "",
+            "id": "one"
+          },
+          {
+            "description": "Implement module two",
+            "existing_task_id": "",
+            "id": "two"
+          }
+        ],
+        "version": 1
+      },
+      "proposal_hash": "a2944b67feb0ee2efc7087b1d33c4b183424da03f488eb1e08eb4c6e0d6e8d72",
+      "task_ids": {
+        "one": "oracle-one",
+        "two": "oracle-two"
+      }
+    },
+    "evidence": [
+      {
+        "acceptance_revision": 1,
+        "artifact_hashes": {
+          "artifact_oCFxP2dSQr2bLaKOaVAv7lhdM0A7XeOQbkSpTprYY8o": "3f02ac0bef567cb8542fb071e64ef98834890cedbc6b9ae4ae9191f18d8d6057",
+          "checks.py": "a7920c657fa72984342282811deae9aeafeae0e55ee7114218a71ad3a3f0ab96"
+        },
+        "artifacts": [
+          "artifact_oCFxP2dSQr2bLaKOaVAv7lhdM0A7XeOQbkSpTprYY8o"
+        ],
+        "at": "2026-11-13T07:52:04.695415992Z",
+        "candidate": "b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92",
+        "check": "one",
+        "config_hash": "e6308dc9d4ef37ff336b697b9918bdbd0d15c8801f06d38a3b0840f45973a613",
+        "environment": "remote-runner",
+        "executor": "mac-pilot",
+        "inputs": [
+          "checks.py"
+        ],
+        "plan_revision": 2,
+        "reason": "Existing external Agent completed check:one",
+        "result": "pass",
+        "source": "remote-command:mac-pilot"
+      },
+      {
+        "acceptance_revision": 1,
+        "artifact_hashes": {
+          "artifact_0lD0bazkR7O5sTDxkQumbtLhn7qrvjLh-p0NTF4RZ4Y": "772834e72f2a3c46e78e500226a543435245d5866d252b4f161072a22d5d743e",
+          "checks.py": "a7920c657fa72984342282811deae9aeafeae0e55ee7114218a71ad3a3f0ab96"
+        },
+        "artifacts": [
+          "artifact_0lD0bazkR7O5sTDxkQumbtLhn7qrvjLh-p0NTF4RZ4Y"
+        ],
+        "at": "2026-11-13T07:52:37.296573404Z",
+        "candidate": "b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92",
+        "check": "two",
+        "config_hash": "22679907c55ee7f09998bf069773dc6b11f8dc529c6a02b80518bd5077c42329",
+        "environment": "remote-runner",
+        "executor": "mac-pilot",
+        "inputs": [
+          "checks.py"
+        ],
+        "plan_revision": 2,
+        "reason": "Existing external Agent completed check:two",
+        "result": "pass",
+        "source": "remote-command:mac-pilot"
+      },
+      {
+        "acceptance_revision": 1,
+        "artifact_hashes": {
+          "artifact_stgyj2SnlSLSsm5Jom8C1a5A5IHPCUfgNh1H-JT6hlo": "59c2766de929039a2e98fc18322eb2e1f19cda5ca7c537a7c423740c900d8205"
+        },
+        "artifacts": [
+          "artifact_stgyj2SnlSLSsm5Jom8C1a5A5IHPCUfgNh1H-JT6hlo"
+        ],
+        "at": "2026-11-13T07:53:19.523413799Z",
+        "candidate": "b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92",
+        "check": "layout",
+        "comparison": {
+          "actual": {
+            "artifact_id": "artifact_stgyj2SnlSLSsm5Jom8C1a5A5IHPCUfgNh1H-JT6hlo",
+            "candidate": "b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92",
+            "sha256": "59c2766de929039a2e98fc18322eb2e1f19cda5ca7c537a7c423740c900d8205",
+            "source": "external-host Chromium through actual Lucky Dashboard",
+            "uploader": "mac-agent"
+          },
+          "baseline": {
+            "artifact_id": "",
+            "candidate": "",
+            "sha256": "",
+            "source": "",
+            "uploader": ""
+          }
+        },
+        "config_hash": "6b58717b2ce258544e8c1bea20794a676898f7293a6bf81f07b32dfaa505406c",
+        "environment": "human remote review",
+        "executor": "mac-reviewer",
+        "plan_revision": 2,
+        "reason": "Actual external Chromium observation {\"total\": \"8\", \"clipped\": false, \"viewport\": {\"width\": 640, \"height\": 480}}",
+        "result": "pass",
+        "source": "human:mac-reviewer"
+      }
+    ],
+    "evidence_progress": {
+      "at": "2026-11-13T07:53:19.524667571Z",
+      "candidate": "b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92",
+      "check_conclusions": {
+        "layout\u0000b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92\u00006b58717b2ce258544e8c1bea20794a676898f7293a6bf81f07b32dfaa505406c": "fd531d86ae239c960fbcf036258ad4f2f0805c1bdeac51b96fcaa71efdf6bea1",
+        "one\u0000b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92\u0000e6308dc9d4ef37ff336b697b9918bdbd0d15c8801f06d38a3b0840f45973a613": "8b198186a63204795788a748e5c82859eb789c9bb10aa0dc28ab5185dfa85ba4",
+        "two\u0000b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92\u000022679907c55ee7f09998bf069773dc6b11f8dc529c6a02b80518bd5077c42329": "ea64b09963c5bb75043c4818d6624b572391090e869d73a52c3710a07cc6bf0d"
+      },
+      "kind": "check",
+      "summary": "Actual external Chromium observation {\"total\": \"8\", \"clipped\": false, \"viewport\": {\"width\": 640, \"height\": 480}}",
+      "unit": "check:layout"
+    },
+    "failure": "",
+    "feedback": [],
+    "historical": false,
+    "integration": {
+      "candidate": "b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92",
+      "definition_revision": 1,
+      "files": {
+        ".gitignore": {
+          "hash": "5e4b444abf21fe39b9a891cb93801b20f89ed22b50d344fc419a3316e3bcfa63",
+          "mode": 420
+        },
+        "build.py": {
+          "hash": "499f9a7a59400192365c8338f345ff12dcfd32fe98f7e4c7045471d4779cc37e",
+          "mode": 420
+        },
+        "checks.py": {
+          "hash": "a7920c657fa72984342282811deae9aeafeae0e55ee7114218a71ad3a3f0ab96",
+          "mode": 420
+        },
+        "module_one.py": {
+          "hash": "865086861917a3ce68e4f7246cec846fbe6d717cdda1e22917bbbb9cb133a9e4",
+          "mode": 420
+        },
+        "module_two.py": {
+          "hash": "429742c307cb3002da4f9ed9f3604d9c1cb065b05135067f6fa864ac7d25ac34",
+          "mode": 420
+        },
+        "screen.html": {
+          "hash": "02822ce21c663eb023ef696a60288e9f7dc50571779c71d5f4266a4810e5f2c8",
+          "mode": 420
+        },
+        "spec/rules.md": {
+          "hash": "3fdeab2f4569fb7797bcd3743aac30a422288b758c190338c243f5ce548d776c",
+          "mode": 420
+        }
+      },
+      "git_head": "e0b6fccac89f8a6938680cf7d61d69a8f88a8c1f",
+      "impact_unknown": true,
+      "leaves": [
+        {
+          "candidate": "4ec402d73182c94406008944bb842150e08b4068c51924437f10cbcac2e4d4ab",
+          "definition_revision": 1,
+          "id": "oracle-one",
+          "method": "parent_rechecked",
+          "plan_revision": 1,
+          "rechecks": [
+            {
+              "leaf_check": "one",
+              "parent_check": "one"
+            }
+          ]
+        },
+        {
+          "candidate": "b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92",
+          "definition_revision": 1,
+          "id": "oracle-two",
+          "method": "parent_rechecked",
+          "plan_revision": 1,
+          "rechecks": [
+            {
+              "leaf_check": "two",
+              "parent_check": "two"
+            },
+            {
+              "leaf_check": "layout",
+              "parent_check": "layout"
+            }
+          ]
+        }
+      ],
+      "plan_digest": "a9515e624b7da44ebf11c460662738d5d4ac3f8e8b4e6e02c8482bfaaf702385",
+      "plan_revision": 2,
+      "prepared_at": "2026-11-13T07:51:30.296415792Z",
+      "project_id": "v223-pilot",
+      "remote_repository": "oracle-pilot"
+    },
+    "paused": false,
+    "plan": {
+      "approved": false,
+      "preset": "epic",
+      "reason": "aggregate scope and verify integration",
+      "revision": 2,
+      "steps": [
+        "define",
+        "integrate",
+        "verify"
+      ]
+    },
+    "policy_hash": "f81062153a7fd48fe21d6e69db545aa418368c48791cb17e657cea7e0318fe05",
+    "result": "verified",
+    "status": "completed",
+    "updated": "2026-11-13T07:53:19.526059185Z"
+  }
+}

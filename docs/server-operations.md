@@ -60,3 +60,11 @@ restore 的阶段记录绑定原备份 hash。进程中断后用相同备份和�
 恢复完整中央数据，重定位已知服务器 outbox 路径，客户端诊断路径保持原事实。旧运行责任失效，unknown workspace 保护继续。恢复会清除旧浏览器 session 并撤销快照中的项目令牌，管理员重新登录后检查恢复代次、resume，再签发新项目令牌。密码摘要、账号、成员关系、任务/候选/规范/发现/人工结果、历史回执及附件保留。新身份仍可查原幂等回执，旧责任不能据此重新写入。
 
 本机演练入口为 scripts/server_compose_acceptance.py 和 scripts/server_storage_acceptance.py。前者覆盖真实 TLS Compose、任务/图片重启与空卷恢复，后者使用真实旧/新程序并实际杀死迁移和恢复进程。实际平台、镜像 ID、版本和限制写入本项回执。Oracle 与实际业务部署由对应后续授权处理。
+
+## 已有 Lucky 反向代理
+
+已有 Lucky 时，可使用独立 AEL Server 服务，将容器 7332 发布到主机回环地址。V2-23 授权部署实际使用 `127.0.0.1:17332:7332`，Lucky 的上游为 `http://127.0.0.1:17332`，转发根路径并保留访问域名的原始 Host，HTTPS 由已有代理处理。AEL 的 `--origin` 配置为实际完整 HTTPS 地址，Lucky 传递 `X-Forwarded-Proto: https`。
+
+`--trusted-proxy` 只包含实际反代到达 AEL 时的直接来源地址。本次 Lucky 使用 host 网络，经 Docker 回环端口到达容器时来源为该专用网桥网关 `172.31.240.1`，配置为 `/32`。其他部署应先核对实际网络和对端地址。身份、项目授权、Host/Origin、CSRF、私有健康端点和版本保护继续生效。
+
+实际单客户端部署配置与验证结果保存于 `docs/v2-execution/evidence/V2-23/`。本轮用户选择现有 Lucky，AEL Server 使用独立数据卷和备份卷，运维沿用上文的一致备份与空卷恢复入口。

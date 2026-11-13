@@ -1,0 +1,17 @@
+[
+  {
+    "method": "GET",
+    "path": "/api/v1/projects",
+    "status": 403
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/users",
+    "status": 403
+  },
+  {
+    "method": "GET",
+    "path": "/healthz",
+    "status": 403
+  }
+]

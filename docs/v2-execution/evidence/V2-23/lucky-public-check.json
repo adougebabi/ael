@@ -1,0 +1,36 @@
+{
+  "origin": "https://ael.adoumi.site",
+  "system_tls_verified": true,
+  "meta": {
+    "build": "f838a94-e5074a4d4148",
+    "capabilities": [
+      "login",
+      "projects",
+      "project_roles",
+      "revocable_tokens",
+      "remote_tasks",
+      "remote_plans",
+      "operation_receipts",
+      "artifacts",
+      "portable_candidates",
+      "portable_contexts",
+      "remote_runners",
+      "findings",
+      "authority_imports",
+      "remote_integration",
+      "remote_failure_review"
+    ],
+    "cli_output_protocol": 1,
+    "maintenance": {
+      "deadline": null,
+      "epoch": 1,
+      "mode": "active"
+    },
+    "mode": "server",
+    "protocol": 1,
+    "skill_protocol": 1,
+    "version": "0.1.22"
+  },
+  "unauthorized_projects_http": 401,
+  "profile_created": "oracle-public"
+}

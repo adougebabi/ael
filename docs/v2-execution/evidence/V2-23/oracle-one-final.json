@@ -1,0 +1,233 @@
+{
+  "authoritative": true,
+  "blocking_reasons": [],
+  "board": "completed",
+  "cache_saved": true,
+  "current_step": "verify",
+  "definition_revision": 1,
+  "health": {
+    "candidate": "4ec402d73182c94406008944bb842150e08b4068c51924437f10cbcac2e4d4ab",
+    "contact_state": "no_executor",
+    "healthy_long": false,
+    "last_contact": "2026-11-13T07:42:55.407455222Z",
+    "last_progress_at": "2026-11-13T07:43:02.11208707Z",
+    "last_progress_kind": "check",
+    "last_progress_summary": "Existing external Agent completed check:one",
+    "no_progress": false,
+    "threshold_seconds": 1800
+  },
+  "mode": "remote",
+  "next_action": "completed",
+  "observed_at": "2026-11-13T08:10:29.852269Z",
+  "online": true,
+  "plan_revision": 1,
+  "projection_status": "ready",
+  "revision": "083ed92876b022ceda1cd16b145a8b2268579f44fbd022daa383b6a9be76174d",
+  "task": {
+    "applicable_knowledge": [
+      {
+        "id": "source:spec/rules.md",
+        "reason": "scope or explicit reference",
+        "source": "spec/rules.md",
+        "status": "current",
+        "version": "3fdeab2f4569fb7797bcd3743aac30a422288b758c190338c243f5ce548d776c"
+      }
+    ],
+    "approvals": [],
+    "attempts": [
+      {
+        "candidate_version": "03c666cf2004f5f938b49c065a5f79d90e962d4f44e2372897f4f852a3ccb76a",
+        "definition_revision": 1,
+        "ended": "2026-11-13T07:40:23.50387565Z",
+        "executor": "mac-pilot",
+        "fence": 1,
+        "id": "AT-f9976a48fefd1bdef7fd",
+        "input_version": "03c666cf2004f5f938b49c065a5f79d90e962d4f44e2372897f4f852a3ccb76a",
+        "last_contact": "2026-11-13T07:40:17.2595623Z",
+        "lease_until": "2026-11-13T08:10:17.2595623Z",
+        "outputs": [],
+        "pid": 0,
+        "plan_revision": 1,
+        "reason": "Existing external Agent completed define",
+        "session": "",
+        "started": "2026-11-13T07:40:14.061483187Z",
+        "status": "pass",
+        "unit": "define",
+        "workspace": ""
+      },
+      {
+        "candidate_version": "4ec402d73182c94406008944bb842150e08b4068c51924437f10cbcac2e4d4ab",
+        "definition_revision": 1,
+        "ended": "2026-11-13T07:41:29.343519882Z",
+        "executor": "mac-pilot",
+        "fence": 2,
+        "id": "AT-b6b8b5849effb6c00e04",
+        "input_version": "03c666cf2004f5f938b49c065a5f79d90e962d4f44e2372897f4f852a3ccb76a",
+        "last_contact": "2026-11-13T07:41:22.614503095Z",
+        "lease_until": "2026-11-13T08:11:22.614503095Z",
+        "outputs": [
+          "artifact_qKuDYB8PkmjgVIobomLuQ8_2uJo7671lFfYTecvDtkY"
+        ],
+        "pid": 0,
+        "plan_revision": 1,
+        "reason": "Existing external Agent completed execute",
+        "session": "",
+        "started": "2026-11-13T07:41:12.325660797Z",
+        "status": "pass",
+        "unit": "execute",
+        "workspace": ""
+      },
+      {
+        "candidate_version": "4ec402d73182c94406008944bb842150e08b4068c51924437f10cbcac2e4d4ab",
+        "definition_revision": 1,
+        "ended": "2026-11-13T07:43:02.11208707Z",
+        "executor": "mac-pilot",
+        "fence": 3,
+        "id": "AT-f5e2230c84f28bb9527e",
+        "input_version": "4ec402d73182c94406008944bb842150e08b4068c51924437f10cbcac2e4d4ab",
+        "last_contact": "2026-11-13T07:42:55.407455222Z",
+        "lease_until": "2026-11-13T08:12:55.407455222Z",
+        "outputs": [
+          "artifact_O3QioIFiLxsR1Ek4sD62uQm46ou2V9UnAVtQxL7yajI"
+        ],
+        "pid": 0,
+        "plan_revision": 1,
+        "reason": "Existing external Agent completed check:one",
+        "session": "",
+        "started": "2026-11-13T07:41:47.766981083Z",
+        "status": "pass",
+        "unit": "check:one",
+        "workspace": ""
+      }
+    ],
+    "candidate": "4ec402d73182c94406008944bb842150e08b4068c51924437f10cbcac2e4d4ab",
+    "candidate_workspace": "",
+    "completed": "2026-11-13T07:43:02.11211007Z",
+    "confirmation": null,
+    "context_attempt": "AT-f5e2230c84f28bb9527e",
+    "created": "2026-11-13T07:39:54.116894855Z",
+    "current_step": "verify",
+    "definition": {
+      "acceptance": [
+        "module one"
+      ],
+      "checks": [
+        {
+          "artifacts": [
+            "runtime:report.json"
+          ],
+          "command": [
+            "python3",
+            "checks.py",
+            "one"
+          ],
+          "covers": [
+            "module one"
+          ],
+          "id": "one",
+          "kind": "functional",
+          "method": "command",
+          "required": true,
+          "timeout_seconds": 0
+        }
+      ],
+      "definition_revision": 1,
+      "dependencies": null,
+      "environment": "",
+      "feedback_of": "",
+      "goal": "verified",
+      "id": "oracle-one",
+      "knowledge": [
+        "source:spec/rules.md"
+      ],
+      "max_retries": 3,
+      "max_seconds": 0,
+      "non_goals": [
+        "publishing",
+        "business project changes"
+      ],
+      "original_request": "Implement two modules and readable sum UI, then check final integrated candidate.",
+      "parent": "oracle-parent",
+      "preset": "",
+      "priority": 0,
+      "risk": null,
+      "scope": [
+        "module_one.py"
+      ],
+      "source": "",
+      "target": "",
+      "title": "Oracle module one",
+      "type": "bug",
+      "ui": false,
+      "ux": false
+    },
+    "definition_hash": "084e22f95c3c9ee56cebdbdd909b85eac98ea97b02bdf06dab1f0fa1078192f2",
+    "delivery": null,
+    "epic_membership": {
+      "parent": "oracle-parent",
+      "required": true
+    },
+    "evidence": [
+      {
+        "acceptance_revision": 1,
+        "artifact_hashes": {
+          "artifact_O3QioIFiLxsR1Ek4sD62uQm46ou2V9UnAVtQxL7yajI": "d16515f35337e3b1152e2c241968a75e8f8789002ea4de8f4ad966fd8a2977d1",
+          "checks.py": "a7920c657fa72984342282811deae9aeafeae0e55ee7114218a71ad3a3f0ab96"
+        },
+        "artifacts": [
+          "artifact_O3QioIFiLxsR1Ek4sD62uQm46ou2V9UnAVtQxL7yajI"
+        ],
+        "at": "2026-11-13T07:43:02.11208603Z",
+        "candidate": "4ec402d73182c94406008944bb842150e08b4068c51924437f10cbcac2e4d4ab",
+        "check": "one",
+        "config_hash": "065b6a9d307958ce72ff5f48463892f9cf531b0c0fdb2f8cb8282b6988cfdc8a",
+        "environment": "remote-runner",
+        "executor": "mac-pilot",
+        "inputs": [
+          "checks.py"
+        ],
+        "plan_revision": 1,
+        "reason": "Existing external Agent completed check:one",
+        "result": "pass",
+        "source": "remote-command:mac-pilot"
+      }
+    ],
+    "evidence_progress": {
+      "at": "2026-11-13T07:43:02.11208707Z",
+      "candidate": "4ec402d73182c94406008944bb842150e08b4068c51924437f10cbcac2e4d4ab",
+      "check_conclusions": {
+        "one\u00004ec402d73182c94406008944bb842150e08b4068c51924437f10cbcac2e4d4ab\u0000065b6a9d307958ce72ff5f48463892f9cf531b0c0fdb2f8cb8282b6988cfdc8a": "b9e36e21be9a048678147f33eed717c1876789b7669b449bbb4f18eabbf8e4f7"
+      },
+      "kind": "check",
+      "seen_artifacts": {
+        "865086861917a3ce68e4f7246cec846fbe6d717cdda1e22917bbbb9cb133a9e4": true
+      },
+      "summary": "Existing external Agent completed check:one",
+      "unit": "check:one"
+    },
+    "failure": "",
+    "feedback": [],
+    "historical": false,
+    "knowledge_outcome": {
+      "artifacts": null,
+      "reason": "Fixture specification read and retained",
+      "status": "unchanged"
+    },
+    "paused": false,
+    "plan": {
+      "approved": true,
+      "preset": "fast",
+      "reason": "small explicit change",
+      "revision": 1,
+      "steps": [
+        "define",
+        "execute",
+        "verify"
+      ]
+    },
+    "policy_hash": "f81062153a7fd48fe21d6e69db545aa418368c48791cb17e657cea7e0318fe05",
+    "result": "verified",
+    "status": "completed",
+    "updated": "2026-11-13T07:43:02.112291912Z"
+  }
+}

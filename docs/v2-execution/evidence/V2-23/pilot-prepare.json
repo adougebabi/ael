@@ -1,0 +1,492 @@
+{
+  "authoritative": true,
+  "changes": [
+    {
+      "acceptance": [
+        "module one"
+      ],
+      "action": "create",
+      "deliverables": [
+        "module_one.py"
+      ],
+      "dependencies": null,
+      "goal": "verified",
+      "key": "one",
+      "order": 1,
+      "required": true,
+      "scope": [
+        "module_one.py"
+      ],
+      "task_id": "oracle-one",
+      "title": "Oracle module one"
+    },
+    {
+      "acceptance": [
+        "module two",
+        "layout readable"
+      ],
+      "action": "create",
+      "deliverables": [
+        "module_two.py",
+        "screen.html"
+      ],
+      "dependencies": [
+        "oracle-one"
+      ],
+      "goal": "verified",
+      "key": "two",
+      "order": 2,
+      "required": true,
+      "scope": [
+        "module_two.py",
+        "screen.html"
+      ],
+      "task_id": "oracle-two",
+      "title": "Oracle module two"
+    }
+  ],
+  "mode": "remote",
+  "observed_at": "2026-11-13T07:39:55.051864Z",
+  "online": true,
+  "operation_id": "oracle-plan",
+  "parent": "oracle-parent",
+  "plan_id": "oracle-plan",
+  "proposal_hash": "a2944b67feb0ee2efc7087b1d33c4b183424da03f488eb1e08eb4c6e0d6e8d72",
+  "result": {
+    "changes": [
+      {
+        "acceptance": [
+          "module one"
+        ],
+        "action": "create",
+        "deliverables": [
+          "module_one.py"
+        ],
+        "dependencies": null,
+        "goal": "verified",
+        "key": "one",
+        "order": 1,
+        "required": true,
+        "scope": [
+          "module_one.py"
+        ],
+        "task_id": "oracle-one",
+        "title": "Oracle module one"
+      },
+      {
+        "acceptance": [
+          "module two",
+          "layout readable"
+        ],
+        "action": "create",
+        "deliverables": [
+          "module_two.py",
+          "screen.html"
+        ],
+        "dependencies": [
+          "oracle-one"
+        ],
+        "goal": "verified",
+        "key": "two",
+        "order": 2,
+        "required": true,
+        "scope": [
+          "module_two.py",
+          "screen.html"
+        ],
+        "task_id": "oracle-two",
+        "title": "Oracle module two"
+      }
+    ],
+    "parent": "oracle-parent",
+    "plan_id": "oracle-plan",
+    "proposal_hash": "a2944b67feb0ee2efc7087b1d33c4b183424da03f488eb1e08eb4c6e0d6e8d72",
+    "status": "applied"
+  },
+  "revision": "bda1ae8f0f2c2798c0ad3ee5ef5a863199f2b0c44dddb89269802b7553b6fbec",
+  "status": "applied",
+  "task": {
+    "applicable_knowledge": null,
+    "approvals": [],
+    "attempts": [],
+    "candidate": "",
+    "candidate_workspace": "",
+    "completed": null,
+    "confirmation": null,
+    "created": "2026-11-13T07:38:58.471408464Z",
+    "current_step": "define",
+    "definition": {
+      "acceptance": [
+        "module one",
+        "module two",
+        "layout readable"
+      ],
+      "checks": [
+        {
+          "affected_tasks": [
+            "oracle-one"
+          ],
+          "artifacts": [
+            "runtime:report.json"
+          ],
+          "command": [
+            "python3",
+            "checks.py",
+            "one"
+          ],
+          "covers": [
+            "module one"
+          ],
+          "id": "one",
+          "kind": "functional",
+          "method": "command",
+          "required": true,
+          "timeout_seconds": 0
+        },
+        {
+          "affected_tasks": [
+            "oracle-two"
+          ],
+          "artifacts": [
+            "runtime:report.json"
+          ],
+          "command": [
+            "python3",
+            "checks.py",
+            "two"
+          ],
+          "covers": [
+            "module two"
+          ],
+          "id": "two",
+          "kind": "functional",
+          "method": "command",
+          "required": true,
+          "timeout_seconds": 0
+        },
+        {
+          "affected_tasks": [
+            "oracle-two"
+          ],
+          "artifacts": null,
+          "command": null,
+          "covers": [
+            "layout readable"
+          ],
+          "id": "layout",
+          "kind": "ui",
+          "method": "human",
+          "required": true,
+          "timeout_seconds": 0
+        }
+      ],
+      "definition_revision": 1,
+      "dependencies": null,
+      "environment": "",
+      "feedback_of": "",
+      "goal": "verified",
+      "id": "oracle-parent",
+      "knowledge": [
+        "source:spec/rules.md"
+      ],
+      "max_retries": 3,
+      "max_seconds": 0,
+      "non_goals": null,
+      "parent": "",
+      "preset": "",
+      "priority": 0,
+      "risk": null,
+      "scope": [
+        "module_one.py",
+        "module_two.py",
+        "screen.html"
+      ],
+      "source": "",
+      "target": "",
+      "title": "Oracle real Agent pilot",
+      "type": "epic",
+      "ui": false,
+      "ux": false
+    },
+    "definition_hash": "69fb0e809967836d10dff0affe111bf8f886b96e61f868fc5434ba3cb1b0edf0",
+    "delivery": null,
+    "epic_plan": {
+      "changes": [
+        {
+          "acceptance": [
+            "module one"
+          ],
+          "action": "create",
+          "deliverables": [
+            "module_one.py"
+          ],
+          "dependencies": null,
+          "goal": "verified",
+          "key": "one",
+          "order": 1,
+          "required": true,
+          "scope": [
+            "module_one.py"
+          ],
+          "task_id": "oracle-one",
+          "title": "Oracle module one"
+        },
+        {
+          "acceptance": [
+            "module two",
+            "layout readable"
+          ],
+          "action": "create",
+          "deliverables": [
+            "module_two.py",
+            "screen.html"
+          ],
+          "dependencies": [
+            "oracle-one"
+          ],
+          "goal": "verified",
+          "key": "two",
+          "order": 2,
+          "required": true,
+          "scope": [
+            "module_two.py",
+            "screen.html"
+          ],
+          "task_id": "oracle-two",
+          "title": "Oracle module two"
+        }
+      ],
+      "digest": "a9515e624b7da44ebf11c460662738d5d4ac3f8e8b4e6e02c8482bfaaf702385",
+      "proposal": {
+        "coverage": [
+          {
+            "acceptance": "module one",
+            "integration": "Rerun exact command on final parent",
+            "leaves": [
+              "one"
+            ]
+          },
+          {
+            "acceptance": "module two",
+            "integration": "Rerun exact command on final parent",
+            "leaves": [
+              "two"
+            ]
+          },
+          {
+            "acceptance": "layout readable",
+            "integration": "Review final candidate image",
+            "leaves": [
+              "two"
+            ]
+          }
+        ],
+        "id": "oracle-plan",
+        "input_hash": "247a0d7db1e552f4363ca1c7c95da1ac011ad333c044765e5500cf7479869d6b",
+        "leaves": [
+          {
+            "basis": [
+              "spec/rules.md"
+            ],
+            "capabilities": [
+              "development"
+            ],
+            "definition": {
+              "acceptance": [
+                "module one"
+              ],
+              "checks": [
+                {
+                  "artifacts": [
+                    "runtime:report.json"
+                  ],
+                  "command": [
+                    "python3",
+                    "checks.py",
+                    "one"
+                  ],
+                  "covers": [
+                    "module one"
+                  ],
+                  "id": "one",
+                  "kind": "functional",
+                  "method": "command",
+                  "required": true,
+                  "timeout_seconds": 0
+                }
+              ],
+              "definition_revision": 0,
+              "dependencies": null,
+              "environment": "",
+              "feedback_of": "",
+              "goal": "verified",
+              "id": "oracle-one",
+              "knowledge": [
+                "source:spec/rules.md"
+              ],
+              "max_retries": 0,
+              "max_seconds": 0,
+              "non_goals": [
+                "publishing",
+                "business project changes"
+              ],
+              "parent": "",
+              "preset": "",
+              "priority": 0,
+              "risk": null,
+              "scope": [
+                "module_one.py"
+              ],
+              "source": "",
+              "target": "",
+              "title": "Oracle module one",
+              "type": "bug",
+              "ui": false,
+              "ux": false
+            },
+            "deliverables": [
+              "module_one.py"
+            ],
+            "depends_on": null,
+            "key": "one",
+            "milestone": "",
+            "order": 1,
+            "required": true,
+            "source_ids": [
+              "one"
+            ]
+          },
+          {
+            "basis": [
+              "spec/rules.md"
+            ],
+            "capabilities": [
+              "development"
+            ],
+            "definition": {
+              "acceptance": [
+                "module two",
+                "layout readable"
+              ],
+              "checks": [
+                {
+                  "artifacts": [
+                    "runtime:report.json"
+                  ],
+                  "command": [
+                    "python3",
+                    "checks.py",
+                    "two"
+                  ],
+                  "covers": [
+                    "module two"
+                  ],
+                  "id": "two",
+                  "kind": "functional",
+                  "method": "command",
+                  "required": true,
+                  "timeout_seconds": 0
+                },
+                {
+                  "artifacts": null,
+                  "command": null,
+                  "covers": [
+                    "layout readable"
+                  ],
+                  "id": "layout",
+                  "kind": "ui",
+                  "method": "human",
+                  "required": true,
+                  "timeout_seconds": 0
+                }
+              ],
+              "definition_revision": 0,
+              "dependencies": [
+                "oracle-one"
+              ],
+              "environment": "",
+              "feedback_of": "",
+              "goal": "verified",
+              "id": "oracle-two",
+              "knowledge": [
+                "source:spec/rules.md"
+              ],
+              "max_retries": 0,
+              "max_seconds": 0,
+              "non_goals": [
+                "publishing",
+                "business project changes"
+              ],
+              "parent": "",
+              "preset": "",
+              "priority": 0,
+              "risk": null,
+              "scope": [
+                "module_two.py",
+                "screen.html"
+              ],
+              "source": "",
+              "target": "",
+              "title": "Oracle module two",
+              "type": "bug",
+              "ui": true,
+              "ux": false
+            },
+            "deliverables": [
+              "module_two.py",
+              "screen.html"
+            ],
+            "depends_on": null,
+            "key": "two",
+            "milestone": "",
+            "order": 2,
+            "required": true,
+            "source_ids": [
+              "two"
+            ]
+          }
+        ],
+        "parent": "oracle-parent",
+        "parent_revision": 1,
+        "request": "Implement two modules and readable sum UI, then check final integrated candidate.",
+        "user_items": [
+          {
+            "description": "Implement module one",
+            "existing_task_id": "",
+            "id": "one"
+          },
+          {
+            "description": "Implement module two",
+            "existing_task_id": "",
+            "id": "two"
+          }
+        ],
+        "version": 1
+      },
+      "proposal_hash": "a2944b67feb0ee2efc7087b1d33c4b183424da03f488eb1e08eb4c6e0d6e8d72",
+      "task_ids": {
+        "one": "oracle-one",
+        "two": "oracle-two"
+      }
+    },
+    "evidence": [],
+    "failure": "",
+    "feedback": [],
+    "historical": false,
+    "paused": false,
+    "plan": {
+      "approved": false,
+      "preset": "epic",
+      "reason": "aggregate scope and verify integration",
+      "revision": 1,
+      "steps": [
+        "define",
+        "integrate"
+      ]
+    },
+    "policy_hash": "f81062153a7fd48fe21d6e69db545aa418368c48791cb17e657cea7e0318fe05",
+    "result": "",
+    "status": "open",
+    "updated": "2026-11-13T07:39:54.149442988Z"
+  }
+}
