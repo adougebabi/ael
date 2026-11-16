@@ -206,3 +206,7 @@ OPT-00 DONE，OPT-01 DONE，OPT-02 DONE，OPT-03 DONE，OPT-04 DONE，OPT-05 DON
 - main自动构建已实际触发，run43812202292，https://github.com/adougebabi/ael/actions/runs/43812202292。当前唯一动作跟进该构建；通过后创建v0.1.28指向同提交并推送，让标签自动调度main上的正式发布。尚未创建tag，避免为失败构建产生发行标签。
 
 - main首轮run43812202292已执行到签名工具安装，旧cosign-installer@v3请求Cosign3.1.4已取消的detached .sig，HTTP404导致失败。已读取官方v4.1.3实际action配置并改为该确定版本，支持.sigstore.json，保留Cosign3.1.4与完整验证链。下一动作推送CI修复并跟进新的main构建，尚未创建发行tag。
+
+- CI安装修复已推送commit dc7263c87e14af561ad3b54514e4b12e819c476e。新main run43812597842已通过Cosign安装并进入Test and build all packages。当前继续跟进该run，完成后先检查manifest clean状态，再推送v0.1.28。
+
+- 第二轮main run43812597842已通过Cosign安装、全Go与前端构建，在package.sh版本探针失败，明确原因为runner未安装rg。版本探针改为既有Python3读取JSON并精确比较，去除非必要rg依赖，执行本地完整打包回归后推送继续。尚未创建tag。

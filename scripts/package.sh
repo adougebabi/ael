@@ -17,7 +17,12 @@ for target in darwin-arm64 darwin-amd64 linux-amd64 linux-arm64; do
  printf '%s %s ael-%s\n' "$target" "$digest" "$target" >> dist/ael-toolchain.lock
 done
 native_platform="$(go env GOOS)-$(go env GOARCH)"
-"./dist/ael-$native_platform" version --json | rg -q "\"version\":\"$version\"" || { echo 'Binary/lock version mismatch' >&2; exit 1; }
+binary_version=$("./dist/ael-$native_platform" version --json | python3 -c '
+import json
+import sys
+print(json.load(sys.stdin)["version"])
+')
+[ "$binary_version" = "$version" ] || { echo 'Binary/lock version mismatch' >&2; exit 1; }
 cp THIRD_PARTY_NOTICES.txt dist/THIRD_PARTY_NOTICES.txt
 digest=$(shasum -a 256 dist/THIRD_PARTY_NOTICES.txt | awk '{print $1}')
 printf 'notice %s THIRD_PARTY_NOTICES.txt\n' "$digest" >> dist/ael-toolchain.lock
