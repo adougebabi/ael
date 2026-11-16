@@ -201,3 +201,8 @@ OPT-00 DONE，OPT-01 DONE，OPT-02 DONE，OPT-03 DONE，OPT-04 DONE，OPT-05 DON
 - 独立复核发现普通构建会挤掉pending发行，已分离普通构建、各tag调度、各版本发布并发组，避免相互替换。actionlint和发行脚本6场景回归进行中，全Go回归进行中。
 - 本地0.1.27已安装为unpublished，正式CI字节不同，按既有版本缓存不可变要求递增0.1.28作为首个正式在线版本。Oracle0.1.26和实际项目客户端0.1.27继续现有兼容状态。
 - 下一动作是完成本地检查，提交并推送完整0.1.28源码及发行workflow，先跟进main构建，再创建并推送匹配tag，跟进正式release并验证签名、平台资产与真实发行源可用性。
+
+- 正式发布源码已提交并推送main，commit ecc9ef0b73a0833658f06fa74db0135a9b43968f，版本0.1.28。包含187个源码/受管资源/文字回执文件；8张验收截图保留本地。提交前归一化了文字回执副本行尾空白，原现场日志仍保留/tmp。全Go与发行6场景回归、actionlint通过。
+- main自动构建已实际触发，run43812202292，https://github.com/adougebabi/ael/actions/runs/43812202292。当前唯一动作跟进该构建；通过后创建v0.1.28指向同提交并推送，让标签自动调度main上的正式发布。尚未创建tag，避免为失败构建产生发行标签。
+
+- main首轮run43812202292已执行到签名工具安装，旧cosign-installer@v3请求Cosign3.1.4已取消的detached .sig，HTTP404导致失败。已读取官方v4.1.3实际action配置并改为该确定版本，支持.sigstore.json，保留Cosign3.1.4与完整验证链。下一动作推送CI修复并跟进新的main构建，尚未创建发行tag。
