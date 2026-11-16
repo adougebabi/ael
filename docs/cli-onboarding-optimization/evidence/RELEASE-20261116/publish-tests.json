@@ -1,0 +1,121 @@
+{
+  "status": "passed",
+  "offline_gh_fixture": true,
+  "real_release_access": false,
+  "cases": [
+    {
+      "case": "create draft",
+      "passed": true,
+      "commands": [
+        [
+          "api",
+          "repos/fixture/unused/commits/v1.2.3-rc.1"
+        ],
+        [
+          "api",
+          "repos/fixture/unused/releases?per_page=100&page=1"
+        ],
+        [
+          "release",
+          "create",
+          "v1.2.3-rc.1",
+          "/private/var/folders/gv/hlfcpzxj63b3813yxlrkqv6r0000gn/T/ael-publish-fixture-q07d7avr/manifest.json",
+          "/private/var/folders/gv/hlfcpzxj63b3813yxlrkqv6r0000gn/T/ael-publish-fixture-q07d7avr/manifest.sigstore.json",
+          "/private/var/folders/gv/hlfcpzxj63b3813yxlrkqv6r0000gn/T/ael-publish-fixture-q07d7avr/client.tar.gz",
+          "--verify-tag",
+          "--title",
+          "AEL 1.2.3-rc.1",
+          "--notes",
+          "Independent clients, Server and protocol resources. Verify the signed manifest using your pinned publisher policy.",
+          "--prerelease=true",
+          "--latest=false",
+          "--draft"
+        ]
+      ]
+    },
+    {
+      "case": "promote rebuilt signed draft",
+      "passed": true,
+      "commands": [
+        [
+          "api",
+          "repos/fixture/unused/commits/v1.2.3-rc.1"
+        ],
+        [
+          "api",
+          "repos/fixture/unused/releases?per_page=100&page=1"
+        ],
+        [
+          "release",
+          "upload",
+          "v1.2.3-rc.1",
+          "/private/var/folders/gv/hlfcpzxj63b3813yxlrkqv6r0000gn/T/ael-publish-fixture-q07d7avr/manifest.json",
+          "/private/var/folders/gv/hlfcpzxj63b3813yxlrkqv6r0000gn/T/ael-publish-fixture-q07d7avr/manifest.sigstore.json",
+          "/private/var/folders/gv/hlfcpzxj63b3813yxlrkqv6r0000gn/T/ael-publish-fixture-q07d7avr/client.tar.gz",
+          "--clobber"
+        ],
+        [
+          "release",
+          "edit",
+          "v1.2.3-rc.1",
+          "--verify-tag",
+          "--draft=false",
+          "--prerelease=true",
+          "--latest=false"
+        ]
+      ]
+    },
+    {
+      "case": "published immutable",
+      "passed": true,
+      "commands": [
+        [
+          "api",
+          "repos/fixture/unused/commits/v1.2.3-rc.1"
+        ],
+        [
+          "api",
+          "repos/fixture/unused/releases?per_page=100&page=1"
+        ]
+      ]
+    },
+    {
+      "case": "wrong target commit",
+      "passed": true,
+      "commands": [
+        [
+          "api",
+          "repos/fixture/unused/commits/v1.2.3-rc.1"
+        ]
+      ]
+    },
+    {
+      "case": "failed upload stays draft",
+      "passed": true,
+      "commands": [
+        [
+          "api",
+          "repos/fixture/unused/commits/v1.2.3-rc.1"
+        ],
+        [
+          "api",
+          "repos/fixture/unused/releases?per_page=100&page=1"
+        ],
+        [
+          "release",
+          "upload",
+          "v1.2.3-rc.1",
+          "/private/var/folders/gv/hlfcpzxj63b3813yxlrkqv6r0000gn/T/ael-publish-fixture-q07d7avr/manifest.json",
+          "/private/var/folders/gv/hlfcpzxj63b3813yxlrkqv6r0000gn/T/ael-publish-fixture-q07d7avr/manifest.sigstore.json",
+          "/private/var/folders/gv/hlfcpzxj63b3813yxlrkqv6r0000gn/T/ael-publish-fixture-q07d7avr/client.tar.gz",
+          "--clobber"
+        ]
+      ]
+    },
+    {
+      "case": "changed asset rejected",
+      "passed": true,
+      "commands": []
+    }
+  ]
+}

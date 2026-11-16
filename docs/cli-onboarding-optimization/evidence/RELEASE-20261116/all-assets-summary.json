@@ -1,0 +1,16 @@
+{
+  "result": "PASS",
+  "payload_assets": 10,
+  "metadata_assets": 2,
+  "signed_identity": "https://github.com/adougebabi/ael/.github/workflows/release.yml@refs/heads/main",
+  "all_sizes_and_sha256_verified": true,
+  "platforms": [
+    "darwin-arm64",
+    "darwin-amd64",
+    "linux-amd64",
+    "linux-arm64"
+  ],
+  "physical_execution_verified": [
+    "darwin-arm64"
+  ]
+}

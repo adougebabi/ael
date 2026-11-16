@@ -82,7 +82,7 @@ ael release download --source /absolute/path/source.json --kind client --platfor
 
 构建 job 仅有 contents read 及签名所需 id-token write，只有选择发行操作的 publish job 有 contents write。CI 执行 Go 测试、相同本地打包脚本、双架构 Server 镜像导出，再以 Cosign keyless 签署最终 manifest 并验证当前 workflow identity。构建、草稿、公开状态写入清单。草稿的 manifest 不被在线正式下载入口接受。公开发布前须以 `released` 状态重新构建和签名，由有权人员审阅具体 tag、commit、工作流身份及产物。
 
-本轮只验证本地等价构建和工作流配置，未 dispatch 工作流、改真实 Release、push、tag 或部署 Oracle。当前没有产品默认在线发行 URL，必须使用真实已核实的显式来源。
+2026-11-16 已按用户授权实测 main 构建、版本标签自动调度与 main 正式发布，首个正式在线版为 v0.1.28。固定身份签名、实际客户端下载及升级预检通过，回执见 docs/cli-onboarding-optimization/evidence/RELEASE-20261116。客户端通过显式 packaging/client-source.github.json 选择该可信来源，Cosign 验证器须在本机可调用。
 
 签名和 Actions 的配置依据来自官方文档。[Cosign](https://github.com/sigstore/cosign/blob/v3.1.4/doc/cosign_verify-blob.md) · [GitHub workflow syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax)
 

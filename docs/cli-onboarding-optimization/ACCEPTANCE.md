@@ -90,3 +90,15 @@
 迁移曾使用Oracle同机有限loopback桥接，复用原CLI与现有可信反代头及项目token鉴权，减少千余对象绕行公网。命令结束后退出并清除临时凭据，正式Mac profile始终使用原HTTPS地址。生产项目图片仅用于仓库外浏览器验收。
 
 完整回执与适用源码hash位于evidence/ONLINE-20261116。正式公开在线发行仍无默认可用版本，Claude完整登录调用按用户要求暂缓，宿主Hook信任仍待用户在宿主审阅。
+
+## 2026-11-16 正式在线发行
+
+用户授权处理GitHub发布。产品源码已提交并推送，正式版本采用0.1.28，为已安装的本地0.1.27构建保留独立版本标识。
+
+main构建43813390505、标签调度43814091823与正式发行43814104078均成功。发布流程实际修复了旧Cosign installer对已取消.sig文件的依赖，以及新runner缺少rg造成的打包探针失败。独立复核补齐了构建与正式发行并发队列隔离。
+
+正式Release为https://github.com/adougebabi/ael/releases/tag/v0.1.28，源码a176ada242ca574cd93aed9f34e6fbd2059718f8，build a176ada-42b8537d40ba。12个文件包含4平台客户端、2平台Server包、2平台Server镜像、Skill、完整离线包、manifest和Sigstore bundle。
+
+真实发行源已通过Cosign固定main身份独立验签，实际下载macOS arm64包、核对压缩包与包内可执行文件hash，并执行正式客户端version确认。真实签名升级源对现有0.1.27安装到0.1.28的dry-run成功。本项验证涉及发布与更新路径，实际运行中的Oracle为0.1.26、项目共享CLI为0.1.27。
+
+当前main push自动构建artifact，版本tag push自动调度main正式发布，workflow_dispatch手动选择继续可用。完整回执在evidence/RELEASE-20261116。

@@ -2,7 +2,7 @@
 
 ## 当前检查点
 
-- OPT-00 至 OPT-05、部署与Online迁移已完成。当前唯一任务为用户明确授权的GitHub提交、发行流程修复与正式发布。
+- OPT-00 至 OPT-05、部署、Online迁移及用户授权的GitHub正式发行已完成。v0.1.28已公开并通过独立签名与下载验证，当前任务 DONE。
 - 分支为 main，基线为 259cd8139c4bedac1ab8d91c6b6466bc536ec79d，全部修改保留在工作区。
 - 当前客户端/入口0.1.27 / 259cd81-536b3a1781e8，Oracle Server/Dashboard0.1.26 / 259cd81-b393c60af771，协议兼容。publication为local_unpublished，既往版本证据保留。
 - 最终包初始化、恢复、签名并发升级、手动升级/回退、Remote 协作、Local T01 至 T12、内嵌 Dashboard 两项真实浏览器及全 Go 回归全部通过。适用源码 hash 与回执位于 evidence/OPT-05。
@@ -210,3 +210,16 @@ OPT-00 DONE，OPT-01 DONE，OPT-02 DONE，OPT-03 DONE，OPT-04 DONE，OPT-05 DON
 - CI安装修复已推送commit dc7263c87e14af561ad3b54514e4b12e819c476e。新main run43812597842已通过Cosign安装并进入Test and build all packages。当前继续跟进该run，完成后先检查manifest clean状态，再推送v0.1.28。
 
 - 第二轮main run43812597842已通过Cosign安装、全Go与前端构建，在package.sh版本探针失败，明确原因为runner未安装rg。版本探针改为既有Python3读取JSON并精确比较，去除非必要rg依赖，执行本地完整打包回归后推送继续。尚未创建tag。
+
+- 打包探针修复本地完整package.sh PASS后推送commit a176ada242ca574cd93aed9f34e6fbd2059718f8。当前main CI run43813390505（https://github.com/adougebabi/ael/actions/runs/43813390505）正在运行，仍未创建tag。main通过且manifest dirty=false后，将v0.1.28指向此已验证提交，再SSH推送tag；标签workflow自动以actions:write调度main workflow_dispatch publication=released+release_tag。
+- 临时官方Cosign3.1.4位于/tmp/ael-release-20261116/verifier/cosign，SHA9f9b8cd557cf2e5b3df3373a00baa005a86b02391e3e06dd0ce37b3a1533d3a4匹配官方installer@v4.1.3固定值。正式发布后使用PATH前置该临时目录，通过packaging/client-source.github.json实际release check/download验证签名与平台包。无本机GH_TOKEN/gh登录，GitHub读日志用connector fetch_workflow_job_logs参数repo_full_name+job_id，实际文本在structuredContent.content；公开API可读runs/jobs/releases，SSH已认证adougebabi可推送。
+
+- main run43813390505 SUCCESS，最终manifest version0.1.28/build a176ada-42b8537d40ba/commit a176ada242ca574cd93aed9f34e6fbd2059718f8/dirty=false/publication=build_artifact，10个平台资产含双Server镜像，Cosign写bundle并Verified OK。已创建并推送annotated tag v0.1.28指向同一提交，下一唯一动作跟进tag调度与main正式发行，之后在线签名/下载验收。
+
+- v0.1.28标签推送实际触发run43814091823 SUCCESS，仓库令牌自动调度main正式发行run43814104078，event=workflow_dispatch/ref=main/sha=a176ada242ca574cd93aed9f34e6fbd2059718f8，正在执行。自动触发链已实证。下一动作仅跟进该发行运行到公开Release可下载并独立签名验证，不要重复推标签或创建第二份发行。
+
+- GitHub正式发布DONE。main43813390505、tag调度43814091823、main正式发行43814104078全部SUCCESS。v0.1.28公开于https://github.com/adougebabi/ael/releases/tag/v0.1.28，12个可下载文件，含10个payload资产与manifest/签名。源码a176ada242ca574cd93aed9f34e6fbd2059718f8，build a176ada-42b8537d40ba，dirty=false/publication=released。
+- 临时官方Cosign3.1.4按固定main身份验证真实Github源，release check available/publisher_identity verified，下载macOS arm64正式包SHA bbb8c75e4c1bb8d82ae46bd8997ca962b1a9b99fea8172479b3d00438f5167c0核对，包内ael hash再核对，实际执行version=0.1.28与正式build一致。真实签名源对现有共享安装0.1.27→0.1.28升级dry-run成功。没有安装这份新客户端到业务安装或修改Oracle运行版本。
+- 发行方式已实证为main push自动构建，推送匹配v* tag自动以仓库令牌调度受信main发布，手动入口保留。签名信任身份和已公开版本不可覆盖保护保持一致。验收文字回执与签名清单元数据位于evidence/RELEASE-20261116，截图仍保留本地。
+
+- 最后独立下载并核对全部10个payload资产与原始manifest/bundle，逐项size/SHA匹配，正式客户端release verify全包PASS。已将dist/release及dist下对应0.1.28离线分发替换为经过验签的正式GitHub字节，避免同版本本地build_artifact与正式包混用。最终发布回执将提交并推送；随后只跟进该文档提交的自动main构建。
