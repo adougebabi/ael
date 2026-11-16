@@ -1,7 +1,9 @@
 FROM scratch
 ARG VERSION
 ARG COMMIT
-LABEL org.opencontainers.image.title="AEL Server" \
+ARG SOURCE=https://github.com/adougebabi/ael
+LABEL org.opencontainers.image.source=$SOURCE \
+      org.opencontainers.image.title="AEL Server" \
       org.opencontainers.image.version=$VERSION \
       org.opencontainers.image.revision=$COMMIT
 COPY --chown=65532:65532 ael /ael

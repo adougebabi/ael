@@ -37,7 +37,7 @@ with tempfile.TemporaryDirectory(prefix='.ael-server-image-', dir=path.parent) a
     (stage / 'ael').chmod(0o755)
     (stage / 'data').mkdir(mode=0o700)
     shutil.copyfile(repo / 'packaging/server.Dockerfile', stage / 'Dockerfile')
-    subprocess.run(['docker', 'build', '--platform', args.platform.replace('-', '/'), '--build-arg', 'VERSION=' + manifest['version'], '--build-arg', 'COMMIT=' + manifest['commit'], '-t', args.tag, str(stage)], check=True)
+    subprocess.run(['docker', 'build', '--platform', args.platform.replace('-', '/'), '--build-arg', 'VERSION=' + manifest['version'], '--build-arg', 'COMMIT=' + manifest['commit'], '--build-arg', 'SOURCE=https://github.com/' + os.environ.get('GITHUB_REPOSITORY', 'adougebabi/ael'), '-t', args.tag, str(stage)], check=True)
     name = 'ael-server-image-' + manifest['version'] + '-' + args.platform + '.tar.gz'
     destination = path.parent / name
     temporary = stage / name

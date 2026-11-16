@@ -27,10 +27,16 @@ type MaintenanceState struct {
 }
 
 type maintenanceInput struct {
-	Action     string     `json:"action"`
-	Reason     string     `json:"reason"`
-	Deadline   *time.Time `json:"deadline,omitempty"`
-	RequestKey string     `json:"request_key"`
+	Action        string     `json:"action"`
+	Reason        string     `json:"reason"`
+	Deadline      *time.Time `json:"deadline,omitempty"`
+	RequestKey    string     `json:"request_key"`
+	ExpectedState string     `json:"expected_state,omitempty"`
+}
+
+func (state MaintenanceState) revision() string {
+	body, _ := json.Marshal(state)
+	return store.Hash(body)
 }
 
 func (s *Standalone) Maintenance() (MaintenanceState, error) {
@@ -66,6 +72,9 @@ func (s *Standalone) changeMaintenance(principal standalonePrincipal, input main
 	if !principal.Admin || !standaloneID.MatchString(input.RequestKey) || strings.TrimSpace(input.Reason) == "" || len(input.Reason) > 1000 {
 		return nil, errors.New("MAINTENANCE_INVALID")
 	}
+	if input.ExpectedState != "" && !artifactDigest.MatchString(input.ExpectedState) {
+		return nil, errors.New("MAINTENANCE_INVALID")
+	}
 	if input.Action != "drain" && input.Action != "quiesce" && input.Action != "resume" {
 		return nil, errors.New("MAINTENANCE_INVALID")
 	}
@@ -86,7 +95,7 @@ func (s *Standalone) changeMaintenance(principal standalonePrincipal, input main
 			return nil, errors.New("IDEMPOTENCY_CONFLICT")
 		}
 		current, err := s.Maintenance()
-		return map[string]any{"state": receipt.State, "current": current, "replayed": true}, err
+		return map[string]any{"state": receipt.State, "current": current, "current_revision": current.revision(), "replayed": true}, err
 	}
 	if err != sql.ErrNoRows {
 		return nil, err
@@ -97,6 +106,10 @@ func (s *Standalone) changeMaintenance(principal standalonePrincipal, input main
 	}
 	if state.Mode == "quiescing" && (input.Action != "quiesce" || state.Operation != input.RequestKey || state.InputHash != hash) {
 		return nil, errors.New("MAINTENANCE_RECOVERY_REQUIRED")
+	}
+	// A matching interrupted quiesce retains its original conditional input.
+	if state.Mode != "quiescing" && input.ExpectedState != "" && input.ExpectedState != state.revision() {
+		return nil, errors.New("MAINTENANCE_STATE_CONFLICT")
 	}
 	now := time.Now().UTC()
 	switch input.Action {
@@ -147,7 +160,7 @@ func (s *Standalone) changeMaintenance(principal standalonePrincipal, input main
 	}); err != nil {
 		return nil, err
 	}
-	return map[string]any{"state": state, "current": state, "replayed": false}, nil
+	return map[string]any{"state": state, "current": state, "current_revision": state.revision(), "replayed": false}, nil
 }
 
 func (s *Standalone) interruptMaintenanceResponsibilities(actor, reason string, epoch int) (int, error) {
@@ -232,7 +245,10 @@ func (h *standaloneHandler) maintenanceAPI(w http.ResponseWriter, r *http.Reques
 			standaloneFail(w, 500, "SERVER_ERROR")
 			return
 		}
-		standaloneReply(w, 200, state)
+		standaloneReply(w, 200, struct {
+			MaintenanceState
+			Revision string `json:"revision"`
+		}{state, state.revision()})
 		return
 	}
 	if r.Method != http.MethodPost {

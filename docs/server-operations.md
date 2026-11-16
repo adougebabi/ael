@@ -68,3 +68,24 @@ restore 的阶段记录绑定原备份 hash。进程中断后用相同备份和�
 `--trusted-proxy` 只包含实际反代到达 AEL 时的直接来源地址。本次 Lucky 使用 host 网络，经 Docker 回环端口到达容器时来源为该专用网桥网关 `172.31.240.1`，配置为 `/32`。其他部署应先核对实际网络和对端地址。身份、项目授权、Host/Origin、CSRF、私有健康端点和版本保护继续生效。
 
 实际单客户端部署配置与验证结果保存于 `docs/v2-execution/evidence/V2-23/`。本轮用户选择现有 Lucky，AEL Server 使用独立数据卷和备份卷，运维沿用上文的一致备份与空卷恢复入口。
+
+## 注册表镜像与定期更新
+
+正式版本镜像发布到 `ghcr.io/adougebabi/ael-server:<version>`，包含 Linux amd64 与 arm64，版本索引使用受信 main 工作流的 Cosign 身份签名。正式稳定发行完成后，串行晋级任务将 `latest` 指向最高已发布稳定版本。GitHub Release 保留镜像归档，并附 `server-registry.json` 供定位版本与 digest。
+
+Oracle 使用 `scripts/server_update.py` 的有限检查命令，由 `packaging/systemd/ael-server-update.timer` 每小时触发一次。配置路径为 `/opt/ael-v2/server-update.json`，管理员密码单独保存在 root 私有文件。CLI、验证器和固定信任源在该机器持久保存。
+
+每次检查先验证正式发行清单与镜像签名，再按已验证 digest 拉取。维护请求携带状态摘要前置条件，更新器在内存中复用同一管理员HTTPS会话。运行中存在有效责任时记录延期。空闲时先 drain 并重查责任，再 quiesce、创建及校验一致备份、更新固定镜像引用、验证私有健康与公开版本，最后 resume。候选存储格式不同会记录待迁移。新镜像失败则回退记录中的旧镜像 ID，pending journal 记录精确维护请求并支持进程中断恢复。
+
+旧版本首次接入可由管理员在已协调的维护窗口运行同一命令并加 `--bootstrap-legacy`，之后定时入口使用条件维护转换。
+
+状态保存在 `/opt/ael-v2/updates/status.json`，未完成过程在同目录的 `pending.json`。运维入口如下。
+
+```sh
+systemctl status ael-server-update.timer
+journalctl -u ael-server-update.service
+systemctl start ael-server-update.service
+systemctl disable --now ael-server-update.timer
+```
+
+GHCR 首次发布的 package 默认为 private。为使 Oracle 匿名拉取，在 GitHub 个人账户的 Packages → ael-server → Package settings → Change visibility 选择 Public。后续版本沿用该设置。原 Local 客户端继续通过机器级更新策略在新工作会话和领取前检查发行。

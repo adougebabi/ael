@@ -1,0 +1,15 @@
+[Unit]
+Description=Check and safely update the AEL Server image
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+Type=oneshot
+UMask=0077
+ExecStart=/usr/bin/python3 /opt/ael-v2/server_update.py --config /opt/ael-v2/server-update.json
+TimeoutStartSec=900
+Restart=on-failure
+RestartSec=30s

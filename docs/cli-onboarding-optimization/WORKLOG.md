@@ -2,7 +2,7 @@
 
 ## 当前检查点
 
-- OPT-00 至 OPT-05、部署、Online迁移及用户授权的GitHub正式发行已完成。v0.1.28已公开并通过独立签名与下载验证，当前任务 DONE。
+- 既有实施、Online迁移及v0.1.28正式发行已完成。当前唯一任务为用户要求的GHCR镜像发布、Oracle定期安全更新与CLI自动更新实际接通。
 - 分支为 main，基线为 259cd8139c4bedac1ab8d91c6b6466bc536ec79d，全部修改保留在工作区。
 - 当前客户端/入口0.1.27 / 259cd81-536b3a1781e8，Oracle Server/Dashboard0.1.26 / 259cd81-b393c60af771，协议兼容。publication为local_unpublished，既往版本证据保留。
 - 最终包初始化、恢复、签名并发升级、手动升级/回退、Remote 协作、Local T01 至 T12、内嵌 Dashboard 两项真实浏览器及全 Go 回归全部通过。适用源码 hash 与回执位于 evidence/OPT-05。
@@ -223,3 +223,16 @@ OPT-00 DONE，OPT-01 DONE，OPT-02 DONE，OPT-03 DONE，OPT-04 DONE，OPT-05 DON
 - 发行方式已实证为main push自动构建，推送匹配v* tag自动以仓库令牌调度受信main发布，手动入口保留。签名信任身份和已公开版本不可覆盖保护保持一致。验收文字回执与签名清单元数据位于evidence/RELEASE-20261116，截图仍保留本地。
 
 - 最后独立下载并核对全部10个payload资产与原始manifest/bundle，逐项size/SHA匹配，正式客户端release verify全包PASS。已将dist/release及dist下对应0.1.28离线分发替换为经过验签的正式GitHub字节，避免同版本本地build_artifact与正式包混用。最终发布回执将提交并推送；随后只跟进该文档提交的自动main构建。
+
+## 2026-11-16 接通实际自动更新
+
+- 用户明确要求推送Docker镜像供Oracle定期更新，并指出CLI运行前自动拉取也应接通。已有CLI代码具备session/claim前auto检查，但实际策略此前为notify且无source，这是接线缺口。
+- 已为共享安装持久保存官方Cosign3.1.4 Darwin arm64验证器与固定main信任源，并将策略改auto。真实新工具会话自动从0.1.27升级到已签名正式0.1.28，preflight.status=updated，目标版本/实际缓存CLI匹配，测试session已结束，未领取业务责任。项目入口与init上报也已更新到0.1.28/auto。
+- 当前实现0.1.29。发行增加GHCR双架构镜像push与多架构index签名，版本发布前复用release_publish --check避免覆盖既有版本。稳定latest别名由独立串行job选最高正式stable版本并验镜像签名后晋级。GitHubRelease manifest schema1不变，额外registry回执独立提供，旧0.1.28客户端可继续读取新发行。
+- Server使用有限server_update.py + systemd hourly timer。受信Release和OCI签名均验证，按digest预拉与格式探针；有有效责任时延期；空闲则drain后二次检查、quiesce、完整备份与校验、切镜像、内外健康/版本核验、resume。失败回退原镜像ID，pending journal支持中断恢复及quiescing原请求重放，保留外部.env修改。仅Oracle安装timer，客户端保持按需前台。
+- 单元回归15项Python控制器/注册表fixture通过，发行控制8场景通过，actionlint与全Go通过。下一动作为独立复核、正式CI发布0.1.29镜像，准备Oracle host工具/配置，并验证匿名pull后启用timer和实跑。
+- 官方GHCR文档确认首次package默认private，关联公开repo仅继承访问权限、不继承visibility，当前受支持API/工具没有visibility修改入口。首次真实push创建包后可能需用户在Package settings一次性设Public；等实际创建并检查后再通知用户，其他已授权工作继续。
+
+- 独立复核发现恢复路径的维护归属/未知状态/active重新认领竞争，已修正。后端提供基于完整维护状态hash的expected_state条件转换，保留原幂等回执与quiescing原请求续跑，旧存储和备份格式不变。更新器使用单个内存HTTPS管理员session，已对真实入口只读验证复用会话，避免多次登录限流。恢复未知状态不修改部署，own quiesced可读中央状态证明屏障，active回滚重新drain并重查责任，外部.env和维护状态均保护。
+- 最终Python23项（含注册表与恢复竞争）与维护API条件回归通过，全Go0.1.29通过。定时命令要求条件维护支持；从当前旧0.1.26进行一次明确协调的--bootstrap-legacy初始化，初始化成功后systemd定时入口不带该参数。
+- 当前准备推送0.1.29实现并启动CI发布，CLI自动更新实际状态已完成，Oracle定时器尚未安装或启用。

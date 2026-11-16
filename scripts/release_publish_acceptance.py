@@ -43,13 +43,13 @@ path.write_text(json.dumps(state))
     manifest = {'version': version, 'commit': commit, 'dirty': False, 'publication': 'draft', 'assets': [{'path': 'client.tar.gz', 'size': len(content), 'sha256': hashlib.sha256(content).hexdigest()}]}
     statefile = root / 'fixture.json'
     results = []
-    def run(case, publication, releases, expected, **changes):
+    def run(case, publication, releases, expected, check=False, **changes):
         manifest['publication'] = publication
         (root / 'manifest.json').write_text(json.dumps(manifest))
         state = {'tag_commit': commit, 'calls': [], 'mutations': [], 'releases': releases, **changes}
         statefile.write_text(json.dumps(state))
         env = dict(os.environ, PATH=str(root) + os.pathsep + os.environ['PATH'], GH_REPO='fixture/unused', GH_TOKEN='', SOURCE_COMMIT=commit, GH_FIXTURE=str(statefile))
-        result = subprocess.run([sys.executable, str(repo / 'scripts/release_publish.py'), '--manifest', str(root / 'manifest.json'), '--publication', publication], env=env, text=True, capture_output=True)
+        result = subprocess.run([sys.executable, str(repo / 'scripts/release_publish.py'), '--manifest', str(root / 'manifest.json'), '--publication', publication, *(['--check'] if check else [])], env=env, text=True, capture_output=True)
         assert (result.returncode == 0) == expected, (case, result.stdout, result.stderr)
         state = json.loads(statefile.read_text())
         results.append({'case': case, 'passed': True, 'commands': state['calls']})
@@ -65,6 +65,10 @@ path.write_text(json.dumps(state))
     assert state['mutations'] == []
     state = run('failed upload stays draft', 'released', draft, False, fail_upload=True)
     assert state['releases'][0]['draft'] and all(call[1] != 'edit' for call in state['mutations'])
+    state = run('registry publication precheck is read-only', 'released', [], True, check=True)
+    assert state['mutations'] == []
+    state = run('precheck rejects published version', 'released', [{'tag_name': 'v' + version, 'draft': False}], False, check=True)
+    assert state['mutations'] == []
     (root / 'client.tar.gz').write_bytes(b'changed')
     state = run('changed asset rejected', 'released', draft, False)
     assert state['calls'] == []

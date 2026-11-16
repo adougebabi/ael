@@ -87,3 +87,9 @@ ael release download --source /absolute/path/source.json --kind client --platfor
 签名和 Actions 的配置依据来自官方文档。[Cosign](https://github.com/sigstore/cosign/blob/v3.1.4/doc/cosign_verify-blob.md) · [GitHub workflow syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax)
 
 0.1.19 可用 `upgrade --source TRUSTED_JSON --version EXACT --prefix DIR --check` 核对实际目标安装和签名发行，正式升级对下载与内包执行完整校验。`release download` 保持只下载的独立入口。
+
+## GHCR Server 镜像
+
+从0.1.29开始，正式发行将已校验的双架构Server镜像归档载入发布job，再分别推送到GHCR、创建版本多架构索引并以同一main身份签名。发布job按版本串行化，在任何镜像写入前检查GitHub版本不可覆盖条件。正式Release增加registry回执，现有签名manifest的schema与asset种类保持兼容。
+
+稳定发行之后的晋级job使用独立串行组，重新读取最高已发布stable版本并验证其OCI签名，再更新latest别名，避免较旧发行晚完成导致别名降级。Oracle更新器以正式Release清单、OCI签名与固定digest共同选择候选。

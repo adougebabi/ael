@@ -11,6 +11,7 @@ import subprocess
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--manifest', required=True)
 parser.add_argument('--publication', choices=['draft', 'released'], required=True)
+parser.add_argument('--check', action='store_true')
 args = parser.parse_args()
 path = Path(args.manifest).resolve()
 manifest = json.loads(path.read_text())
@@ -51,6 +52,12 @@ else:
     raise SystemExit('release catalog exceeds bounded publication lookup')
 if existing and not existing['draft']:
     raise SystemExit('refusing to modify an existing published release')
+if args.check:
+    print(json.dumps({'status': 'checked', 'tag': tag, 'commit': commit, 'existing_draft': bool(existing)}))
+    raise SystemExit(0)
+registry = path.parent / 'server-registry.json'
+if registry.is_file():
+    files.append(registry)
 prerelease = '-' in version.split('+', 1)[0]
 flags = ['--prerelease=' + str(prerelease).lower()]
 if prerelease:
@@ -61,5 +68,5 @@ if existing:
 else:
     if args.publication == 'draft':
         flags.append('--draft')
-    gh('release', 'create', tag, *map(str, files), '--verify-tag', '--title', 'AEL ' + version, '--notes', 'Independent clients, Server and protocol resources. Verify the signed manifest using your pinned publisher policy.', *flags)
+    gh('release', 'create', tag, *map(str, files), '--verify-tag', '--title', 'AEL ' + version, '--notes', 'Independent clients, Server and protocol resources. Verify the signed manifest using your pinned publisher policy.' + ('\n\nDocker image: `' + json.loads(registry.read_text())['image'] + ':' + version.replace('+', '_') + '`' if registry.is_file() else ''), *flags)
 print(json.dumps({'status': args.publication, 'tag': tag, 'commit': commit, 'prerelease': prerelease}))

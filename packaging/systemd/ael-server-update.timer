@@ -1,0 +1,11 @@
+[Unit]
+Description=Hourly AEL Server image update check
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=5m
+Persistent=true
+Unit=ael-server-update.service
+
+[Install]
+WantedBy=timers.target

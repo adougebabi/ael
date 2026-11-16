@@ -11,7 +11,9 @@ import (
 	"time"
 )
 
-const serverDataFormatVersion = 2
+// DataFormatVersion identifies the storage format accepted by this Server.
+const DataFormatVersion = 2
+const serverDataFormatVersion = DataFormatVersion
 const serverMarker = "ael-server.marker"
 
 func serverDataFormat(dir string) (int, error) {
