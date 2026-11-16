@@ -16,6 +16,7 @@ func standaloneCommand(cmd string, a args) (any, error) {
 		allowed["username"], allowed["password-stdin"] = true, true
 	} else {
 		allowed["addr"], allowed["origin"], allowed["trusted-proxy"] = true, true, true
+		allowed["client-release-source"], allowed["client-min-version"], allowed["client-recommended-version"] = true, true, true
 	}
 	for flag, value := range a.Flags {
 		if !allowed[flag] {
@@ -64,6 +65,9 @@ func standaloneCommand(cmd string, a args) (any, error) {
 		return nil, core.Error("SERVER_NOT_BOOTSTRAPPED", "bootstrap an administrator first")
 	}
 	options := server.StandaloneHTTPOptions{Version: bootstrap.Version, Build: build, Origin: a.get("origin", os.Getenv("AEL_SERVER_ORIGIN")), TrustedProxies: csvValues(a.get("trusted-proxy", ""))}
+	options.ClientReleaseSource = a.get("client-release-source", os.Getenv("AEL_CLIENT_RELEASE_SOURCE"))
+	options.MinimumClientVersion = a.get("client-min-version", os.Getenv("AEL_MIN_CLIENT_VERSION"))
+	options.RecommendedClientVersion = a.get("client-recommended-version", os.Getenv("AEL_RECOMMENDED_CLIENT_VERSION"))
 	err = server.ListenStandalone(s, a.get("addr", "127.0.0.1:7332"), options, func(url string) {
 		_ = writeOutput(os.Stdout, map[string]string{"url": url}, a.has("json"), a.has("verbose"))
 	})

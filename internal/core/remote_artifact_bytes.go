@@ -28,8 +28,17 @@ func ValidateRemoteArtifactBytes(data []byte, mimeType string) error {
 			return errors.New("ARTIFACT_MIME_INVALID")
 		}
 	case "text/plain":
-		trimmed := strings.ToLower(strings.TrimSpace(string(data)))
-		if !utf8.Valid(data) || bytes.IndexByte(data, 0) >= 0 || !strings.HasPrefix(http.DetectContentType(data), "text/plain") || strings.HasPrefix(trimmed, "<svg") || strings.HasPrefix(trimmed, "<?xml") {
+		text := bytes.TrimSpace(data)
+		for bytes.HasPrefix(text, []byte("<!--")) {
+			end := bytes.Index(text, []byte("-->"))
+			if end < 0 {
+				break
+			}
+			text = bytes.TrimSpace(text[end+3:])
+		}
+		trimmed := strings.ToLower(string(text))
+		plain := len(text) == 0 || strings.HasPrefix(http.DetectContentType(text), "text/plain")
+		if !utf8.Valid(data) || bytes.IndexByte(data, 0) >= 0 || !plain || strings.HasPrefix(trimmed, "<svg") || strings.HasPrefix(trimmed, "<?xml") {
 			return errors.New("ARTIFACT_MIME_INVALID")
 		}
 	case "video/mp4":

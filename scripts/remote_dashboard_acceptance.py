@@ -30,10 +30,11 @@ os.chmod(out,0o700)
 system=platform.system().lower()
 arch={'aarch64':'arm64','arm64':'arm64','x86_64':'amd64','amd64':'amd64'}[platform.machine().lower()]
 binary=Path(args.bundle).resolve()/f'ael-{system}-{arch}'
-env={k:v for k,v in os.environ.items() if not k.startswith('GIT_')}
-env.update(GIT_CONFIG_NOSYSTEM='1',GIT_CONFIG_GLOBAL=os.devnull,GIT_TERMINAL_PROMPT='0',AEL_DATA_DIR=str(out/'unused-runtime'))
+env={k:v for k,v in os.environ.items() if not k.startswith(('GIT_','AEL_'))}
+env.update(GIT_CONFIG_NOSYSTEM='1',GIT_CONFIG_GLOBAL=os.devnull,GIT_TERMINAL_PROMPT='0',AEL_DATA_DIR=str(out/'unused-runtime'),AEL_CLIENT_CONFIG_DIR=str(out/'machine-clients'),AEL_INSTALL_PREFIX=str(out/'client-install'),CODEX_HOME=str(out/'host-codex'),CLAUDE_CONFIG_DIR=str(out/'host-claude'))
 serial=itertools.count(1)
 process=None
+zero_process=None
 control=None
 log=(out/'server.log').open('w')
 reports=[]
@@ -55,6 +56,10 @@ def start(address):
 try:
     run([binary,'server','bootstrap','--data-dir',out/'server-data','--username','owner','--password-stdin','--json'],input_text='fixture-admin-password\n')
     base=start('127.0.0.1:0')
+    run([binary,'server','bootstrap','--data-dir',out/'zero-server-data','--username','owner','--password-stdin','--json'],input_text='fixture-admin-password\n')
+    zero_process=subprocess.Popen([str(binary),'server','start','--data-dir',str(out/'zero-server-data'),'--addr','127.0.0.1:0','--json'],cwd=out,env=env,stdout=subprocess.PIPE,stderr=log,text=True)
+    if not select.select([zero_process.stdout],[],[],30)[0]:raise RuntimeError('empty Server startup timeout')
+    zero_url=json.loads(zero_process.stdout.readline())['url']
     opener=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
     csrf=''
     def api(method,path,value=None):
@@ -63,7 +68,10 @@ try:
         if data is not None:headers['Content-Type']='application/json'
         with opener.open(urllib.request.Request(base+path,data=data,method=method,headers=headers),timeout=20) as response:return json.load(response)
     csrf=api('POST','/api/v1/auth/login',{'username':'owner','password':'fixture-admin-password'})['csrf']
+    product_version=run([binary,'version','--json'])['version']
     for name in ('shared','other'):api('POST','/api/v1/projects',{'id':name,'name':'Dashboard '+name})
+    api('POST','/api/v1/projects',{'id':'empty','name':'新项目 · 初始化接入资料待完善'})
+    api('POST','/api/v1/projects',{'id':'long-name','name':'非常长的项目名称用于验证完整显示与搜索 — 跨团队 AEL 工程协作项目'})
     projects={}
     configs={}
     for name in ('a','b'):
@@ -81,6 +89,9 @@ try:
         token=api('POST','/api/v1/tokens',{'username':'client-'+name,'project_id':'shared','label':'fixture'})['token']
         run([binary,'server','profile','add','--name','central','--url',base,'--token-stdin','--project',path,'--config-dir',configs[name],'--json'],input_text=token+'\n')
         run([binary,'project','connect','--profile','central','--remote-project','shared','--project',path,'--config-dir',configs[name],'--json'])
+        client_archive=Path(args.bundle).resolve()/'release'/f'ael-client-{product_version}-{system}-{arch}.tar.gz'
+        if not client_archive.exists():raise RuntimeError('packaged client archive required for real onboarding fixture')
+        run([binary,'init','--profile','central','--project',path,'--config-dir',configs[name],'--prefix',out/'client-install','--from',client_archive,'--host',('codex' if name=='a' else 'none'),'--update-policy','notify','--json'])
     api('POST','/api/v1/users',{'username':'observer','password':'fixture-observer-password'})
     api('POST','/api/v1/projects/shared/members',{'username':'observer','role':'reader'})
     def cli(name,*argv):return run([binary,*argv,'--project',projects[name],'--config-dir',configs[name],'--json'],projects[name])
@@ -162,6 +173,10 @@ try:
                 if value['action']=='progress':progress()
                 elif value['action']=='expire':expire_fixture_responsibility()
                 elif value['action']=='finish':finish_child()
+                elif value['action']=='revoke-observer':
+                    database=out/'server-data/runtime.db'
+                    with sqlite3.connect(database) as connection:connection.execute("DELETE FROM server_members WHERE project_id='shared' AND user_id=(SELECT id FROM server_users WHERE username='observer')")
+                    reports.append('observer-access-revoked')
                 elif value['action']=='restart':
                     process.terminate();process.wait(timeout=10);assert start(urllib.parse.urlparse(base).netloc)==base;reports.append('server-restarted')
                 else:self.send_error(400);return
@@ -170,13 +185,17 @@ try:
                 self.send_response(500);self.end_headers();self.wfile.write(str(error).encode())
     control=http.server.ThreadingHTTPServer(('127.0.0.1',0),Control)
     threading.Thread(target=control.serve_forever,daemon=True).start()
-    manifest=private('manifest',{'url':base,'control':'http://127.0.0.1:'+str(control.server_address[1]),'nonce':nonce,'out':str(out)})
+    manifest=private('manifest',{'url':base,'zero_url':zero_url,'control':'http://127.0.0.1:'+str(control.server_address[1]),'nonce':nonce,'out':str(out)})
     browser_env=dict(env,AEL_REMOTE_DASHBOARD_FIXTURE=str(manifest),AEL_UI_OUT=str(out/'browser'))
-    result=subprocess.run([str(repo/'web/node_modules/.bin/playwright'),'test','--config=playwright.remote-dashboard.config.ts'],cwd=repo/'web',env=browser_env,timeout=240)
+    result=subprocess.run([str(repo/'web/node_modules/.bin/playwright'),'test','--config=playwright.remote-dashboard.config.ts'],cwd=repo/'web',env=browser_env,timeout=420)
     if result.returncode:raise RuntimeError('packaged Dashboard browser acceptance failed')
     (out/'summary.json').write_text(json.dumps({'result':'PASS','mode':'packaged Server + external CLI clients + real browser','actions':reports},indent=2))
     print(json.dumps({'result':'PASS','out':str(out),'actions':reports}))
 finally:
+    if zero_process is not None:
+        zero_process.terminate()
+        try:zero_process.wait(timeout=10)
+        except subprocess.TimeoutExpired:zero_process.kill();zero_process.wait()
     if process is not None:
         process.terminate()
         try:process.wait(timeout=10)

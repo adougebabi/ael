@@ -1,0 +1,12 @@
+
+Running 2 tests using 1 worker
+
+(node:78691) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:78691) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 tests/remote-dashboard.spec.ts:20:1 › 统一远程工作台保持责任、证据、导航和项目隔离 (19.1s)
+  ✓  2 tests/remote-dashboard.spec.ts:233:1 › 零项目管理员可直接访问服务和账户并创建首个项目 (544ms)
+
+  2 passed (20.5s)
+{"result": "PASS", "out": "/private/tmp/ael-deploy-20261116/isolated-dashboard-0124", "actions": ["two-client-progress", "child-completed", "server-restarted", "server-fixture-lease-expired", "observer-access-revoked"]}

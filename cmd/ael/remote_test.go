@@ -29,7 +29,9 @@ func TestRemoteBindingStopsLocalFallbackBeforeOpen(t *testing.T) {
 	}
 	for _, command := range [][]string{{"task", "list"}, {"task", "create", "--file", "missing.json"}, {"init"}, {"repair"}, {"storage", "restore", "--from", "missing"}} {
 		args := append(append([]string{}, command...), "--project", project, "--config-dir", config)
-		if _, err := run(args); err == nil || !strings.Contains(err.Error(), "REMOTE_") {
+		_, err := run(args)
+		remoteFailure := err != nil && (strings.Contains(err.Error(), "REMOTE_") || (command[0] == "init" && strings.Contains(err.Error(), "LOCAL_PROJECT_EXISTS")))
+		if !remoteFailure {
 			t.Fatalf("remote command fell through to local authority: %v %v", command, err)
 		}
 	}

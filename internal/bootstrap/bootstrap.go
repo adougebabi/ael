@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-const Version = "0.1.22"
+const Version = "0.1.28"
 
 const DefaultPolicy = "{\"schema\":1,\"max_retries\":3,\"max_seconds\":0,\"lease_seconds\":1800,\"checks\":[],\"critical_knowledge\":[],\"delivery_requires_confirmation\":true}\n"
 
@@ -94,6 +94,7 @@ func block(mode string) string {
 	text := begin + "\nAEL project (" + mode + "). Before any AEL command, first decide whether the user's goal is a project iteration, bug fix, or other engineering change to the project itself.\nFor discussion, lookup, analysis, review, or review-only materials, even when saved to a file, work directly and communicate with the user; do not run AEL commands or create tasks or enter implementation/acceptance workflows for that request. Read relevant project files normally as needed.\nFor an authorized engineering change, use $ael-work and resume a relevant existing task first. From the project root run `./ael doctor` and `./ael task list`; load exact task rules with `./ael context --task <id>`. If the request later becomes an authorized engineering change, enter $ael-work before making that change.\nIf the user explicitly requests an AEL command or an AEL task, follow that request. Use $ael-migrate-legacy only for reviewed legacy proposals.\nDo not treat historical imports as current constraints or verified checks.\n" + end
 	if mode == "remote" {
 		text = strings.ReplaceAll(text, "./ael context --task <id>", "./ael context show --task <id>")
+		text = strings.Replace(text, end, "Before new Remote work, run `./ael session start --session <host-session-id> --runner <runner-id>` and read its returned frozen Skill path. Pass `--session <host-session-id>` on subsequent Remote commands. After context compaction, session resume, task switch, or uncertain progress, first run `./ael recovery check --session <host-session-id> --json`. Verify Server/project, current parent/leaf task, step, versions, accepted checks and latest blocker before continuing the unfinished item. Server records govern task identity and scope. Until online verification succeeds, limit work to read-only inspection and saving the scene. Bind a new session explicitly with `./ael recovery save --session <host-session-id> --runner <runner-id>` and refresh it after each verifiable unit.\n"+end, 1)
 	}
 	return text
 }

@@ -1,0 +1,15 @@
+{
+  "result": "PASS",
+  "version": {
+    "api_protocol": 1,
+    "build": "259cd81-b393c60af771",
+    "cli_output_protocol": 1,
+    "skill_protocol": 1,
+    "version": "0.1.26"
+  },
+  "backup_volume": "ael-v2_backup_data",
+  "backup_path": "/backup/pre-0126-20261116T015607Z",
+  "configuration_backup": "/opt/ael-v2/.env.pre-20261116T015607Z",
+  "origin": "https://ael.adoumi.site",
+  "maintenance": "active"
+}

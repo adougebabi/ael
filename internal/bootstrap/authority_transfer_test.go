@@ -220,7 +220,7 @@ func TestAuthorityTransferRejectsDeterministicLimitsBeforeFreezing(t *testing.T)
 					t.Fatal(err)
 				}
 			} else {
-				if _, err := db.DB.Exec("UPDATE tasks SET body=json_set(body,'$.result',?)", strings.Repeat("x", 2<<20)); err != nil {
+				if _, err := db.DB.Exec("UPDATE tasks SET body=json_set(body,'$.result',?)", strings.Repeat("x", core.AuthorityArchiveRequestLimit)); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -235,5 +235,51 @@ func TestAuthorityTransferRejectsDeterministicLimitsBeforeFreezing(t *testing.T)
 				t.Fatalf("deterministic rejection left a frozen source %v", err)
 			}
 		})
+	}
+}
+
+func TestAuthorityTransferPreservesExpiredAttemptHistoryDuringFreeze(t *testing.T) {
+	root, db := transferFixture(t)
+	lease := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339Nano)
+	if _, err := db.DB.Exec("UPDATE tasks SET body=json_set(body,'$.attempts[0].status','running','$.attempts[0].lease_until',?,'$.attempts[0].pid',0,'$.attempts[0].owner_pid',0)", lease); err != nil {
+		t.Fatal(err)
+	}
+	var before string
+	if err := db.DB.QueryRow("SELECT body FROM tasks").Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := ScanTransfer(root, "expired-local")
+	if err != nil || plan.Active != 0 {
+		t.Fatalf("expired history blocked transfer: %v %+v", err, plan)
+	}
+	if _, err := ExportTransfer(plan, filepath.Join(t.TempDir(), "export"), true); err != nil {
+		t.Fatal(err)
+	}
+	var after string
+	if err := db.DB.QueryRow("SELECT body FROM tasks").Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if before != after {
+		t.Fatal("freezing authority changed task history")
+	}
+}
+
+func TestTransferredCheckoutKeepsLocalRecoveryWhileAllowingRemoteEntry(t *testing.T) {
+	root, _ := transferFixture(t)
+	if err := VerifyTransferredCheckout(root); err == nil {
+		t.Fatal("unfrozen Local checkout accepted")
+	}
+	plan, err := ScanTransfer(root, "entry-transfer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = ExportTransfer(plan, filepath.Join(t.TempDir(), "export"), true); err != nil {
+		t.Fatal(err)
+	}
+	if err = VerifyTransferredCheckout(root); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = os.Stat(filepath.Join(root, ".ael/project.yaml")); err != nil {
+		t.Fatal("recovery config removed", err)
 	}
 }

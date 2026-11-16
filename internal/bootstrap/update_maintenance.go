@@ -4,6 +4,7 @@ import (
 	"ael/internal/core"
 	"ael/internal/process"
 	"ael/internal/store"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -146,14 +147,15 @@ func beginMaintenance(root string, b Bundle, old *maintenance) (*store.Store, *m
 			}
 			m.BackupDir = current.BackupDir
 		}
-		var active, locks, pending int
-		if e := tx.Row(`SELECT count(*) FROM tasks,json_each(tasks.body,'$.attempts') a WHERE json_extract(a.value,'$.status') IN ('running','interrupted')`).Scan(&active); e != nil {
+		active, e := blockingUpdateWriters(tx.Conn.QueryContext(context.Background(), updateWritersQuery))
+		if e != nil {
 			return e
 		}
+		var locks, pending int
 		if e := tx.Row("SELECT count(*) FROM workspace_locks").Scan(&locks); e != nil {
 			return e
 		}
-		if active > 0 || locks > 0 {
+		if len(active) > 0 || locks > 0 {
 			return core.Error("PROJECT_BUSY", "writer appeared before maintenance transaction")
 		}
 		if e := tx.Row("SELECT count(*) FROM outbox WHERE state IN ('pending','delete_pending')").Scan(&pending); e != nil {
@@ -175,7 +177,7 @@ func beginMaintenance(root string, b Bundle, old *maintenance) (*store.Store, *m
 		if _, e := tx.Exec("INSERT INTO metadata(key,body) VALUES('tool-update',?) ON CONFLICT(key) DO UPDATE SET body=excluded.body", string(body)); e != nil {
 			return e
 		}
-		_, e := tx.Exec("INSERT INTO metadata(key,body) VALUES('tool-generation',?) ON CONFLICT(key) DO UPDATE SET body=excluded.body", m.Token)
+		_, e = tx.Exec("INSERT INTO metadata(key,body) VALUES('tool-generation',?) ON CONFLICT(key) DO UPDATE SET body=excluded.body", m.Token)
 		return e
 	})
 	if e != nil {

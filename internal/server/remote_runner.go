@@ -135,14 +135,15 @@ func (p *portableStore) getRunner(principal standalonePrincipal, runnerID string
 	}
 	connection := "no_responsibility"
 	responsibility := "none"
-	rows, err := p.service.Store.DB.Query("SELECT a.attempt_id,t.body FROM remote_runner_attempts a JOIN tasks t ON t.id=a.task_id WHERE a.runner_id=? AND a.state IN ('running','interrupted')", runnerID)
+	assignments := []map[string]any{}
+	rows, err := p.service.Store.DB.Query(`SELECT a.attempt_id,a.context_id,t.body,coalesce((SELECT e.body FROM events e WHERE e.task_id=a.task_id AND e.kind='work_progress' AND json_extract(e.body,'$.actor')=a.runner_id ORDER BY e.id DESC LIMIT 1),'') FROM remote_runner_attempts a JOIN tasks t ON t.id=a.task_id WHERE a.runner_id=? AND a.state IN ('running','interrupted')`, runnerID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, body string
-		if err := rows.Scan(&id, &body); err != nil {
+		var id, contextID, body, progressBody string
+		if err := rows.Scan(&id, &contextID, &body, &progressBody); err != nil {
 			return nil, err
 		}
 		var task core.Task
@@ -152,13 +153,21 @@ func (p *portableStore) getRunner(principal standalonePrincipal, runnerID string
 		for _, attempt := range task.Attempts {
 			if attempt.ID == id {
 				connection, responsibility = remoteResponsibilityState(task, attempt)
+				if attempt.Status == "running" || attempt.Status == "interrupted" {
+					assignment := map[string]any{"task_id": task.Definition.ID, "attempt_id": id, "context_id": contextID, "unit": attempt.Unit, "responsibility_state": responsibility}
+					var progress core.Progress
+					if json.Unmarshal([]byte(progressBody), &progress) == nil && !progress.At.Before(attempt.Started) {
+						assignment["progress_next"] = progress.Next
+					}
+					assignments = append(assignments, assignment)
+				}
 			}
 		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	return map[string]any{"id": runnerID, "alias": alias, "machine": machine, "workspace_id": workspace, "checkout_id": checkout, "repository": repository, "version": version, "capabilities": capabilities, "created_at": created, "connection_state": connection, "responsibility_state": responsibility, "host_execution_state": "unknown"}, nil
+	return map[string]any{"id": runnerID, "alias": alias, "machine": machine, "workspace_id": workspace, "checkout_id": checkout, "repository": repository, "version": version, "capabilities": capabilities, "created_at": created, "connection_state": connection, "responsibility_state": responsibility, "host_execution_state": "unknown", "assignments": assignments}, nil
 }
 
 func (p *portableStore) claimRunner(principal standalonePrincipal, role, runnerID string, input remoteRunnerClaimInput, artifacts *artifactStore) (map[string]any, error) {

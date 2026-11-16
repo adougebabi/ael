@@ -1,0 +1,15 @@
+{
+  "version": "0.1.24",
+  "build": "259cd81-ca59ab062a95",
+  "files": {
+    "internal/bootstrap/bootstrap.go": "9c3ca33df466547a339095d580a5c0b36214d7e1a9d5ff44a112bc905cedfcd9",
+    "internal/bootstrap/update_guard.go": "11860449a941b63af384f012e83ac0e7d6321adf9e4288b7a079154aba3b9939",
+    "internal/bootstrap/update_maintenance.go": "e8defa190a848fa92e1ef47ba6575c14145b896363eda248757c672e18aff9f7",
+    "internal/bootstrap/update_test.go": "ccb4cd7a7b22afae70073865c51ccccc004cee62dd9722bd11b0e3d2f2ada32d",
+    "web/package.json": "f4d0b5720ca3ccaee0bfda256525256cdb08cc6299a3f324efc0641a5f11c047",
+    "web/package-lock.json": "38cf356c1a38d7c9091a8040a08292662768e2412fb10a7c7246bdb9630512f1",
+    "web/tests/remote-dashboard.spec.ts": "c8a522d8b98e9ac3c2e53113d89e232f5ca23386694551e447420cb750444ff4"
+  },
+  "test_note": "Dashboard test assertions now use the tested Server version; runtime assets are unchanged by this test-only edit.",
+  "review": "independent read-only review found no defect in lease validity, process liveness or transaction recheck"
+}

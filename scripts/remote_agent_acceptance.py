@@ -24,6 +24,7 @@ source = parser.add_mutually_exclusive_group(required=True)
 source.add_argument("--binary")
 source.add_argument("--bundle")
 parser.add_argument("--out", required=True)
+parser.add_argument("--verify-recovery", action="store_true")
 args = parser.parse_args()
 out = Path(args.out).resolve()
 if out.exists() and any(out.iterdir()):
@@ -233,6 +234,22 @@ try:
         client("b", "runner", "claim", "--runner", "agent-a", "--file", out / f"request-{serial}.json", "--out", out / f"forbidden-claim-{iteration}.json", expect_ok=False)
         request("heartbeat", lease)
         request("progress", dict(lease, summary="external driver working", next="submit actual observations", stage=step))
+        if args.verify_recovery:
+            saved = client("a", "recovery", "save", "--session", "deterministic-a", "--runner", "agent-a")
+            assert saved["online_verified"] and saved["summary"]["task"] == task_id, saved
+            checked = client("a", "recovery", "check", "--session", "deterministic-a")
+            assert checked["summary"]["attempt"] == attempt["id"], checked
+            assert client("a", "recovery", "check", "--session", "independent-session")["status"] == "no_checkpoint"
+            raw_checkpoint = Path(saved["checkpoint"]).read_text()
+            assert attempt["token"] not in raw_checkpoint and tokens["a"] not in raw_checkpoint
+            if task_id == "second":
+                assert "task" in checked["summary"]["completed_children"], checked
+            if iteration == 0:
+                for host in ("codex", "claude"):
+                    installed = client("a", "recovery", "install", "--host", host)
+                    assert installed["status"] in ("pending_host_trust", "unsupported_or_unavailable"), installed
+                    repeated = client("a", "recovery", "install", "--host", host)
+                    assert not repeated.get("changed", False), repeated
         if step == "execute":
             (projects["a"] / "app.txt").write_text("fixed\n" if did_break else "broken\n")
             did_break = True
@@ -287,11 +304,19 @@ try:
         # An active responsibility loses effective write permission immediately.
         if iteration == 1:
             api("POST", "/api/v1/projects/shared/members", {"username":"writer", "role":"reader"}, expected=201)
+            if args.verify_recovery:
+                revoked = client("a", "recovery", "check", "--session", "deterministic-a")
+                assert revoked["status"] == "permission_revoked", revoked
             request("submit", body, ok=False)
             api("POST", "/api/v1/projects/shared/members", {"username":"writer", "role":"executor"}, expected=201)
         if iteration == 0:
             proxy.drop_next_submit = True
         submitted = request("submit", body)
+        if args.verify_recovery:
+            refreshed = client("a", "recovery", "save", "--session", "deterministic-a", "--runner", "agent-a")
+            assert refreshed["online_verified"], refreshed
+            if submitted["next"]["next_action"] == "completed":
+                assert not refreshed["summary"].get("task"), refreshed
         if iteration == 0:
             assert proxy.drop_count == 1
         # Replaying the exact accepted submission returns the same immutable receipt.

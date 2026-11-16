@@ -10,9 +10,9 @@ transfer 命令处理明确选择的旧 Local checkout 和现有运行实例。�
     ael transfer plan --plan /private/path/scan.json --out /private/path/plan.json
     ael transfer export --plan /private/path/plan.json --approved-digest DIGEST --ack-drained --out /private/path/new-export
 
-plan 和 export 重新核对同一来源与摘要。--ack-drained 表示外部执行者已协调，数据库中的未解决责任仍会阻止导出。导出在 BEGIN IMMEDIATE 中检查空闲并安装旧版本兼容触发器，冻结 tasks、events、submissions、workspace_locks、outbox 与 metadata 的写入。当前 CLI 也在正常 Local 打开入口提示冻结状态。
+plan 和 export 重新核对同一来源与摘要。--ack-drained 表示外部执行者已协调，数据库中的有效租约、存活绑定进程及工作区锁仍会阻止导出。已过期且无存活绑定进程的责任作为原历史保留。导出在 BEGIN IMMEDIATE 中检查空闲并安装旧版本兼容触发器，冻结 tasks、events、submissions、workspace_locks、outbox 与 metadata 的写入。当前 CLI 也在正常 Local 打开入口提示冻结状态。
 
-冻结前校验统一来源 ID、现有单文件 10 MiB 和请求 2 MiB 上限。超限返回具体错误并保持 Local 可写，先核对容量与迁移范围。旧媒体在通过现有解码/像素约束后提供图片预览，其余选定历史制品按原字节保存为可下载对象。
+冻结前校验统一来源 ID、现有单文件 10 MiB 和迁移清单请求 8 MiB 上限（普通请求仍为 2 MiB）。超限返回具体错误并保持 Local 可写，先核对容量与迁移范围。旧媒体在通过现有解码/像素约束后提供图片预览，其余选定历史制品按原字节保存为可下载对象。
 
 导出目录位于 checkout 和运行库之外，保持私有权限。local-recovery.db 是一致 SQLite 恢复备份，包含原始运行数据和本地授权信息，应按私有数据保管。plan.json 保存去除执行授权的中央导入清单，objects 按 SHA256 保存选定引用的字节。Evidence 输入/输出、历史检查、人类意见、Attempt 输出、交付回执及已供应规范快照均参与对账。相对文件沿任务已绑定的 CandidateWorkspace 读取，runtime 引用沿原运行目录读取。原 source 路径保留在本地计划中。
 

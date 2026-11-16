@@ -2,6 +2,7 @@ package server
 
 import (
 	"ael/internal/bootstrap"
+	"ael/internal/release"
 	"bytes"
 	"crypto/subtle"
 	"encoding/hex"
@@ -19,20 +20,28 @@ import (
 )
 
 type StandaloneHTTPOptions struct {
-	Version        string
-	Build          string
-	Origin         string
-	TrustedProxies []string
+	ClientReleaseSource      string
+	MinimumClientVersion     string
+	RecommendedClientVersion string
+	Version                  string
+	Build                    string
+	Origin                   string
+	TrustedProxies           []string
 }
 
 type standaloneHandler struct {
-	server  *Standalone
-	version string
-	build   string
-	origin  *url.URL
-	proxies []netip.Prefix
-	mu      sync.Mutex
-	logins  map[string][]time.Time
+	releaseSource     string
+	minimumClient     string
+	recommendedClient string
+	releaseMu         sync.Mutex
+	releaseCache      map[string]clientReleaseCache
+	server            *Standalone
+	version           string
+	build             string
+	origin            *url.URL
+	proxies           []netip.Prefix
+	mu                sync.Mutex
+	logins            map[string][]time.Time
 }
 
 func (s *Standalone) Handler(options StandaloneHTTPOptions) (http.Handler, error) {
@@ -45,6 +54,14 @@ func (s *Standalone) Handler(options StandaloneHTTPOptions) (http.Handler, error
 		version = bootstrap.Version
 	}
 	h := &standaloneHandler{server: s, version: version, build: options.Build, origin: origin, logins: map[string][]time.Time{}}
+	h.minimumClient = options.MinimumClientVersion
+	if h.minimumClient == "" {
+		h.minimumClient = "0.1.22"
+	}
+	if !release.ValidVersion(h.minimumClient) || (options.RecommendedClientVersion != "" && !release.ValidVersion(options.RecommendedClientVersion)) {
+		return nil, errors.New("INVALID_CLIENT_VERSION_CONFIGURATION")
+	}
+	h.releaseSource, h.recommendedClient, h.releaseCache = options.ClientReleaseSource, options.RecommendedClientVersion, map[string]clientReleaseCache{}
 	for _, value := range options.TrustedProxies {
 		prefix, err := netip.ParsePrefix(value)
 		if err != nil {
@@ -216,7 +233,13 @@ func (h *standaloneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			standaloneFail(w, 503, "SERVER_MAINTENANCE")
 			return
 		}
-		standaloneReply(w, http.StatusOK, map[string]any{"maintenance": state.publicNotice(), "mode": "server", "protocol": 1, "skill_protocol": 1, "cli_output_protocol": 1, "version": h.version, "build": h.build, "capabilities": []string{"login", "projects", "project_roles", "revocable_tokens", "remote_tasks", "remote_plans", "operation_receipts", "artifacts", "portable_candidates", "portable_contexts", "remote_runners", "findings", "authority_imports", "remote_integration", "remote_failure_review"}})
+		info := map[string]any{"maintenance": state.publicNotice(), "mode": "server", "protocol": 1, "skill_protocol": 1, "cli_output_protocol": 1, "version": h.version, "build": h.build, "minimum_client_version": h.minimumClient, "protocol_range": map[string]int{"api_min": 1, "api_max": 1, "skill_min": 1, "skill_max": 1}, "capabilities": []string{"client_releases", "onboarding", "login", "projects", "project_roles", "revocable_tokens", "remote_tasks", "remote_plans", "operation_receipts", "artifacts", "portable_candidates", "portable_contexts", "remote_runners", "findings", "authority_imports", "remote_integration", "remote_failure_review"}}
+		clientRelease := h.clientRelease(r.URL.Query().Get("platform"), r.URL.Query().Get("updates") == "1")
+		info["client_release"] = clientRelease
+		if clientRelease["available"] == true {
+			info["recommended_client_version"] = clientRelease["version"]
+		}
+		standaloneReply(w, http.StatusOK, info)
 		return
 	}
 	if !strings.HasPrefix(r.URL.Path, "/api/") {
@@ -284,8 +307,9 @@ func (h *standaloneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		// Read before acquiring the fence: a slow client must not prevent a
 		// concurrent revocation from completing.
-		raw, err := io.ReadAll(io.LimitReader(r.Body, (2<<20)+1))
-		if err != nil || len(raw) > 2<<20 {
+		limit := jsonRequestLimit(r)
+		raw, err := io.ReadAll(io.LimitReader(r.Body, limit+1))
+		if err != nil || int64(len(raw)) > limit {
 			standaloneFail(w, http.StatusBadRequest, "INVALID_REQUEST")
 			return
 		}
@@ -328,6 +352,18 @@ func (h *standaloneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.URL.Path == "/api/v1/admin/maintenance" {
 		h.maintenanceAPI(w, r, p, method)
+		return
+	}
+	if r.URL.Path == "/api/v1/admin/client-release" {
+		if r.Method != http.MethodGet || !p.Admin || method != "session" {
+			standaloneFail(w, http.StatusForbidden, "FORBIDDEN")
+			return
+		}
+		standaloneReply(w, http.StatusOK, map[string]any{"server_version": h.version, "server_build": h.build, "minimum_client_version": h.minimumClient, "protocol_range": map[string]int{"api_min": 1, "api_max": 1, "skill_min": 1, "skill_max": 1}, "client_release": h.clientRelease(r.URL.Query().Get("platform"), true)})
+		return
+	}
+	if r.URL.Path == "/api/v1/onboarding" {
+		h.onboarding(w, r, p, method)
 		return
 	}
 	if r.URL.Path == "/api/v1/auth/session" && r.Method == http.MethodGet && method == "session" {
@@ -390,6 +426,14 @@ func (h *standaloneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.HasPrefix(r.URL.Path, "/api/v1/projects/") {
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v1/projects/"), "/")
+		if len(parts) == 2 && parts[1] == "onboarding" {
+			h.onboardingConfiguration(w, r, p, parts[0])
+			return
+		}
+		if len(parts) == 2 && parts[1] == "client-onboarding" {
+			h.onboardingClient(w, r, p, parts[0])
+			return
+		}
 		if len(parts) >= 2 && parts[1] == "imports" {
 			h.remoteAuthorityImports(w, r, p, parts[0], parts[2:])
 			return

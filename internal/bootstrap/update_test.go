@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // These shell programs are installer protocol fixtures, not real AEL releases.
@@ -480,5 +481,93 @@ func TestRecoveryBadBackupKeepsMaintenanceFence(t *testing.T) {
 	remaining, e := readMaintenance(root)
 	if e != nil || remaining == nil {
 		t.Fatal("failed recovery released maintenance", remaining, e)
+	}
+}
+
+func TestProjectUpdateDistinguishesExpiredHistoryFromLiveWriters(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		lease   time.Time
+		pid     int
+		owner   int
+		blocked bool
+	}{
+		{name: "expired history", lease: time.Now().Add(-time.Hour)},
+		{name: "valid lease", lease: time.Now().Add(time.Hour), blocked: true},
+		{name: "expired bound process", lease: time.Now().Add(-time.Hour), pid: os.Getpid(), blocked: true},
+		{name: "expired attached owner", lease: time.Now().Add(-time.Hour), owner: os.Getpid(), blocked: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("AEL_DATA_DIR", t.TempDir())
+			root := t.TempDir()
+			source := updateFixture(t, Version, "new")
+			bundle := mustBundle(t, source)
+			if _, err := InitProject(root, false, false, source); err != nil {
+				t.Fatal(err)
+			}
+			service, _, err := Open(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			task, err := service.Create(core.Definition{Title: "retained update task", Type: "bug", Goal: "verified", Acceptance: []string{"pass"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			claim, err := service.Claim(task.Task.Definition.ID, "", "fixture", "", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			current := claim.Task
+			for i := range current.Attempts {
+				current.Attempts[i].Lease = tc.lease
+				current.Attempts[i].PID = tc.pid
+				current.Attempts[i].OwnerPID = tc.owner
+			}
+			body, err := json.Marshal(current)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = service.Store.DB.Exec("UPDATE tasks SET body=? WHERE id=?", string(body), current.Definition.ID); err != nil {
+				t.Fatal(err)
+			}
+			service.Store.Close()
+			err = projectIdle(root)
+			if tc.blocked {
+				if err == nil || !strings.Contains(err.Error(), "PROJECT_BUSY") {
+					t.Fatalf("live writer accepted: %v", err)
+				}
+				gate, _, err := beginMaintenance(root, bundle, nil)
+				if gate != nil {
+					gate.Close()
+				}
+				if err == nil || !strings.Contains(err.Error(), "PROJECT_BUSY") {
+					t.Fatalf("transaction accepted live writer: %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			config, err := Read(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			report, err := applyProjectUpdate(root, UpdateOptions{}, bundle, config, UpdateReport{Operation: "update", Target: root, Available: BinaryVersion{Version: Version}})
+			if err != nil {
+				t.Fatal(report, err)
+			}
+			db, err := projectReadDB(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+			var after string
+			if err = db.QueryRow("SELECT body FROM tasks WHERE id=?", current.Definition.ID).Scan(&after); err != nil {
+				t.Fatal(err)
+			}
+			if after != string(body) {
+				t.Fatal("tool update changed the expired task or its history")
+			}
+		})
 	}
 }

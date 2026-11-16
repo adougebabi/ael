@@ -79,29 +79,53 @@ func projectReadDB(root string) (*sql.DB, error) {
 }
 
 func projectIdle(root string) error { return projectIdleFor(root, false) }
+
+// Expired leases cannot submit or renew. Preserve their records during tool
+// maintenance, while still protecting any live bound host process.
+func blockingUpdateWriters(rows *sql.Rows, err error) ([]string, error) {
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	active := []string{}
+	now := time.Now()
+	for rows.Next() {
+		var task, raw string
+		if err := rows.Scan(&task, &raw); err != nil {
+			return nil, err
+		}
+		var attempt core.Attempt
+		if err := json.Unmarshal([]byte(raw), &attempt); err != nil {
+			return nil, err
+		}
+		live := attempt.Lease.IsZero() || attempt.Lease.After(now)
+		if attempt.PID > 0 && (process.Alive(attempt.PID) || process.GroupAlive(attempt.PID)) {
+			live = true
+		}
+		if attempt.OwnerPID > 0 {
+			identity, err := process.Identity(attempt.OwnerPID)
+			if err == nil && (attempt.OwnerIdentity == "" || identity == attempt.OwnerIdentity) || err != nil && process.Alive(attempt.OwnerPID) {
+				live = true
+			}
+		}
+		if live {
+			active = append(active, task+"/"+attempt.ID+" ("+attempt.Status+")")
+		}
+	}
+	return active, rows.Err()
+}
+
+const updateWritersQuery = `SELECT tasks.id,a.value FROM tasks,json_each(tasks.body,'$.attempts') a WHERE json_extract(a.value,'$.status') IN ('running','interrupted')`
+
 func projectIdleFor(root string, recovering bool) error {
 	db, e := projectReadDB(root)
 	if e != nil || db == nil {
 		return e
 	}
 	defer db.Close()
-	rows, e := db.Query(`SELECT tasks.id,json_extract(a.value,'$.id'),json_extract(a.value,'$.status') FROM tasks,json_each(tasks.body,'$.attempts') a WHERE json_extract(a.value,'$.status') IN ('running','interrupted')`)
+	active, e := blockingUpdateWriters(db.Query(updateWritersQuery))
 	if e != nil {
 		return core.Error("RUNTIME_INSPECTION_FAILED", e.Error())
-	}
-	active := []string{}
-	for rows.Next() {
-		var task, attempt, status string
-		if e = rows.Scan(&task, &attempt, &status); e != nil {
-			rows.Close()
-			return e
-		}
-		active = append(active, task+"/"+attempt+" ("+status+")")
-	}
-	e = rows.Err()
-	rows.Close()
-	if e != nil {
-		return e
 	}
 	var locks, pending int
 	if e = db.QueryRow("SELECT count(*) FROM workspace_locks").Scan(&locks); e != nil {

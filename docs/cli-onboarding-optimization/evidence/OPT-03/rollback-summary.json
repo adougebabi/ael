@@ -1,0 +1,8 @@
+{
+  "result": "PASS",
+  "preview": "preview",
+  "rollback": "updated",
+  "repeat": "up_to_date",
+  "restored_version": "0.1.22",
+  "new_cache_retained": true
+}

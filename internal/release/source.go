@@ -2,6 +2,7 @@ package release
 
 import (
 	"ael/internal/core"
+	"ael/internal/store"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -55,6 +56,23 @@ type Selection struct {
 	URL                 string    `json:"asset_url,omitempty"`
 	PublisherIdentity   string    `json:"publisher_identity"`
 	authenticatedSource string
+}
+
+// Fingerprint binds an explicit local trust choice, including public key bytes.
+// A Server recommendation cannot replace this identity or catalog selection.
+func (source Source) Fingerprint() (string, error) {
+	raw, _ := json.Marshal(source)
+	for _, path := range []string{source.Trust.AllowedSigners, source.Trust.PublicKey} {
+		if path == "" {
+			continue
+		}
+		data, err := readLocal(path, 1<<20)
+		if err != nil {
+			return "", err
+		}
+		raw = append(raw, []byte("\n"+store.Hash(data))...)
+	}
+	return store.Hash(raw), nil
 }
 
 func ReadSource(path string) (Source, error) {

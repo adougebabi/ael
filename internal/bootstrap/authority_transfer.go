@@ -95,11 +95,6 @@ func scanTransfer(root, data, source string, reader archiveReader) (TransferPlan
 		if err = core.Validate(task.Definition); err != nil {
 			break
 		}
-		for _, attempt := range task.Attempts {
-			if attempt.Status == "running" || attempt.Status == "interrupted" {
-				plan.Active++
-			}
-		}
 		identity, _ := json.Marshal([]string{config.ProjectID, source, task.Definition.ID})
 		mapped := "import-" + store.Hash(identity)[:32]
 		archived := core.ArchiveTask(task, mapped)
@@ -117,6 +112,11 @@ func scanTransfer(root, data, source string, reader archiveReader) (TransferPlan
 	if err != nil {
 		return plan, err
 	}
+	active, err := blockingUpdateWriters(reader.QueryContext(context.Background(), updateWritersQuery))
+	if err != nil {
+		return plan, err
+	}
+	plan.Active = len(active)
 	for _, query := range []struct {
 		SQL string
 		Out *int
@@ -493,6 +493,29 @@ func VerifyTransferExport(from string) (TransferPlan, error) {
 		}
 	}
 	return plan, nil
+}
+
+// VerifyTransferredCheckout permits managed entry installation only while the
+// original Local authority remains fenced by its verified recovery export.
+func VerifyTransferredCheckout(root string) error {
+	db, err := projectReadDB(root)
+	if err != nil {
+		return err
+	}
+	if db == nil {
+		return core.Error("LOCAL_PROJECT_EXISTS", "the Local source has no transfer freeze")
+	}
+	var export string
+	err = db.QueryRow("SELECT export_dir FROM authority_transfer WHERE id=1").Scan(&export)
+	db.Close()
+	if err != nil {
+		return core.Error("LOCAL_PROJECT_EXISTS", "complete the authority transfer before installing Remote entry assets")
+	}
+	plan, err := VerifyTransferExport(export)
+	if err != nil {
+		return err
+	}
+	return VerifyFrozenTransfer(plan, root)
 }
 
 func VerifyFrozenTransfer(plan TransferPlan, root string) error {

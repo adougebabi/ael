@@ -268,8 +268,10 @@ func upgrade(o UpdateOptions) (UpdateReport, error) {
 		if e != nil {
 			return r, e
 		}
-		if e = rejectDowngrade(r.Previous.Version, b.Version); e != nil {
-			return r, e
+		if !o.rollback {
+			if e = rejectDowngrade(r.Previous.Version, b.Version); e != nil {
+				return r, e
+			}
 		}
 	}
 	if current != "" && !recovering && r.Previous.Version == b.Version && current != native.SHA256 {

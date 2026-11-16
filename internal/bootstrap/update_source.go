@@ -21,6 +21,7 @@ import (
 )
 
 type UpdateOptions struct {
+	rollback       bool
 	From           string
 	Prefix         string
 	DryRun         bool
@@ -105,6 +106,13 @@ func prefixPath(p string) (string, error) {
 			if filepath.Base(filepath.Dir(exe)) == "bin" {
 				candidate := filepath.Dir(filepath.Dir(exe))
 				if _, e := os.Stat(filepath.Join(candidate, "share/ael/install.sha256")); e == nil {
+					p = candidate
+				}
+			}
+			cacheRoot := filepath.Dir(filepath.Dir(exe))
+			if p == "" && (filepath.Base(cacheRoot) == "clients" || filepath.Base(cacheRoot) == "distribution") && filepath.Base(filepath.Dir(cacheRoot)) == "ael" && filepath.Base(filepath.Dir(filepath.Dir(cacheRoot))) == "share" {
+				candidate := filepath.Clean(filepath.Join(cacheRoot, "..", "..", ".."))
+				if _, err := os.Stat(filepath.Join(candidate, "share/ael/install.sha256")); err == nil {
 					p = candidate
 				}
 			}
@@ -310,6 +318,7 @@ func probeBinary(path string) (BinaryVersion, error) {
 	// The legacy parser accepts a trailing unknown flag and still emits JSON;
 	// putting it first would instead consume the version command.
 	cmd := exec.CommandContext(ctx, path, "version", "--json")
+	cmd.Env = append(os.Environ(), "AEL_BINARY_PROBE=1")
 	cmd.Stderr = &stderr
 	b, e := cmd.Output()
 	if e != nil {

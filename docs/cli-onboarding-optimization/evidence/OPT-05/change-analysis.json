@@ -1,0 +1,776 @@
+{
+  "passed": true,
+  "total_additions": 0,
+  "total_deletions": 0,
+  "affected_modules": [
+    "assets",
+    "cmd",
+    ".",
+    "internal",
+    "internal/release",
+    "scripts",
+    "web",
+    "docs",
+    "packaging"
+  ],
+  "changes": [
+    {
+      "path": "assets/project-launcher.sh",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "assets/skills/ael-work/SKILL.md",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": true,
+      "is_test": false
+    },
+    {
+      "path": "assets/skills/ael-work/references/remote-agent.md",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": true,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/main.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/output.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/remote.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/remote_context.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/remote_test.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": true
+    },
+    {
+      "path": "cmd/ael/server_maintenance.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/standalone.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/upgrade.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/version.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "go.mod",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/bootstrap/bootstrap.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/bootstrap/remote_entry.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/bootstrap/remote_entry_test.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": true
+    },
+    {
+      "path": "internal/bootstrap/update_source.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/bootstrap/upgrade.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/core/remote_artifact_bytes.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/knowledge/catalog.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/release/source.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/remote/profile.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/remote/protocol.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/portable_candidate.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/remote_dashboard.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/remote_runner.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/standalone_http.go",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/ui/assets/StandaloneApp-B6ayezEn.css",
+      "type": "deleted",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/ui/assets/StandaloneApp-DwQdIioV.js",
+      "type": "deleted",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/ui/assets/index-DC81FuFX.js",
+      "type": "deleted",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/ui/assets/index-oq5MtzZh.css",
+      "type": "deleted",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/ui/index.html",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "scripts/client_upgrade_acceptance.py",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "scripts/remote_agent_acceptance.py",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "scripts/remote_dashboard_acceptance.py",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "web/package-lock.json",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "web/package.json",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "web/playwright.remote-dashboard.config.ts",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "web/src/App.vue",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "web/src/StandaloneApp.vue",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "web/src/pages/TaskList.vue",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "web/src/style.css",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "web/tests/remote-dashboard.spec.ts",
+      "type": "modified",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": true
+    },
+    {
+      "path": "cmd/ael/client_policy.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/onboarding.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/onboarding_finish.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/onboarding_test.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": true
+    },
+    {
+      "path": "cmd/ael/recovery.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/recovery_hook.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/recovery_test.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": true
+    },
+    {
+      "path": "cmd/ael/server_session.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/tool_dispatch.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/tool_exec_other.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/tool_exec_unix.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/tool_preflight.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/tool_session.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "cmd/ael/tool_session_test.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": true
+    },
+    {
+      "path": "docs/cli-onboarding-optimization/",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/bootstrap/remote_client.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/bootstrap/rollback.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/bootstrap/rollback_test.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": true
+    },
+    {
+      "path": "internal/core/remote_artifact_bytes_test.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": true
+    },
+    {
+      "path": "internal/knowledge/managed_entry_test.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": true
+    },
+    {
+      "path": "internal/server/client_release.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/client_release_test.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": true
+    },
+    {
+      "path": "internal/server/onboarding.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/onboarding_test.go",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": true
+    },
+    {
+      "path": "internal/server/ui/assets/StandaloneApp-B8DSrURj.css",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/ui/assets/StandaloneApp-C0hLADHv.js",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/ui/assets/index-CK-sJV-v.js",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "internal/server/ui/assets/index-w1yj5neO.css",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "packaging/client-source.github.json",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "scripts/onboarding_acceptance.py",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "scripts/task_update_acceptance.py",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": true,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "web/src/components/RemoteAccountPanel.vue",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    },
+    {
+      "path": "web/src/components/RemoteServicePanel.vue",
+      "type": "added",
+      "additions": 0,
+      "deletions": 0,
+      "is_code": false,
+      "is_doc": false,
+      "is_test": false
+    }
+  ],
+  "issues": [
+    {
+      "severity": "info",
+      "message": "模块 cmd 新增了文件，建议更新 README.md",
+      "related_files": [
+        "cmd/ael/client_policy.go",
+        "cmd/ael/onboarding.go",
+        "cmd/ael/onboarding_finish.go",
+        "cmd/ael/onboarding_test.go",
+        "cmd/ael/recovery.go",
+        "cmd/ael/recovery_hook.go",
+        "cmd/ael/recovery_test.go",
+        "cmd/ael/server_session.go",
+        "cmd/ael/tool_dispatch.go",
+        "cmd/ael/tool_exec_other.go",
+        "cmd/ael/tool_exec_unix.go",
+        "cmd/ael/tool_preflight.go",
+        "cmd/ael/tool_session.go",
+        "cmd/ael/tool_session_test.go"
+      ]
+    },
+    {
+      "severity": "info",
+      "message": "模块 internal 新增了文件，建议更新 README.md",
+      "related_files": [
+        "internal/bootstrap/remote_client.go",
+        "internal/bootstrap/rollback.go",
+        "internal/bootstrap/rollback_test.go",
+        "internal/core/remote_artifact_bytes_test.go",
+        "internal/knowledge/managed_entry_test.go",
+        "internal/server/client_release.go",
+        "internal/server/client_release_test.go",
+        "internal/server/onboarding.go",
+        "internal/server/onboarding_test.go",
+        "internal/server/ui/assets/StandaloneApp-C0hLADHv.js",
+        "internal/server/ui/assets/index-CK-sJV-v.js"
+      ]
+    },
+    {
+      "severity": "info",
+      "message": "模块 scripts 新增了文件，建议更新 README.md",
+      "related_files": [
+        "scripts/onboarding_acceptance.py",
+        "scripts/task_update_acceptance.py"
+      ]
+    },
+    {
+      "severity": "info",
+      "message": "配置文件有变更，请确认是否需要更新文档",
+      "related_files": [
+        "go.mod",
+        "web/package-lock.json",
+        "web/package.json",
+        "packaging/client-source.github.json"
+      ]
+    },
+    {
+      "severity": "info",
+      "message": "删除了 4 个文件，请确认相关引用已清理",
+      "related_files": [
+        "internal/server/ui/assets/StandaloneApp-B6ayezEn.css",
+        "internal/server/ui/assets/StandaloneApp-DwQdIioV.js",
+        "internal/server/ui/assets/index-DC81FuFX.js",
+        "internal/server/ui/assets/index-oq5MtzZh.css"
+      ]
+    }
+  ],
+  "doc_sync_status": {
+    "cmd/DESIGN.md": true,
+    "internal/DESIGN.md": true,
+    "internal/release/DESIGN.md": true,
+    "scripts/DESIGN.md": true,
+    "web/DESIGN.md": true
+  }
+}

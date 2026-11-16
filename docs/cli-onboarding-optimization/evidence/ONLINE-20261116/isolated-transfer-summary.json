@@ -1,0 +1,28 @@
+{
+  "result": "PASS",
+  "mode": "same-machine isolated real HTTP",
+  "synthetic_legacy_history": true,
+  "image_sha256": "58e39b2c7543a687927151ab15064ae09337f8dc09c89a51d42d94ba3ad8edf3",
+  "imports": {
+    "mac-old": {
+      "id": "import-52910ed6fe2074ce39e47bf747e171c7",
+      "task": "import-66a8ead7375a8b07af512e2776f582eb"
+    },
+    "cloud-old": {
+      "id": "import-b82a9c9830edf4662614936d0ee39e0b",
+      "task": "import-0e6a422a59afea88dc6c79883ce2edbc"
+    }
+  },
+  "events": [
+    "two actual Local clones with same ID, conflicting revision, duplicate PNG and unknown historical time",
+    "absent and unactivated imports abort safely, reject late stages and release the original Local runtime",
+    "unknown historical responsibility rejects export despite drain acknowledgement",
+    "actual CLI SIGKILL after central import commit, followed by exact input recovery",
+    "formal CLI scan/plan/export/import/verify/commit/cutover, exact replay and shared live reads",
+    "actual packaged Dashboard history, image, missing state and slow response isolation",
+    "new central evidence prevents old Local authority rollback",
+    "actual CLI SIGKILL after Local release and central rollback receipt, followed by journal recovery",
+    "unchanged selected source rolls back with a durable journal while unrelated central facts remain"
+  ],
+  "oracle_access": false
+}

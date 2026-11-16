@@ -1,0 +1,15 @@
+{
+  "result": "PASS",
+  "origin": "https://ael.adoumi.site",
+  "project_id": "local-ai-companion",
+  "tasks": 90,
+  "counts": {
+    "cancelled": 2,
+    "completed": 46,
+    "confirmation": 42
+  },
+  "client_report": "0.1.27",
+  "original_task_history_visible": true,
+  "logout": true,
+  "page_errors": []
+}

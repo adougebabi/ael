@@ -427,3 +427,56 @@ func TestAuthorityImportArtifactFenceHasConflictResponse(t *testing.T) {
 		t.Fatalf("import authority rejection was hidden as storage failure %d %s", recorder.Code, recorder.Body.String())
 	}
 }
+
+func TestAuthorityImportAllowsCompleteHistoryBeyondOrdinaryRequestLimit(t *testing.T) {
+	f := newArtifactFixture(t)
+	archive := authorityArchiveFixture("large-history")
+	archive.Tasks[0].Snapshot.Definition.OriginalRequest = strings.Repeat("history ", (core.RemoteJSONRequestLimit/8)+1024)
+	if err := core.ValidateArchiveTransferLimits(archive); err != nil {
+		t.Fatal(err)
+	}
+	input := authorityImportInput{Archive: archive, Digest: importArchiveDigest(archive), OperationID: "large-history", IdempotencyKey: "large-history"}
+	raw, _ := json.Marshal(input)
+	if len(raw) <= core.RemoteJSONRequestLimit {
+		t.Fatal("fixture did not exercise import limit")
+	}
+	path := "/api/v1/projects/shared/imports"
+	standaloneJSON(t, standaloneRequest(t, f.h, http.MethodPost, path, input, f.admin, f.csrf, "", "http://server.test", "1"), 200)
+	if jsonRequestLimit(httptest.NewRequest(http.MethodPost, "/api/v1/projects/shared/tasks", nil)) != core.RemoteJSONRequestLimit {
+		t.Fatal("ordinary request limit changed")
+	}
+	archive.Tasks[0].Snapshot.Definition.OriginalRequest = strings.Repeat("x", core.AuthorityArchiveRequestLimit)
+	if err := core.ValidateArchiveTransferLimits(archive); err == nil {
+		t.Fatal("oversized archive accepted")
+	}
+}
+
+func TestAuthorityImportPreservesLegacyParentAttribution(t *testing.T) {
+	f := newArtifactFixture(t)
+	service, _ := f.s.projectService("shared")
+	p, err := f.s.portable("shared", service)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = authorityImportSchema(service); err != nil {
+		t.Fatal(err)
+	}
+	archive := authorityArchiveFixture("legacy-tree")
+	parent := core.Task{Definition: core.Definition{ID: "parent", Title: "Legacy feature parent", Type: "feature", Goal: "verified", Revision: 1, Acceptance: []string{"result"}}, Status: "completed", Step: "done", Plan: core.Plan{Revision: 1}}
+	identity, _ := json.Marshal([]string{archive.Project, archive.Source, "parent"})
+	parentID := "import-" + store.Hash(identity)[:32]
+	archive.Tasks[0].Snapshot.Definition.Parent = "parent"
+	archive.Tasks[0] = core.ArchiveTask(archive.Tasks[0].Snapshot, archive.Tasks[0].MappedID)
+	archive.Tasks = append(archive.Tasks, core.ArchiveTask(parent, parentID))
+	_, err = p.stageAuthorityImport(standalonePrincipal{UserID: "admin", Username: "owner", Admin: true}, authorityImportInput{Archive: archive, Digest: importArchiveDigest(archive), OperationID: "legacy-tree", IdempotencyKey: "legacy-tree"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, err := service.Get(archive.Tasks[0].MappedID)
+	if err != nil || child.Definition.Parent != parentID || child.EpicMembership != nil {
+		t.Fatalf("legacy attribution changed: %+v %v", child, err)
+	}
+	if child.Status != "completed" || !child.Historical {
+		t.Fatal("historical result changed")
+	}
+}

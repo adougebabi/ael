@@ -1762,3 +1762,45 @@ main { max-width: 1600px; margin: 0 auto; padding: 32px 38px 42px; }
   .workbench-filters .search { flex: 1; max-width: none; }
   .task-heading-actions { flex-wrap: nowrap; }
 }
+
+/* Remote project navigation uses the existing workbench surface and tokens. */
+.project-switcher { position: relative; margin: 26px 0 25px; }
+.project-switcher .workspace { margin: 0; width: 100%; text-align: left; min-height: 58px; }
+.project-switcher .workspace-info { flex: 1; }
+.project-switcher .workspace-info strong { white-space: normal; overflow-wrap: anywhere; line-height: 1.5; }
+.project-options { position: absolute; top: calc(100% + 8px); left: 0; z-index: 40; width: 300px; max-width: calc(100vw - 36px); padding: 10px; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 12px 32px #24294a18; }
+.project-options .search { margin-bottom: 8px; }
+.project-options input { min-width: 0; width: 100%; }
+.project-options-list { max-height: 340px; overflow-y: auto; }
+.project-options-list > button { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px; text-align: left; border: 0; background: transparent; }
+.project-options-list > button:hover, .project-options-list > button[aria-current] { background: var(--tint); }
+.project-options-list > button > span { display: grid; gap: 3px; min-width: 0; }
+.project-options-list strong { overflow-wrap: anywhere; font-size: 12px; }
+.project-options-list small { color: var(--muted); font-size: 11px; }
+.sidebar-bottom { gap: 9px; }
+.account-menu summary { display: flex; align-items: center; gap: 12px; cursor: pointer; padding: 10px 12px; color: var(--muted); font-size: 13px; border-radius: 8px; }
+.account-menu summary::-webkit-details-marker { display: none; }
+.account-menu summary > span:first-of-type { flex: 1; overflow-wrap: anywhere; }
+.account-menu[open] { background: var(--paper); border-radius: 8px; }
+.account-menu > div { display: grid; padding: 0 12px 10px; gap: 5px; }
+.account-menu a, .account-menu button { padding: 7px 0; text-align: left; border: 0; background: transparent; color: var(--ink); font-size: 12px; }
+.remote-facts { display: grid; gap: 13px; margin: 20px 0; }
+.remote-facts > div { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 16px; }
+.remote-facts dt { color: var(--muted); font-size: 12px; }
+.remote-facts dd { margin: 0; overflow-wrap: anywhere; }
+.remote-diagnostics { margin-top: 18px; color: var(--muted); font-size: 12px; }
+.remote-diagnostics > summary { cursor: pointer; padding: 6px 0; }
+.remote-diagnostics pre, .remote-diagnostics p { overflow-wrap: anywhere; white-space: pre-wrap; }
+.remote-account-actions { margin-top: 30px; border-top: 1px solid var(--line); padding-top: 20px; }
+.client-report-list > article { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(90px, .7fr) minmax(100px, .8fr) minmax(150px, 1.2fr); gap: 16px; border-top: 1px solid var(--line); padding: 16px 0; }
+.client-report-list > article > div { display: grid; align-content: start; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.client-report-list small { color: var(--muted); }
+.client-report-list .remote-diagnostics { grid-column: 1 / -1; margin-top: 0; }
+.workbench-empty { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 24px 0; margin-bottom: 20px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.workbench-empty h2 { margin-bottom: 6px; }
+.compact-dashboard { grid-template-columns: 1fr; }
+@media (max-width: 800px) {
+  .client-report-list > article { grid-template-columns: 1fr 1fr; }
+  .remote-facts > div { grid-template-columns: 1fr; gap: 3px; }
+  .workbench-empty { align-items: flex-start; flex-direction: column; gap: 12px; }
+}

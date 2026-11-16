@@ -1,0 +1,15 @@
+{
+  "releases_url": "https://api.github.com/repos/adougebabi/ael/releases",
+  "manifest_asset": "manifest.json",
+  "signature_asset": "manifest.sigstore.json",
+  "allowed_origins": [
+    "https://github.com",
+    "https://release-assets.githubusercontent.com",
+    "https://objects.githubusercontent.com"
+  ],
+  "trust": {
+    "type": "cosign-keyless",
+    "identity": "https://github.com/adougebabi/ael/.github/workflows/release.yml@refs/heads/main",
+    "issuer": "https://token.actions.githubusercontent.com"
+  }
+}

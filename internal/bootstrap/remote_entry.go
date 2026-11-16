@@ -84,8 +84,11 @@ func readEntryJSON(root, relative string, result any) error {
 
 func (manifest RemoteEntryManifest) validate() error {
 	names := []string{"ael", "AGENTS:block", ".agents/skills/ael-work/SKILL.md", ".agents/skills/ael-work/references/workflow.md", ".agents/skills/ael-work/references/commands.md", ".agents/skills/ael-work/references/remote-agent.md"}
-	if manifest.Schema != 1 || manifest.APIProtocol != 1 || manifest.SkillProtocol != 1 || !release.ValidVersion(manifest.Version) || len(manifest.Assets) != len(names) {
+	if manifest.Schema != 1 || manifest.APIProtocol != 1 || manifest.SkillProtocol != 1 || !release.ValidVersion(manifest.Version) || (len(manifest.Assets) != len(names) && len(manifest.Assets) != len(names)+2) {
 		return core.Error("REMOTE_ENTRY_INVALID", "incompatible or incomplete entry metadata")
+	}
+	if len(manifest.Assets) == len(names)+2 {
+		names = append(names, "CLAUDE:block", ".claude/skills/ael-work/SKILL.md")
 	}
 	for _, name := range names {
 		if len(manifest.Assets[name]) != 64 {
@@ -111,8 +114,9 @@ func RemoteEntryInfo(root string) (RemoteEntryState, error) {
 	result.Status, result.Version, result.APIProtocol, result.SkillProtocol = "current", manifest.Version, manifest.APIProtocol, manifest.SkillProtocol
 	for relative, expected := range manifest.Assets {
 		var actual string
-		if relative == "AGENTS:block" {
-			body, readErr := managedBlock(root)
+		if relative == "AGENTS:block" || relative == "CLAUDE:block" {
+			filename := strings.TrimSuffix(relative, ":block") + ".md"
+			body, readErr := remoteManagedBlock(root, filename)
 			if readErr == nil {
 				actual = store.Hash([]byte(body))
 			}
@@ -149,30 +153,34 @@ func remoteEntryTargets(root string, owned map[string]string) (map[string][]byte
 		}
 		targets[".agents/skills/ael-work/"+name] = body
 	}
+	targets[".claude/skills/ael-work/SKILL.md"] = []byte("---\nname: ael-work\ndescription: Continue authorized AEL project engineering work or an explicitly requested AEL task.\n---\n\nFor an authorized AEL engineering request, run `./ael session show --session HOST_SESSION_ID --json` and read the returned frozen `session.skill_path`. Prepare a missing tool session with `./ael session start --session HOST_SESSION_ID --runner RUNNER --json`, then read its frozen Skill. After compaction or resume, first run `./ael recovery check --session HOST_SESSION_ID --json`. Ordinary discussion and review follow the user request directly.\n")
 	for path, body := range targets {
 		manifest.Assets[path] = store.Hash(body)
 	}
-	raw, err := readEntryBytes(root, "AGENTS.md", 12<<20)
-	if err != nil && !os.IsNotExist(err) {
-		return nil, manifest, err
-	}
-	text := string(raw)
-	start, finish := strings.Index(text, begin), strings.Index(text, end)
-	managed := block("remote")
-	if start >= 0 || finish >= 0 {
-		if start < 0 || finish < start || strings.Count(text, begin) != 1 || strings.Count(text, end) != 1 {
-			return nil, manifest, core.Error("ASSET_CONFLICT", "malformed AGENTS managed block")
+	for _, filename := range []string{"AGENTS.md", "CLAUDE.md"} {
+		raw, err := readEntryBytes(root, filename, 12<<20)
+		if err != nil && !os.IsNotExist(err) {
+			return nil, manifest, err
 		}
-		finish += len(end)
-		if store.Hash([]byte(text[start:finish])) != owned["AGENTS:block"] {
-			return nil, manifest, core.Error("ASSET_CONFLICT", "user edited AGENTS managed block; content preserved")
+		text := string(raw)
+		start, finish := strings.Index(text, begin), strings.Index(text, end)
+		managed := block("remote")
+		key := strings.TrimSuffix(filename, ".md") + ":block"
+		if start >= 0 || finish >= 0 {
+			if start < 0 || finish < start || strings.Count(text, begin) != 1 || strings.Count(text, end) != 1 {
+				return nil, manifest, core.Error("ASSET_CONFLICT", "malformed "+filename+" managed block")
+			}
+			finish += len(end)
+			if store.Hash([]byte(text[start:finish])) != owned[key] {
+				return nil, manifest, core.Error("ASSET_CONFLICT", "user edited "+filename+" managed block; content preserved")
+			}
+			text = text[:start] + managed + text[finish:]
+		} else {
+			text = strings.TrimRight(text, "\n") + "\n\n" + managed + "\n"
 		}
-		text = text[:start] + managed + text[finish:]
-	} else {
-		text = strings.TrimRight(text, "\n") + "\n\n" + managed + "\n"
+		targets[filename] = []byte(text)
+		manifest.Assets[key] = store.Hash([]byte(managed))
 	}
-	targets["AGENTS.md"] = []byte(text)
-	manifest.Assets["AGENTS:block"] = store.Hash([]byte(managed))
 	body, _ := json.MarshalIndent(manifest, "", "  ")
 	targets[".ael/remote-assets.json"] = append(body, '\n')
 	return targets, manifest, nil
@@ -205,7 +213,9 @@ func UpdateRemoteEntry(root string, dry, migrate bool, expectedBindingHash strin
 		return result, core.Error("REMOTE_BINDING_CHANGED", "project binding changed after validation")
 	}
 	if _, err = os.Lstat(filepath.Join(root, ".ael/project.yaml")); err == nil {
-		return result, core.Error("LOCAL_PROJECT_EXISTS", "coordinate the data authority cutover before changing its entry")
+		if err = VerifyTransferredCheckout(root); err != nil {
+			return result, err
+		}
 	} else if !os.IsNotExist(err) {
 		return result, err
 	}
@@ -246,9 +256,11 @@ func UpdateRemoteEntry(root string, dry, migrate bool, expectedBindingHash strin
 		}
 	}
 	if recovering {
-		actual, readErr := readEntryBytes(root, "AGENTS.md", 12<<20)
-		if readErr == nil && bytes.Equal(actual, pending.Targets["AGENTS.md"]) {
-			owned["AGENTS:block"] = store.Hash([]byte(block("remote")))
+		for _, filename := range []string{"AGENTS.md", "CLAUDE.md"} {
+			actual, readErr := readEntryBytes(root, filename, 12<<20)
+			if readErr == nil && bytes.Equal(actual, pending.Targets[filename]) {
+				owned[strings.TrimSuffix(filename, ".md")+":block"] = store.Hash([]byte(block("remote")))
+			}
 		}
 	}
 	targets, _, err := remoteEntryTargets(root, owned)
@@ -283,7 +295,7 @@ func UpdateRemoteEntry(root string, dry, migrate bool, expectedBindingHash strin
 				return result, core.Error("ASSET_CONFLICT", relative+" changed after the interrupted update")
 			}
 		} else {
-			if actual != "" && actual != store.Hash(wanted) && relative != "AGENTS.md" && relative != ".ael/remote-assets.json" && actual != owned[relative] {
+			if actual != "" && actual != store.Hash(wanted) && relative != "AGENTS.md" && relative != "CLAUDE.md" && relative != ".ael/remote-assets.json" && actual != owned[relative] {
 				return result, core.Error("ASSET_CONFLICT", relative+" user content preserved")
 			}
 			intent.Before[relative] = actual
@@ -366,4 +378,17 @@ func UpdateRemoteEntry(root string, dry, migrate bool, expectedBindingHash strin
 	}
 	result.Status = "updated"
 	return result, nil
+}
+
+func remoteManagedBlock(root, filename string) (string, error) {
+	raw, err := readEntryBytes(root, filename, 12<<20)
+	if err != nil {
+		return "", err
+	}
+	text := string(raw)
+	start, finish := strings.Index(text, begin), strings.Index(text, end)
+	if start < 0 || finish < start || strings.Count(text, begin) != 1 || strings.Count(text, end) != 1 {
+		return "", core.Error("ASSET_CONFLICT", "invalid managed block in "+filename)
+	}
+	return text[start : finish+len(end)], nil
 }

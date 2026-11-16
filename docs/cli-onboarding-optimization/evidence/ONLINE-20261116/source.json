@@ -1,0 +1,19 @@
+{
+  "server": "0.1.26 / 259cd81-b393c60af771",
+  "client": "0.1.27 / 259cd81-536b3a1781e8",
+  "files": {
+    "internal/bootstrap/bootstrap.go": "228629eb2ed14b269d7b65c87234d653957e6b5b0d3e72419b74e214e0d69c25",
+    "internal/bootstrap/authority_transfer.go": "327d0025e226b0825d871aee8bf629f58b9fa9157ea80b3527d603a2377848e1",
+    "internal/bootstrap/authority_transfer_test.go": "2311b8f454b257905a970ba8f35c79fe480a4425d5ed98b8d51bce746e1d9411",
+    "internal/bootstrap/remote_entry.go": "ee97c34d538714fefc0d2b12c7b53b83392445da893c544400d814549e312b21",
+    "internal/core/authority_archive.go": "030cb0e5000a2ad7ef22f3b472d243811d88bd10b5a5ba3cedd01949d7ab1595",
+    "internal/server/authority_import_test.go": "efca94941cf6502c69591baad530bfcab31f41c0c2aa0ed936cc555700cf02cb",
+    "internal/server/server.go": "5f47d4c4a1a5910bca6645d63e4da44fd807ddf9b4795449a1fcf0ec01992b2b",
+    "internal/server/standalone_http.go": "83b6e5447258bf75a3249e4349893ec5800255ab0f13710b69c5d40276a488fb",
+    "internal/server/portable_candidate.go": "827af334f0fedf4aebee1ad688dbbf93d4548c1200eaa896335867954a3c2700",
+    "cmd/ael/onboarding.go": "6aaa9843725a7fb1ded9e80c751809e9a2e24a1ee6086d5b7d10ae3c9f1b11de",
+    "web/package.json": "70b83206991035da4e542b956cb527c9b5493cf0a704b412aa424794a48d7c53",
+    "web/package-lock.json": "01608383ac419b3f8c1690e9ffbabbb9cbbf55ef8420c9275dd54862510c2b4d",
+    "web/tests/authority-transfer.spec.ts": "423221791e4b5361e159057b3b3c16ed71d931a2a018053b3c8d39522857efee"
+  }
+}

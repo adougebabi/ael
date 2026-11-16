@@ -48,6 +48,10 @@ func cleanURL(raw string) (string, error) {
 	return u.String(), nil
 }
 
+func ValidateOrigin(raw string) (string, error) { return cleanURL(raw) }
+
+func CheckRemoteCheckout(root string) error { return checkConnectLocal(root, nil) }
+
 // resolvePath follows existing ancestors to detect paths which enter a
 // checkout through a symlink, even when the final config directory is new.
 func resolvePath(path string) (string, error) {

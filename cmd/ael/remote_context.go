@@ -265,8 +265,18 @@ func remoteContextCommandAtWorkspace(cmd string, a args, config, project, worksp
 			reference core.BasisReference
 			data      []byte
 		}
-		selected := make([]selectedSource, 0, len(basis))
-		for _, reference := range basis {
+		uploadReferences := slices.Clone(basis)
+		for _, path := range []string{"AGENTS.md", "CLAUDE.md"} {
+			record, ok := byPath[path]
+			if !ok || slices.ContainsFunc(uploadReferences, func(reference core.BasisReference) bool { return reference.Source == path }) {
+				continue
+			}
+			if file, ok := files[path]; ok && !file.Deleted {
+				uploadReferences = append(uploadReferences, core.BasisReference{ID: record.ID, Source: path, Version: record.Hash, Status: record.Status, Reason: "project entry snapshot classification"})
+			}
+		}
+		selected := make([]selectedSource, 0, len(uploadReferences))
+		for _, reference := range uploadReferences {
 			record, ok := byID[reference.ID]
 			file, found := files[reference.Source]
 			if !ok || !found || file.Deleted || file.SHA256 != reference.Version || record.Hash != reference.Version {

@@ -14,7 +14,7 @@ func machineUpgradeCommand(a args) (any, error) {
 	if a.get("project", "") != "" {
 		return nil, core.Error("INVALID_UPDATE_SCOPE", "upgrade updates the machine installation; use update --project for project assets")
 	}
-	allowed := map[string]bool{"from": true, "bundle-dir": true, "prefix": true, "dry-run": true, "check": true, "version": true, "source": true, "channel": true, "ack-stopped": true, "json": true, "verbose": true, "no-color": true}
+	allowed := map[string]bool{"rollback": true, "from": true, "bundle-dir": true, "prefix": true, "dry-run": true, "check": true, "version": true, "source": true, "channel": true, "ack-stopped": true, "json": true, "verbose": true, "no-color": true}
 	for flag, value := range a.Flags {
 		if !allowed[flag] {
 			return nil, core.Error("UNKNOWN_FLAG", flag)
@@ -34,6 +34,28 @@ func machineUpgradeCommand(a args) (any, error) {
 	options := bootstrap.UpdateOptions{From: from, Prefix: a.get("prefix", ""), DryRun: a.has("dry-run"), Check: a.has("check"), TargetVersion: a.get("version", ""), AckStopped: a.has("ack-stopped")}
 	if options.TargetVersion != "" && !release.ValidVersion(options.TargetVersion) {
 		return nil, core.Error("INVALID_RELEASE_VERSION", "use an exact semantic version")
+	}
+	if a.has("rollback") {
+		if a.get("source", "") != "" || a.get("version", "") != "" {
+			return nil, core.Error("CONFLICTING_SOURCE", "rollback selects its exact version from matching backup metadata")
+		}
+		return bootstrap.Rollback(options)
+	}
+	if a.get("source", "") == "" && from == "" {
+		prefix, err := bootstrap.InstallationPrefix(options.Prefix)
+		if err != nil {
+			return nil, err
+		}
+		policy, err := readClientPolicy(prefix)
+		if err != nil {
+			return nil, err
+		}
+		if policy.Source != "" {
+			if _, err = trustedPolicySource(policy); err != nil {
+				return nil, err
+			}
+			a.Flags["source"] = policy.Source
+		}
 	}
 	if a.get("source", "") == "" {
 		return bootstrap.Upgrade(options)

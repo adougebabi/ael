@@ -75,6 +75,10 @@ func parseSource(rel string, b []byte) (Record, error) {
 	r.Hash = store.Hash(b)
 	r.Body = strings.TrimSpace(body)
 	r.Reason = "inherited baseline; implementation compliance has not been verified"
+	if (rel == "AGENTS.md" || rel == "CLAUDE.md") && r.Body == "" && !strings.HasPrefix(string(b), "---\n") {
+		r.Kind, r.Status, r.Critical = "reference", "historical", false
+		r.Reason = "managed entry contains no project-specific rules"
+	}
 	if r.Kind == "spec" && !strings.HasPrefix(string(b), "---\n") && (strings.Contains(body, "未实施计划") || strings.Contains(body, "尚未实施") || strings.Contains(body, "TODO") || strings.Contains(body, "待确认")) {
 		r.Status = "conflict"
 		r.Reason = "mixed current rules and unresolved plans; resolve only the relevant scope"
@@ -312,7 +316,7 @@ func Status(root string) Health {
 		h.Reason = e.Error()
 		return h
 	}
-	if len(all) == 0 {
+	if !slices.ContainsFunc(all, func(record Record) bool { return strings.TrimSpace(record.Body) != "" }) {
 		h.State = "empty"
 		h.Reason = "inventory completed; no existing engineering rules; source-derived rules must remain proposed"
 	}

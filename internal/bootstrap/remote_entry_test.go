@@ -25,6 +25,30 @@ func TestRemoteEntryRecoveryAfterAGENTSWasWritten(t *testing.T) {
 	assertInterruptedRemoteEntryRecovers(t, root)
 }
 
+func TestRemoteEntryClaudeRulesPreserveUserContent(t *testing.T) {
+	root := remoteEntryFixture(t)
+	path := filepath.Join(root, "CLAUDE.md")
+	os.WriteFile(path, []byte("User Claude rules\n"), 0644)
+	if _, err := updateRemoteEntryTest(root, false, false); err != nil {
+		t.Fatal(err)
+	}
+	first, _ := os.ReadFile(path)
+	if !strings.Contains(string(first), "User Claude rules") || !strings.Contains(string(first), "recovery check") {
+		t.Fatal("Claude entry missing rules")
+	}
+	if _, err := updateRemoteEntryTest(root, false, false); err != nil {
+		t.Fatal(err)
+	}
+	second, _ := os.ReadFile(path)
+	if string(first) != string(second) {
+		t.Fatal("Claude block duplicated")
+	}
+	os.WriteFile(path, []byte(strings.ReplaceAll(string(first), "recovery check", "user-edited recovery check")), 0644)
+	if _, err := updateRemoteEntryTest(root, false, false); err == nil || !strings.Contains(err.Error(), "ASSET_CONFLICT") {
+		t.Fatalf("Claude user block overwritten %v", err)
+	}
+}
+
 func TestRemoteEntryRecoveryPreservesLargeAGENTS(t *testing.T) {
 	root := remoteEntryFixture(t)
 	os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte(strings.Repeat("User rules.\n", 75000)), 0644)

@@ -9,6 +9,9 @@ import (
 	"time"
 )
 
+// History manifests can contain many tasks and artifact references.
+const AuthorityArchiveRequestLimit = 8 << 20
+
 var archiveSourceID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$`)
 
 func ValidArchiveSourceID(id string) bool { return archiveSourceID.MatchString(id) }
@@ -37,7 +40,7 @@ func ValidateArchiveTransferLimits(archive AuthorityArchive) error {
 	if err != nil {
 		return err
 	}
-	if len(body) > RemoteJSONRequestLimit {
+	if len(body) > AuthorityArchiveRequestLimit {
 		return Error("TRANSFER_ARCHIVE_LIMIT", "archive exceeds the current remote request limit; source remains unfrozen")
 	}
 	return nil
@@ -97,9 +100,31 @@ func (s *Service) ImportArchivedTaskTx(tx *store.Tx, archived ArchivedTask, defi
 		copy.Parent = definition.Parent
 		membership = &copy
 	}
-	task, err := s.createTaskTx(tx, definition, membership, "", "")
+	creation := definition
+	if definition.Parent != "" && membership == nil {
+		// Older Local tasks used Parent for attribution to ordinary tasks.
+		// Preserve that relationship without inventing Epic membership.
+		parent, err := load(tx, definition.Parent)
+		if err != nil || parent.Legacy["authority_import"] != source {
+			return Task{}, Error("IMPORT_REFERENCE_MISSING", definition.Parent)
+		}
+		creation.Parent = ""
+	}
+	task, err := s.createTaskTx(tx, creation, membership, "", "")
 	if err != nil {
 		return task, err
+	}
+	if creation.Parent != definition.Parent {
+		task.Definition.Parent = definition.Parent
+		body := definitionBytes(task.Definition)
+		task.DefinitionHash = store.Hash(body)
+		path, err := s.taskPath(task.Definition.ID)
+		if err != nil {
+			return task, err
+		}
+		if err := tx.File(path, body); err != nil {
+			return task, err
+		}
 	}
 	record := archived.Record
 	task.Plan.Approved = false

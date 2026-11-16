@@ -73,6 +73,24 @@ func writeOutput(w io.Writer, value any, machine, verbose bool) error {
 	if machine {
 		return json.NewEncoder(w).Encode(value)
 	}
+	if result, ok := value.(map[string]any); ok && !verbose {
+		if index, ok := result["summary"].(recoveryIndex); ok {
+			fmt.Fprintf(w, "恢复 %s · 在线核对 %t\n", index.State, index.Verified)
+			fmt.Fprintf(w, "Server %s · 项目 %s\n", index.Server, index.Project)
+			fmt.Fprintf(w, "会话 %s · 执行者 %s · 责任 %s\n", index.Session, index.Runner, index.Responsibility)
+			fmt.Fprintf(w, "父任务 %s · 当前任务 %s · 步骤 %s\n", index.Parent, index.Task, index.Step)
+			fmt.Fprintf(w, "定义 %d · 计划 %d · CLI %s · Skill %s\n", index.DefinitionRevision, index.PlanRevision, index.CLI, index.Skill)
+			fmt.Fprintf(w, "已完成叶子 %d · 已通过检查 %d · 尚未完成检查 %d\n", len(index.CompletedChildren), len(index.Passed), len(index.Unfinished))
+			fmt.Fprintf(w, "下一动作 %s\n检查点 %v\n", index.Next, result["checkpoint"])
+			if index.Blocker != nil {
+				fmt.Fprintf(w, "当前阻塞 %s\n", index.Blocker.Reason)
+			}
+			if index.Failure != "" {
+				fmt.Fprintf(w, "最近失败 %s\n", index.Failure)
+			}
+			return nil
+		}
+	}
 	switch v := value.(type) {
 	case remoteOutput:
 		if online, _ := v["online"].(bool); online {

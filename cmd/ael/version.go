@@ -10,7 +10,7 @@ import (
 func versionCommand(a args) (any, error) {
 	result := map[string]any{"version": bootstrap.Version, "build": build, "cli_output_protocol": 1, "api_protocol": 1, "skill_protocol": 1}
 	for flag, value := range a.Flags {
-		if flag != "check" && flag != "project" && flag != "config-dir" && flag != "json" && flag != "verbose" && flag != "no-color" {
+		if flag != "session" && flag != "check" && flag != "project" && flag != "config-dir" && flag != "json" && flag != "verbose" && flag != "no-color" {
 			return nil, core.Error("UNKNOWN_FLAG", flag)
 		}
 		isBoolean := flag == "check" || booleanFlag(flag)
@@ -56,7 +56,7 @@ func versionCommand(a args) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	meta, err := remote.Metadata(nil, profile)
+	meta, err := remote.MetadataForUpdates(nil, profile)
 	if err != nil {
 		return nil, err
 	}
@@ -70,6 +70,17 @@ func versionCommand(a args) (any, error) {
 	if meta.Version == "" {
 		result["server_version_status"] = "unreported"
 	}
-	result["compatible"], result["active_session_instructions_changed"] = true, false
+	result["compatible"], result["active_session_instructions_changed"] = toolCompatible(bootstrap.Version, meta), false
+	if a.get("session", os.Getenv("AEL_SESSION_ID")) != "" {
+		path, _, _, err := toolSessionLocation(a, config, root, binding)
+		if err != nil {
+			return nil, err
+		}
+		if session, err := readToolSession(path); err == nil {
+			result["tool_session"] = session
+		} else if !os.IsNotExist(err) {
+			return nil, err
+		}
+	}
 	return result, nil
 }

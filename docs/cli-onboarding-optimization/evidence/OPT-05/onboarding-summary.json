@@ -1,0 +1,29 @@
+{
+  "result": "PASS",
+  "driver": "deterministic packaged CLI and isolated Server",
+  "project_id": "project-2949352b796e9238a4c662b1c16e6608",
+  "second_machine_project_id": "project-2949352b796e9238a4c662b1c16e6608",
+  "shared_cli": "/private/tmp/ael-opt-evidence/opt05-final-onboarding/install/bin/ael",
+  "same_name_distinct_id": "project-330ae6f36ab1dbcbc3e6091d3a725279",
+  "interruption_recovered_id": "project-93d24ab0e80d260250798a7fb60b88b2",
+  "runtime_created": false,
+  "lost_response_recovered_id": "project-f8f3dd8ba0b3ecf2ec4e646fc0334033",
+  "cases": [
+    "create",
+    "second-machine-connect",
+    "repeat-init",
+    "same-name-distinct-projects",
+    "permission-denied",
+    "offline",
+    "insecure-origin",
+    "remote-created-local-conflict",
+    "retry-keeps-project-id",
+    "lost-registration-response",
+    "interactive-hidden-password",
+    "interactive-same-name-ambiguity",
+    "interactive-stable-id-connect",
+    "custom-install-launcher",
+    "explicit-config-launcher",
+    "user-managed-block-conflict"
+  ]
+}

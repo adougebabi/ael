@@ -1,0 +1,11 @@
+{
+  "result": "PASS",
+  "version": "0.1.23",
+  "build": "259cd81-2f3750e5d7e7",
+  "backup_volume": "ael-v2_backup_data",
+  "backup_path": "/backup/pre-0123-20261116T011419Z",
+  "configuration_backup": "/opt/ael-v2/.env.pre-20261116T011419Z",
+  "origin": "https://ael.adoumi.site",
+  "maintenance": "active",
+  "http_check": "curl with standard TLS verification; Python urllib returned 403"
+}

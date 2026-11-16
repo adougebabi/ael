@@ -19,6 +19,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import urllib.parse
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--release', required=True)
@@ -47,7 +48,7 @@ old_binary = previous / ('ael-' + native)
 old_version = json.loads(subprocess.check_output([str(old_binary), 'version', '--json'], text=True))
 assert old_version['version'] != manifest['version']
 config = out / 'client-config'
-cli_env = dict(os.environ, AEL_DATA_DIR=str(out / 'unused-runtime'), AEL_REMOTE_CONFIG_DIR=str(config), AEL_BUNDLE_DIR='', PATH='/usr/bin:/bin:/usr/sbin:/sbin', AEL_API_PROTOCOL='1', AEL_SKILL_PROTOCOL='1')
+cli_env = dict(os.environ, AEL_DATA_DIR=str(out / 'unused-runtime'), AEL_REMOTE_CONFIG_DIR=str(config), AEL_CLIENT_CONFIG_DIR=str(out / 'machine-clients'), AEL_BUNDLE_DIR='', PATH='/usr/bin:/bin:/usr/sbin:/sbin', AEL_API_PROTOCOL='1', AEL_SKILL_PROTOCOL='1')
 assert shutil.which('docker', path=cli_env['PATH']) is None
 agent_config = out / 'host-config/agent-settings.toml'
 agent_config.parent.mkdir(parents=True)
@@ -89,11 +90,12 @@ class SourceHandler(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
-        if self.path == '/releases':
+        path = urllib.parse.urlsplit(self.path).path
+        if path == '/releases':
             body = json.dumps(catalog).encode()
-        elif self.path == '/api/v1/meta':
+        elif path == '/api/v1/meta':
             body = json.dumps({'mode': 'server', 'protocol': 2, 'skill_protocol': 2, 'capabilities': ['remote_tasks']}).encode()
-        elif self.path.startswith('/api/v1/projects/'):
+        elif path.startswith('/api/v1/projects/'):
             source_counts['incompatible_project_reads'] += 1
             body = b'{"tasks":[]}'
         else:

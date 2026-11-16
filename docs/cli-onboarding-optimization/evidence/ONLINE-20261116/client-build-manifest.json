@@ -1,0 +1,71 @@
+{
+  "schema": 1,
+  "version": "0.1.27",
+  "build": "259cd81-536b3a1781e8",
+  "commit": "259cd8139c4bedac1ab8d91c6b6466bc536ec79d",
+  "dirty": true,
+  "publication": "local_unpublished",
+  "protocols": {
+    "api": 1,
+    "skill": 1,
+    "cli_output": 1
+  },
+  "assets": [
+    {
+      "kind": "client",
+      "platform": "darwin-arm64",
+      "path": "ael-client-0.1.27-darwin-arm64.tar.gz",
+      "sha256": "040fef1e78fc81eca6102205fb28f56016e3bbba62af0e3e106fe7e0bbe9739f",
+      "size": 6078670
+    },
+    {
+      "kind": "client",
+      "platform": "darwin-amd64",
+      "path": "ael-client-0.1.27-darwin-amd64.tar.gz",
+      "sha256": "a20badcc92663309937c59cb53d0ef29cf4a78405651a87f9fad6c033612da64",
+      "size": 6499243
+    },
+    {
+      "kind": "client",
+      "platform": "linux-amd64",
+      "path": "ael-client-0.1.27-linux-amd64.tar.gz",
+      "sha256": "f009afcab4ba3b73c5ca545fd003aff48a4ecfc09687d9a7a2b40cf4221d79f6",
+      "size": 6403927
+    },
+    {
+      "kind": "client",
+      "platform": "linux-arm64",
+      "path": "ael-client-0.1.27-linux-arm64.tar.gz",
+      "sha256": "9f0731ce338ecc1f5b9f1313ba3f2b93f907a9e9b79e11dcf1374b798d050ff9",
+      "size": 5867724
+    },
+    {
+      "kind": "server",
+      "platform": "linux-amd64",
+      "path": "ael-server-0.1.27-linux-amd64.tar.gz",
+      "sha256": "27ffe9b9aef7731815054a53854d8e0ea88eac928d2c64e97726b290856229a5",
+      "size": 6403928
+    },
+    {
+      "kind": "server",
+      "platform": "linux-arm64",
+      "path": "ael-server-0.1.27-linux-arm64.tar.gz",
+      "sha256": "d0d0877ff369aabcaac0574db54a55016321690551f19cefaf34d58ee5a06945",
+      "size": 5867739
+    },
+    {
+      "kind": "skill",
+      "platform": "all",
+      "path": "ael-skill-0.1.27-all.tar.gz",
+      "sha256": "ed3461dfe7285625653172e9caa02d598d5a2bf9bdfb9af9d091882a58509614",
+      "size": 40476
+    },
+    {
+      "kind": "legacy",
+      "platform": "all",
+      "path": "ael-0.1.27-unix.tar.gz",
+      "sha256": "4c4c7ac648454813d414a91d0e2b0aee8c0a2bd0127a579a93539163c97c9291",
+      "size": 32692951
+    }
+  ]
+}

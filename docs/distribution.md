@@ -74,9 +74,11 @@ ael release download --source /absolute/path/source.json --kind client --platfor
 
 `stable` 排除 draft 及预发布。`prerelease` 允许预发布并按 SemVer 选最新版本。空目录返回 `no_available_version`。选中版本缺清单、签名、目标平台或资产会给出明确失败。签名必须先通过，再解析兼容清单及选平台。清单要求 clean、released，且版本与 tag 一致。下载到临时文件，完成大小和哈希检查后通过新文件链接发布，已存在输出受到保护。CLI 不解包或执行下载内容。
 
-## 手动 CI 与公开发布
+## CI 与公开发布
 
-`.github/workflows/release.yml` 仅由 `workflow_dispatch` 手动触发。默认 `build_artifact` 构建并上传 workflow artifact。显式选择 `draft` 创建草稿，选择 `released` 创建公开 Release。发布步骤需要对应 tag 已存在且准确指向本轮源 commit，使用 `--verify-tag`，不会创建 tag。工作流根据 SemVer 预发布后缀自动设置 prerelease，且预发布不成为 latest。已存在的同 tag 草稿可上传本次重新签名产物，再显式公开。已公开版本受到覆盖保护。草稿替换上传失败会保留草稿状态，重跑可继续。
+`.github/workflows/release.yml` 在推送 main 时自动测试、构建并上传 workflow artifact。推送 `v*` 标签时，标签运行使用仓库工作流令牌调度 main 上的发行运行，选择 `released` 并传入该标签。发行运行从标签 checkout 源码，验证标签版本、精确提交及 main 祖先关系，再构建、签名并公开。签名工作流身份固定在 main，与客户端信任配置一致。普通构建、各标签调度和各版本发行分别使用并发组。
+
+保留 `workflow_dispatch` 手动入口，默认 `build_artifact`，选择 `draft` 创建草稿，选择 `released` 创建公开 Release。可通过 `release_tag` 指定已有标签，发行构建与发布脚本使用实际 checkout 的同一提交。发布步骤需要对应 tag 已存在且准确指向本轮源 commit，使用 `--verify-tag`，不会创建 tag。工作流根据 SemVer 预发布后缀自动设置 prerelease，且预发布不成为 latest。已存在的同 tag 草稿可上传本次重新签名产物，再显式公开。已公开版本受到覆盖保护。草稿替换上传失败会保留草稿状态，重跑可继续。
 
 构建 job 仅有 contents read 及签名所需 id-token write，只有选择发行操作的 publish job 有 contents write。CI 执行 Go 测试、相同本地打包脚本、双架构 Server 镜像导出，再以 Cosign keyless 签署最终 manifest 并验证当前 workflow identity。构建、草稿、公开状态写入清单。草稿的 manifest 不被在线正式下载入口接受。公开发布前须以 `released` 状态重新构建和签名，由有权人员审阅具体 tag、commit、工作流身份及产物。
 

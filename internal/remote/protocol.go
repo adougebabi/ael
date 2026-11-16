@@ -1,11 +1,13 @@
 package remote
 
 import (
+	"ael/internal/release"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"os"
+	"runtime"
 	"slices"
 )
 
@@ -13,14 +15,18 @@ const APIProtocol = 1
 const SkillProtocol = 1
 
 type ServerMetadata struct {
-	Mode           string         `json:"mode"`
-	Protocol       int            `json:"protocol"`
-	SkillProtocol  int            `json:"skill_protocol,omitempty"`
-	OutputProtocol int            `json:"cli_output_protocol,omitempty"`
-	Version        string         `json:"version,omitempty"`
-	Build          string         `json:"build,omitempty"`
-	Maintenance    map[string]any `json:"maintenance,omitempty"`
-	Capabilities   []string       `json:"capabilities"`
+	MinimumClientVersion     string         `json:"minimum_client_version,omitempty"`
+	RecommendedClientVersion string         `json:"recommended_client_version,omitempty"`
+	ProtocolRange            map[string]int `json:"protocol_range,omitempty"`
+	ClientRelease            map[string]any `json:"client_release,omitempty"`
+	Mode                     string         `json:"mode"`
+	Protocol                 int            `json:"protocol"`
+	SkillProtocol            int            `json:"skill_protocol,omitempty"`
+	OutputProtocol           int            `json:"cli_output_protocol,omitempty"`
+	Version                  string         `json:"version,omitempty"`
+	Build                    string         `json:"build,omitempty"`
+	Maintenance              map[string]any `json:"maintenance,omitempty"`
+	Capabilities             []string       `json:"capabilities"`
 }
 
 // Explicit session declarations survive a machine CLI upgrade. Unknown protocols
@@ -38,8 +44,20 @@ func CheckClientProtocols(binding Binding) error {
 }
 
 func Metadata(client *http.Client, profile Profile) (ServerMetadata, error) {
+	return metadata(client, profile, false)
+}
+
+func MetadataForUpdates(client *http.Client, profile Profile) (ServerMetadata, error) {
+	return metadata(client, profile, true)
+}
+
+func metadata(client *http.Client, profile Profile, updates bool) (ServerMetadata, error) {
 	var meta ServerMetadata
-	response, err := request(client, profile, "/api/v1/meta", false)
+	path := "/api/v1/meta?platform=" + runtime.GOOS + "-" + runtime.GOARCH
+	if updates {
+		path += "&updates=1"
+	}
+	response, err := request(client, profile, path, false)
 	if err != nil {
 		return meta, err
 	}
@@ -61,6 +79,17 @@ func Metadata(client *http.Client, profile Profile) (ServerMetadata, error) {
 	}
 	if meta.SkillProtocol == 0 {
 		meta.SkillProtocol = SkillProtocol
+	}
+	if (meta.MinimumClientVersion != "" && !release.ValidVersion(meta.MinimumClientVersion)) || (meta.RecommendedClientVersion != "" && !release.ValidVersion(meta.RecommendedClientVersion)) {
+		return meta, errors.New("REMOTE_PROTOCOL_UNSUPPORTED: Server client version metadata is invalid")
+	}
+	for _, kind := range []string{"api", "skill"} {
+		if minimum, ok := meta.ProtocolRange[kind+"_min"]; ok && (minimum < 0 || minimum > 1) {
+			return meta, errors.New("REMOTE_PROTOCOL_UNSUPPORTED: Server protocol range excludes this client")
+		}
+		if maximum, ok := meta.ProtocolRange[kind+"_max"]; ok && maximum < 1 {
+			return meta, errors.New("REMOTE_PROTOCOL_UNSUPPORTED: Server protocol range excludes this client")
+		}
 	}
 	return meta, nil
 }

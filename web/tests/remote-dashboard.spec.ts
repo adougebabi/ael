@@ -8,11 +8,17 @@ async function login(page: Page, user = "owner", password = "fixture-admin-passw
   await page.getByLabel("用户名", { exact: true }).fill(user);
   await page.getByLabel("密码", { exact: true }).fill(password);
   await page.getByRole("button", { name: "登录", exact: true }).click();
-  await page.getByRole("listitem").filter({ hasText: "Dashboard shared" }).getByRole("button", { name: "查看项目", exact: true }).click();
   await expect(page.getByRole("heading", { name: "工作台", exact: true })).toBeVisible();
 }
 
+async function switchProject(page: Page, name: string, search = name) {
+  await page.getByRole("button", { name: "切换项目", exact: true }).click();
+  await page.getByRole("searchbox", { name: "搜索项目", exact: true }).fill(search);
+  await page.getByRole("region", { name: "选择项目", exact: true }).getByRole("button").filter({ hasText: name }).click();
+}
+
 test("统一远程工作台保持责任、证据、导航和项目隔离", async ({ page, request, browser }) => {
+  const productVersion = (await (await request.get(fixture.url + "/api/v1/meta")).json()).version;
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   const control = async (action: string) => {
@@ -21,6 +27,54 @@ test("统一远程工作台保持责任、证据、导航和项目隔离", async
   };
   await login(page);
   await expect(page.getByRole("link", { name: "Dashboard child", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "切换项目", exact: true })).toHaveCount(1);
+  const longName = "非常长的项目名称用于验证完整显示与搜索 — 跨团队 AEL 工程协作项目";
+  await switchProject(page, longName, "跨团队");
+  await expect(page.locator(".project-switcher-button strong")).toHaveText(longName);
+  await expect(page.getByRole("region", { name: "当前工作空状态" })).toBeVisible();
+  await expect(page.locator(".task-table-head")).toHaveCount(0);
+  await page.screenshot({ path: path.join(fixture.out, "remote-long-project.png"), fullPage: true });
+  await switchProject(page, "新项目 · 初始化接入资料待完善", "新项目");
+  await expect(page.getByRole("region", { name: "当前工作空状态" })).toBeVisible();
+  await page.getByRole("link", { name: "项目设置", exact: true }).click();
+  await expect(page.getByRole("region", { name: "项目接入", exact: true })).toContainText("资料待完善");
+  await switchProject(page, "Dashboard shared");
+  await page.getByRole("link", { name: "项目设置", exact: true }).click();
+  await expect(page.getByRole("region", { name: "客户端最近上报", exact: true })).toContainText(`CLI ${productVersion}`);
+  await expect(page.getByRole("region", { name: "客户端最近上报", exact: true })).toContainText("只提示");
+  await expect(page.getByRole("region", { name: "客户端最近上报", exact: true })).toContainText(/Hook 待宿主信任|显式恢复可用/);
+  let releaseToken: () => void = () => {};
+  const tokenResponse = new Promise<void>(resolve => { releaseToken = resolve; });
+  let tokenHeld = false, issuedToken = "";
+  await page.route("**/api/v1/tokens", async route => {
+    if (route.request().method() === "POST" && !tokenHeld) {
+      const response = await route.fetch();
+      const body = await response.json();
+      issuedToken = body.token; tokenHeld = true;
+      await tokenResponse;
+      await route.fulfill({ response, json: body });
+    } else await route.continue();
+  });
+  await page.getByLabel("成员用户名", { exact: true }).fill("client-a");
+  await page.getByLabel("用途", { exact: true }).fill("project-scoped delayed fixture");
+  await page.getByRole("button", { name: "创建令牌", exact: true }).click();
+  await expect.poll(() => tokenHeld).toBeTruthy();
+  await switchProject(page, "Dashboard other");
+  await page.getByRole("link", { name: "项目设置", exact: true }).click();
+  releaseToken();
+  await expect(page.getByLabel("新令牌", { exact: true })).toHaveCount(0);
+  await switchProject(page, "Dashboard shared");
+  await page.getByRole("link", { name: "项目设置", exact: true }).click();
+  await expect(page.getByLabel("新令牌", { exact: true })).toHaveValue(issuedToken);
+  await page.unroute("**/api/v1/tokens");
+  await page.getByRole("link", { name: "服务管理", exact: true }).click();
+  await expect(page.getByRole("region", { name: "服务版本与发行", exact: true })).toContainText("未配置正式发行源");
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "服务管理", exact: true })).toBeVisible();
+  await page.getByLabel("账户菜单", { exact: true }).click();
+  await page.getByRole("link", { name: "身份与个人设置", exact: true }).click();
+  await expect(page.getByRole("region", { name: "个人账户", exact: true })).toContainText("owner");
+  await page.getByRole("link", { name: /^工作台/ }).click();
   await page.evaluate(() => sessionStorage.setItem("ael-dashboard-claim-v1:dashboard-child", JSON.stringify({ attempt: { id: "foreign-attempt", token: "fixture-foreign-token", executor: "foreign-project", unit: "define" }, draft: { summary: "FOREIGN_PRIVATE_DRAFT" }, pending: { key: "foreign-pending" } })));
   await control("progress");
   await page.screenshot({ path: path.join(fixture.out, "remote-workbench.png"), fullPage: true });
@@ -78,9 +132,10 @@ test("统一远程工作台保持责任、证据、导航和项目隔离", async
   await expect(page.locator(".artifact-panel")).toContainText("External host asserted fixed file");
   await page.getByRole("button", { name: "关闭证据", exact: true }).click();
   await page.getByRole("button", { name: /^规范与决策/ }).click();
-  await page.getByRole("button", { name: "阅读实际提供版本", exact: true }).click();
+  const suppliedRules = page.locator("article").filter({ has: page.getByRole("heading", { name: "Shared rules", exact: true }) });
+  await suppliedRules.getByRole("button", { name: "阅读实际提供版本", exact: true }).click();
   await expect(page.getByText("REMOTE_RULES_SHARED", { exact: false }).first()).toBeVisible();
-  await page.getByRole("link", { name: "查看当前资料与来源", exact: true }).click();
+  await suppliedRules.getByRole("link", { name: "查看当前资料与来源", exact: true }).click();
   await expect(page).toHaveURL(/#\/knowledge\//);
   await expect(page.locator(".object-header h1")).toHaveText("Shared rules");
   await expect(page.getByText("REMOTE_RULES_SHARED", { exact: false }).first()).toBeVisible();
@@ -103,6 +158,9 @@ test("统一远程工作台保持责任、证据、导航和项目隔离", async
   await expect(page.getByRole("searchbox", { name: "搜索任务" })).toHaveValue("Dashboard");
   await expect.poll(async () => Math.abs(await page.evaluate(() => window.scrollY) - returnScroll)).toBeLessThan(20);
   await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe("task-link-dashboard-epic");
+  await page.reload();
+  await expect(page.getByRole("searchbox", { name: "搜索任务" })).toHaveValue("Dashboard");
+  await expect(page).toHaveURL(/project=shared/);
 
   let releaseProject: () => void = () => {};
   const projectResponse = new Promise<void>(resolve => { releaseProject = resolve; });
@@ -114,13 +172,13 @@ test("统一远程工作台保持责任、证据、导航和项目隔离", async
     else await route.continue();
   });
   await expect.poll(() => held).toBeTruthy();
-  await page.getByLabel("切换项目").selectOption("other");
+  await switchProject(page, "Dashboard other");
   await expect(page.getByRole("link", { name: "OTHER SECRET", exact: true })).toBeVisible({ timeout: 15000 });
   releaseProject();
   await projectDelivered;
   await page.unroute("**/api/v1/projects/shared/dashboard/tasks?**");
   await expect(page.getByRole("link", { name: "Dashboard child", exact: true })).toHaveCount(0);
-  await page.getByLabel("切换项目").selectOption("shared");
+  await switchProject(page, "Dashboard shared");
   await page.getByRole("link", { name: "Dashboard peer", exact: true }).click();
   await page.getByLabel("更多任务操作").click();
   await page.getByRole("button", { name: "暂缓", exact: true }).click();
@@ -156,6 +214,35 @@ test("统一远程工作台保持责任、证据、导航和项目隔离", async
   const parentState = await (await reader.request.get(fixture.url + "/api/v1/projects/shared/tasks/dashboard-epic")).json();
   const rejected = await reader.request.post(fixture.url + "/api/v1/projects/shared/tasks/dashboard-epic/cancel", { headers: { Origin: fixture.url, "X-AEL-CSRF": readerSession.csrf, "X-AEL-Protocol": "1" }, data: { expected_revision: parentState.revision, operation_id: "reader-cancel", idempotency_key: "reader-cancel", reason: "must reject read-only mutation" } });
   expect(rejected.status()).toBe(403);
+  await expect(readerPage.getByRole("link", { name: "服务管理", exact: true })).toHaveCount(0);
+  expect((await reader.request.get(fixture.url + "/api/v1/admin/client-release")).status()).toBe(403);
+  await readerPage.goto(fixture.url + "/#/service?project=shared");
+  await expect(readerPage.getByRole("alert").filter({ hasText: "没有服务管理权限" }).first()).toBeVisible();
+  await readerPage.goto(fixture.url + "/#/tasks?project=shared");
+  await control("revoke-observer");
+  await expect(readerPage.getByRole("alert").filter({ hasText: /权限已变化|无法访问|登录/ }).first()).toBeVisible({ timeout: 15000 });
   await reader.close();
+  await page.getByLabel("账户菜单", { exact: true }).click();
+  await page.getByRole("button", { name: "退出登录", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "登录工作台", exact: true })).toBeVisible();
+  expect((await page.request.get(fixture.url + "/api/v1/auth/session")).status()).toBe(401);
   expect(errors).toEqual([]);
+});
+
+
+test("零项目管理员可直接访问服务和账户并创建首个项目", async ({ page, request }) => {
+  const productVersion = (await (await request.get(fixture.zero_url + "/api/v1/meta")).json()).version;
+  await page.goto(fixture.zero_url + "/#/service");
+  await page.getByLabel("用户名", { exact: true }).fill("owner");
+  await page.getByLabel("密码", { exact: true }).fill("fixture-admin-password");
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await expect(page.getByRole("region", { name: "服务版本与发行", exact: true })).toContainText(productVersion);
+  await page.getByRole("link", { name: "账户设置", exact: true }).click();
+  await expect(page.getByRole("region", { name: "个人账户", exact: true })).toContainText("owner");
+  await page.getByRole("link", { name: "服务管理", exact: true }).click();
+  await page.getByLabel("项目 ID", { exact: true }).fill("first-browser-project");
+  await page.getByLabel("项目名称", { exact: true }).fill("浏览器创建的首个项目");
+  await page.getByRole("button", { name: "注册项目", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "工作台", exact: true })).toBeVisible();
+  await expect(page.locator(".project-switcher-button")).toContainText("浏览器创建的首个项目");
 });

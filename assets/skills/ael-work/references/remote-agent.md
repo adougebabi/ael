@@ -1,6 +1,26 @@
 # 外部 Agent → AEL Client → Server
 
-现有 Agent 负责宿主执行，项目通信命令带 `--project PATH --json`。机器级 upgrade 使用安装 prefix 参数。先 profile add/token-stdin、project connect，再 repository register、knowledge index。中间文件放项目外私有目录，不进 Git。每个写请求使用稳定 operation_id/idempotency_key，修改请求必须换键；网络结果未知先查原回执，不回退本地。
+## 会话恢复
+
+新会话先 `./ael session start --session HOST_SESSION_ID --runner RUNNER --json`，读取 session.skill_path，并在后续 Remote 命令中显式带相同 `--session HOST_SESSION_ID`。客户端会在新的工具会话/领取责任前核对 Server、兼容范围与已授权的更新策略。CLI 取既有不可变版本缓存，Skill 冻结在仓库外。活动会话继续使用其版本，`session show` 展示实际引用，`session end` 只结束工具绑定，仍有 Server 责任时须先完成或明确交接。
+
+安装级策略用 `ael client policy --prefix INSTALL` 查看，用 `--mode notify|auto|pinned` 明确设置。固定版用 `--version EXACT`，显式可信发行源用 `--source TRUSTED_SOURCE_JSON`，清除来源用 `--clear-source`。来源与公钥内容指纹变化须通过此命令重新审阅。init 同样支持 `--release-source TRUSTED_SOURCE_JSON`。手动云端 `upgrade --source ... --check|--dry-run` 保留独立入口。精确回退使用 `upgrade --rollback --from REPORTED_BACKUP_DIR --prefix INSTALL`，校验匹配的旧可执行文件、安装标记与缓存后走原安装事务。
+
+上下文压缩、会话恢复、任务切换或进度不确定后，先执行 `./ael recovery check --session HOST_SESSION_ID --json`。恢复查询读取 Server 当前责任、父/叶任务、候选、规范、检查和本地 HEAD/候选，只写仓库外恢复索引。`online_verified=false` 时只允许只读定位与现场保存。state/next_action 表示应核对的差异或唯一下一动作，领取和提交仍使用原有责任协议。
+
+首次显式绑定使用 `./ael recovery save --session HOST_SESSION_ID --runner RUNNER [--parent EPIC --task TASK]`。每次完成一个可验证单元、消费 submit 回执或切换任务后再次 save。可用 `--file PRIVATE_JSON` 补 next、tried、decisions，文件必须私有且不超过 4 KiB，只写必要交接说明，禁止凭据、租约、聊天、内部思考和全量日志。多个 checkout/session 的索引独立，已完成项会清除当前任务指向，恢复命令不会自动领取后继。
+
+`./ael recovery install --host codex|claude [--dry-run]` 合并项目级 PreCompact、SessionStart，保留用户 Hook 与文件权限，修改冲突需审阅。Codex 安装到 `.codex/hooks.json`，在宿主 `/hooks` 审阅并信任。Claude Code 安装到 `.claude/settings.json`，遵循宿主项目信任及 Hook 审阅。安装结果保持 pending_host_trust，实际触发由宿主确认。缺少宿主支持、未信任或运行失败时，显式恢复命令与短 Skill 入口可用。
+
+PreCompact 仅持久化已有索引并标为待在线核对。SessionStart 的 startup/resume/clear/compact/fork 仅通过 hookSpecificOutput.additionalContext 提供固定规则和恢复命令。Hook 不访问聊天、不调用模型、不领取任务、不运行工程命令、不升级，配置超时 5 秒且按需退出。
+
+## 任务通信
+
+现有 Agent 负责宿主执行，项目通信命令带 `--project PATH --json`。首次接入用统一 `ael init --server ORIGIN --create NAME` 或 `--remote-project ID`，从实际客户端包启动，可通过 `--username USER --password-stdin` 登录，或使用已有 profile/项目 token。交互初始化会选择项目并设置更新策略。项目目录仍使用 `--project PATH`，稳定远程 ID 使用 `--remote-project ID`。旧 profile add/project connect 保留为低层兼容入口，统一初始化复用其绑定和受管安装。
+
+init 默认共用机器级 CLI，支持 `--prefix DIR --from CLIENT_PACKAGE`。项目入口通过仓库外机器映射找到本机安装与配置，项目只保存非敏感绑定、轻入口和 Skill。Hook 安装可选 `--host codex|claude|both|none`，默认探测可用宿主并保留待信任状态。更新策略 `--update-policy notify|auto|pinned` 记录用户选择，固定版可另传 `--pin-version EXACT`。初始化不会自动领取任务，资料和当前任务上下文仍须核对。
+
+接入后再 repository register、knowledge index 与当前责任流程。机器级 upgrade 使用安装 prefix 参数。中间文件放项目外私有目录，不进 Git。每个写请求使用稳定 operation_id/idempotency_key，修改请求必须换键；网络结果未知先查原回执，不回退本地。
 
 1. `runner register --file PRIVATE_JSON --operation-id OP --idempotency-key KEY`：文件含 id、workspace_id、checkout_id、repository、version、capabilities（例如 development、model、scenario）、expected_revision:"absent"。可选 alias 和 machine 提供客户端别名与设备声明，未提供时使用 runner ID 并显示设备未声明。这是身份/能力声明，不是 OS 隔离证明。
 2. `task show --task ID` / `next --task ID` 取得 revision、next_action、current_step；父范围先 `runner next --runner ID --parent EPIC` 查询合法后继，再 claim，不凭查询直接工作。人工责任保持 wait_human；父级叶子与集成条件继续生效。

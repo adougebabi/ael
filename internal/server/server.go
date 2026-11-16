@@ -38,8 +38,15 @@ func reply(w http.ResponseWriter, v any, e error) {
 	}
 	_ = json.NewEncoder(w).Encode(v)
 }
+func jsonRequestLimit(r *http.Request) int64 {
+	if strings.HasPrefix(r.URL.Path, "/api/v1/projects/") && strings.HasSuffix(r.URL.Path, "/imports") {
+		return core.AuthorityArchiveRequestLimit
+	}
+	return core.RemoteJSONRequestLimit
+}
+
 func decode(r *http.Request, v any) error {
-	d := json.NewDecoder(io.LimitReader(r.Body, 2<<20))
+	d := json.NewDecoder(io.LimitReader(r.Body, jsonRequestLimit(r)))
 	d.DisallowUnknownFields()
 	if e := d.Decode(v); e != nil {
 		return e

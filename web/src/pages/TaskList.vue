@@ -31,6 +31,7 @@ const attentionCount = computed(() => {
   return (data.value.attentionTotal || 0) + [...pending].filter((id) => !known.has(id)).length;
 });
 const currentCount = computed(() => ["active", "pending", "confirmation"].reduce((sum, id) => sum + (data.value.counts[id] || 0), 0));
+const compactEmpty = computed(() => !!last.value && !loading.value && !error.value && !board.value && !search.value && !taskType.value && !parent.value && currentCount.value === 0);
 const visibleBoards = computed(() => boards.filter(([id]) => board.value === "all" ? !!data.value.counts[id] : board.value ? board.value === id : ["active", "pending", "confirmation"].includes(id) && !!data.value.counts[id]));
 const filteredCount = computed(() => board.value === "all" ? data.value.total : board.value ? data.value.counts[board.value] || 0 : currentCount.value);
 const boardName = (id: string, title: string) => ({ active: "推进中", completed: "已完成" } as Record<string, string>)[id] || title;
@@ -73,14 +74,15 @@ onMounted(() => { load(); loadRecent(); loadBasis(); timer = setInterval(() => {
 onUnmounted(() => { clearInterval(timer); clearTimeout(debounce); });
 </script>
 <template>
-  <section class="attention-section">
+  <section v-if="attentionCount || data.attentionError || data.attentionTruncated" class="attention-section">
     <div class="section-heading"><h2>需要你处理 <span class="count">{{ data.attentionTruncated ? '≥' : '' }}{{ attentionCount }}</span></h2><small>验收、决策与阻塞，不必在任务里反复寻找</small></div>
     <div v-if="attentionCount" class="attention-grid"><article v-for="pending in pendingTargets" :key="pending.taskId + ':' + pending.checkId" class="attention-card featured"><div class="attention-meta"><span><AppIcon name="clock"/>验收提交待确认</span><small>{{ pending.taskId }}</small></div><h3>{{ pending.title }}</h3><p>上次提交结果尚未确认，请原样重试并核对回执。</p><div class="attention-bottom"><small>本标签页保存的验收请求</small><button class="primary" @click="manualTarget = { id: pending.taskId, check: pending.checkId }">查看并重试</button></div></article><AttentionCard v-for="item in attention" :key="item.kind + ':' + item.task.id" :kind="item.kind" :task="item.task" @review="showTaskReview" /></div>
     <p v-else-if="!loading && !data.attentionError && !data.attentionTruncated" class="attention-empty">目前没有需要你介入的事项。</p>
     <p v-if="data.attentionTruncated" class="secondary">待处理事项较多，此处仅检查了最近的部分任务；请使用下方分组查看全部任务。</p>
     <p v-if="data.attentionError" class="secondary">暂时无法读取待处理事项，请刷新工作台重试。</p>
   </section>
-  <div class="workbench-controls">
+  <section v-if="compactEmpty" class="workbench-empty" aria-label="当前工作空状态"><div><h2>当前没有活跃任务</h2><p class="secondary">最近交付保留在下方，历史任务可从全部记录继续查看。</p></div><button @click="filter({ board: 'all' })">查看全部记录</button></section>
+  <div v-else class="workbench-controls">
     <nav class="group-counts" aria-label="任务分组定位">
       <a href="#/tasks" :aria-current="!board ? 'page' : undefined" :class="{ chosen: !board }" @click.prevent="filter({ board: '' })">当前工作 <strong>{{ currentCount }}</strong></a>
       <a v-for="[id, title] in boards" :key="id" :href="'#/tasks?board=' + id" :aria-current="board === id ? 'page' : undefined" :class="{ chosen: board === id }" @click.prevent="filter({ board: id })"><span>{{ boardName(id, title) }}</span><strong>{{ data.counts[id] || 0 }}</strong></a>
@@ -93,7 +95,7 @@ onUnmounted(() => { clearInterval(timer); clearTimeout(debounce); });
   </div>
   <p v-if="parent" class="secondary">子任务 · 父任务 <a :href="taskHref(parent)">{{ parent }}</a> <button class="inline-link" @click="filter({ parent: '' })">显示全部任务</button></p>
   <LoadState :loading="loading" :error="error" :last="last" @retry="load()" />
-  <p class="table-scroll-hint">左右滑动可查看执行者、验收和进展。</p><div class="board-scroll" tabindex="0" aria-label="任务分组列表，可横向滚动">
+  <template v-if="!compactEmpty"><p class="table-scroll-hint">左右滑动可查看执行者、验收和进展。</p><div class="board-scroll" tabindex="0" aria-label="任务分组列表，可横向滚动">
     <div class="task-table-head" aria-hidden="true"><span>工作内容</span><span>当前状态</span><span>执行 / 负责</span><span>必要验收</span><span>最近进展</span><span></span></div>
     <div class="board">
       <section v-for="[id, title] in visibleBoards" :key="id" :data-board="id" class="task-group">
@@ -113,9 +115,9 @@ onUnmounted(() => { clearInterval(timer); clearTimeout(debounce); });
     </div>
     <footer class="task-table-footer"><span>{{ filteredCount }} 项工作 · {{ board === 'completed' ? '按所选时间查看完成记录' : '活跃任务不受完成时间限制' }}</span><button class="inline-link" @click="filter({ board: 'all' })">查看全部记录 →</button></footer>
   </div>
-  <div class="dashboard-bottom">
+  </template><div class="dashboard-bottom" :class="{ 'compact-dashboard': compactEmpty && !basis.data.value.items.length }">
     <section class="dashboard-panel"><div class="dashboard-panel-heading"><h2>最近交付</h2><a href="#/evolution?kind=delivery">查看演进 →</a></div><LoadState :loading="recent.loading.value" :error="recent.error.value" :last="recent.last.value" @retry="loadRecent" /><p v-if="!recent.loading.value && !recent.error.value && !recent.data.value.items.length" class="empty">尚无可追溯的交付结果。</p><a v-for="item in recent.data.value.items" :key="item.id" class="dashboard-item" :href="taskHref(item.id)"><span class="dashboard-item-icon"><AppIcon name="package" /></span><span class="dashboard-item-body"><strong>{{ item.title }}</strong><small>{{ label(item.last_result) }}<span v-if="item.historical"> · 历史记录，未复验</span></small></span><small>{{ stamp(item.completed_at) }}</small></a></section>
-    <section class="dashboard-panel"><div class="dashboard-panel-heading"><h2>项目依据</h2><a href="#/knowledge">规范库 →</a></div><LoadState :loading="basis.loading.value" :error="basis.error.value" :last="basis.last.value" @retry="loadBasis" /><p v-if="!basis.loading.value && !basis.error.value && !basis.data.value.items.length" class="empty">尚无现行资料。</p><a v-for="item in basis.data.value.items" :key="item.id" class="dashboard-item" :href="knowledgeHref(item.id)"><span class="dashboard-item-icon"><AppIcon name="file" /></span><span class="dashboard-item-body"><strong>{{ item.title }}</strong><small>{{ label(item.status) }} · {{ item.paths?.join('、') || '项目级' }}</small></span><span aria-hidden="true">›</span></a></section>
+    <section v-if="!compactEmpty || basis.data.value.items.length || basis.error.value" class="dashboard-panel"><div class="dashboard-panel-heading"><h2>项目依据</h2><a href="#/knowledge">规范库 →</a></div><LoadState :loading="basis.loading.value" :error="basis.error.value" :last="basis.last.value" @retry="loadBasis" /><p v-if="!basis.loading.value && !basis.error.value && !basis.data.value.items.length" class="empty">尚无现行资料。</p><a v-for="item in basis.data.value.items" :key="item.id" class="dashboard-item" :href="knowledgeHref(item.id)"><span class="dashboard-item-icon"><AppIcon name="file" /></span><span class="dashboard-item-body"><strong>{{ item.title }}</strong><small>{{ label(item.status) }} · {{ item.paths?.join('、') || '项目级' }}</small></span><span aria-hidden="true">›</span></a></section>
   </div>
   <ManualReviewDialog v-if="manualTarget" :key="manualTarget.id + ':' + manualTarget.check" :task-id="manualTarget.id" :check-id="manualTarget.check" @select-check="manualTarget.check = $event" @close="reviewClosed" @saved="reviewSaved" />
 </template>

@@ -10,7 +10,7 @@ test("旧来源历史、真实图片、缺失状态和任务切换保持一致",
   await page.getByLabel("用户名", { exact: true }).fill("owner");
   await page.getByLabel("密码", { exact: true }).fill("fixture-owner-password");
   await page.getByRole("button", { name: "登录", exact: true }).click();
-  await page.getByRole("listitem").filter({ hasText: "Imported histories" }).getByRole("button", { name: "查看项目", exact: true }).click();
+  await expect(page.getByRole("button", { name: "切换项目", exact: true })).toHaveCount(1);
   await expect(page.getByRole("heading", { name: "工作台", exact: true })).toBeVisible();
   const history = page.getByRole("region", { name: "导入历史", exact: true });
   for (const name of ["mac-old", "cloud-old"]) {

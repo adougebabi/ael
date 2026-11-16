@@ -1,11 +1,18 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
 import WorkspaceApp from "./App.vue";
 import { connectDashboard } from "./remoteDashboard";
-import { navigate, route } from "./router";
+import { navigate, route, href, taskHref } from "./router";
+import AppIcon from "./components/AppIcon.vue";
+import RemoteServicePanel from "./components/RemoteServicePanel.vue";
+import RemoteAccountPanel from "./components/RemoteAccountPanel.vue";
+import { refreshRevision } from "./api";
+import { stamp } from "./display";
 const workspaceMode = ref(false);
+const locationOrigin = location.origin;
 let projectGeneration = 0;
+let panelRequest = 0;
 
 type Session = { username: string; admin: boolean; csrf: string };
 type Project = { id: string; name: string; role: string };
@@ -16,14 +23,50 @@ type ContextSource = { id: string; path: string; origin?: string; artifact_id: s
 type ContextCheck = { id: string; check_id: string; artifact_id: string; artifact_status: string; artifact_sha256: string; config_sha256: string; candidate_id: string; actor: string };
 type TaskContext = { status?: string; validity?: string; validity_reasons?: string[]; changed_paths?: string[]; impact_unknown?: boolean; inputs_known?: boolean; inventory_unverified?: boolean; id?: string; candidate_id?: string; repository?: string; commit?: string; checkout_id?: string; workspace_id?: string; runner_id?: string; actor?: string; sources: ContextSource[]; checks?: ContextCheck[] };
 
+type ClientReport = { client_id: string; actor: string; session_id?: string; runner?: string; cli_version: string; cli_build?: string; skill_version: string; update_policy: string; specification_state: string; hooks?: Record<string, string>; reported_at: string; compatible: boolean };
+const pickerOpen = ref(false), projectSearch = ref("");
+const accountMenu = ref<HTMLDetailsElement | null>(null);
+const pickerRoot = ref<HTMLElement | null>(null), pickerInput = ref<HTMLInputElement | null>(null);
+const panelLoading = ref(false), panelError = ref("");
+const projectConfiguration = ref<any>(null), clients = ref<ClientReport[]>([]), serviceInfo = ref<any>(null);
+const servicePlatform = ref("");
+const panel = computed(() => route.value.path.split("/")[1] || "tasks");
+const filteredProjects = computed(() => projects.value.filter(project => (project.name + " " + project.id).toLowerCase().includes(projectSearch.value.trim().toLowerCase())));
+const projectTokens = computed(() => tokens.value.filter(token => token.project_id === selected.value?.id));
+const policyNames: Record<string, string> = { notify: "只提示", auto: "自动兼容更新", pinned: "固定版本" };
+const specificationNames: Record<string, string> = { awaiting_sources: "资料待完善", readable_snapshots_require_checkout_verification: "快照可读，待核对 checkout", checkout_differs_from_server_snapshots: "本机与规范快照有差异", session_prepared: "工具会话已准备" };
+function hookSummary(client: ClientReport) { const states = Object.values(client.hooks || {}); return states.includes("pending_host_trust") ? "Hook 待宿主信任" : states.includes("unsupported_or_unavailable") ? "显式恢复可用" : "未上报 Hook 状态"; }
+async function openPicker() { pickerOpen.value = !pickerOpen.value; if (pickerOpen.value) { projectSearch.value = ""; await nextTick(); pickerInput.value?.focus(); } }
+function closePicker(event: MouseEvent) { if (pickerRoot.value && !pickerRoot.value.contains(event.target as Node)) pickerOpen.value = false; }
+async function chooseProject(id: string) { pickerOpen.value = false; await view(id); }
+async function loadPanel() {
+  if (!session.value || !["settings", "service"].includes(panel.value)) return;
+  const generation = projectGeneration, currentPanel = panel.value, requestID = ++panelRequest;
+  panelLoading.value = true; panelError.value = "";
+  try {
+    if (currentPanel === "settings" && selected.value) {
+      const base = `/api/v1/projects/${encodeURIComponent(selected.value.id)}`;
+      const [configuration, reports, page, tokenPage] = await Promise.all([request(base + "/onboarding"), request(base + "/client-onboarding"), request(base + "/tasks?limit=100"), session.value.admin ? request("/api/v1/tokens") : Promise.resolve({ tokens: [] })]);
+      if (generation !== projectGeneration || panel.value !== currentPanel || requestID !== panelRequest) return;
+      projectConfiguration.value = configuration; clients.value = reports.clients; tasks.value = page.items; tokens.value = tokenPage.tokens;
+    }
+    if (currentPanel === "service") {
+      if (!session.value.admin) throw new Error("当前账号没有服务管理权限。");
+      const value = await request("/api/v1/admin/client-release" + (servicePlatform.value ? "?platform=" + encodeURIComponent(servicePlatform.value) : ""));
+      if (generation !== projectGeneration || panel.value !== currentPanel || requestID !== panelRequest) return;
+      serviceInfo.value = value;
+    }
+  } catch (e) { if (generation === projectGeneration && panel.value === currentPanel && requestID === panelRequest) panelError.value = e instanceof Error ? e.message : "页面信息读取失败。"; }
+  finally { if (generation === projectGeneration && panel.value === currentPanel && requestID === panelRequest) panelLoading.value = false; }
+}
 const session = ref<Session | null>(null);
 const loading = ref(true), busy = ref(false), error = ref(""), notice = ref("");
 const username = ref(""), password = ref("");
-const projectID = ref(""), projectName = ref("");
-const newUsername = ref(""), newPassword = ref("");
 const memberProject = ref(""), memberUsername = ref(""), memberRole = ref("reader");
 const tokenProject = ref(""), tokenUsername = ref(""), tokenLabel = ref("");
-const tokenSecret = ref(""), tokenID = ref("");
+const tokenReplies = ref<Record<string, { secret: string; id: string }>>({});
+const tokenSecret = computed(() => tokenReplies.value[selected.value?.id || ""]?.secret || "");
+const tokenID = computed(() => tokenReplies.value[selected.value?.id || ""]?.id || "");
 const projects = ref<Project[]>([]), tokens = ref<Token[]>([]), selected = ref<Project | null>(null);
 const tasks = ref<TaskItem[]>([]), selectedTask = ref(""), artifacts = ref<Artifact[]>([]);
 const taskContext = ref<TaskContext | null>(null);
@@ -43,10 +86,10 @@ function clearPreview() {
 
 function clearSession() {
   projectGeneration++; workspaceMode.value = false; connectDashboard(null);
+  pickerOpen.value = false; projectSearch.value = ""; clients.value = []; projectConfiguration.value = null; serviceInfo.value = null; panelError.value = "";
   session.value = null; projects.value = []; tokens.value = []; selected.value = null;
   tasks.value = []; selectedTask.value = ""; taskLookup.value = ""; artifacts.value = []; taskContext.value = null; contextError.value = ""; clearPreview();
-  tokenSecret.value = ""; tokenID.value = ""; tokenProject.value = ""; tokenUsername.value = ""; tokenLabel.value = "";
-  projectID.value = ""; projectName.value = ""; newUsername.value = ""; newPassword.value = "";
+  tokenReplies.value = {}; tokenProject.value = ""; tokenUsername.value = ""; tokenLabel.value = "";
   memberProject.value = ""; memberUsername.value = ""; memberRole.value = "reader";
 }
 
@@ -112,7 +155,9 @@ async function restore() {
     session.value = await request("/api/v1/auth/session");
     await refresh();
     const wanted = new URL(location.hash.slice(1) || "/tasks", location.origin).searchParams.get("project") || sessionStorage.getItem("ael-remote-project:" + session.value?.csrf);
-    if (wanted && projects.value.some(project => project.id === wanted)) await view(wanted);
+    if (wanted && !projects.value.some(project => project.id === wanted)) error.value = "当前账号无法访问此项目。";
+    else if (wanted || projects.value[0]) await view(wanted || projects.value[0].id);
+    else await loadPanel();
   } catch {
     clearSession();
   } finally {
@@ -127,6 +172,9 @@ async function login() {
     sessionChannel?.postMessage("changed");
     session.value = await request("/api/v1/auth/session");
     await refresh();
+    const wanted = route.value.query.get("project");
+    const first = projects.value.find(project => project.id === wanted) || projects.value[0];
+    if (first) await view(first.id); else await loadPanel();
   } catch (e) { error.value = e instanceof Error ? e.message : "登录未完成。"; }
   finally { password.value = ""; busy.value = false; }
 }
@@ -142,29 +190,32 @@ async function logout() {
 }
 
 async function action(operation: () => Promise<void>, message: string) {
+  const generation = projectGeneration, identity = session.value?.csrf;
   busy.value = true; error.value = ""; notice.value = "";
-  try { await operation(); await refresh(); notice.value = message; }
-  catch (e) { error.value = e instanceof Error ? e.message : "操作未完成。"; }
-  finally { busy.value = false; }
+  try {
+    await operation();
+    if (generation !== projectGeneration || identity !== session.value?.csrf) return;
+    await refresh();
+    if (generation === projectGeneration && identity === session.value?.csrf) notice.value = message;
+  } catch (e) { if (generation === projectGeneration && identity === session.value?.csrf) error.value = e instanceof Error ? e.message : "操作未完成。"; }
+  finally { if (generation === projectGeneration && identity === session.value?.csrf) busy.value = false; }
 }
 
-async function createProject() {
-  await action(async () => { await request("/api/v1/projects", { id: projectID.value, name: projectName.value }); projectID.value = ""; projectName.value = ""; }, "项目已注册。");
-}
-async function createUser() {
-  try { await action(async () => { await request("/api/v1/users", { username: newUsername.value, password: newPassword.value }); newUsername.value = ""; }, "账号已创建。"); }
-  finally { newPassword.value = ""; }
-}
+async function serviceProjectCreated(id: string) { await refresh(); await view(id); }
+function changeServicePlatform(value: string) { servicePlatform.value = value; void loadPanel(); }
 async function addMember() {
   await action(async () => { await request(`/api/v1/projects/${encodeURIComponent(memberProject.value)}/members`, { username: memberUsername.value, role: memberRole.value }); memberUsername.value = ""; }, "项目成员已更新。");
 }
 async function createToken() {
-  tokenSecret.value = ""; tokenID.value = "";
+  const project = tokenProject.value;
+  delete tokenReplies.value[project];
   await action(async () => {
-    const result = await request("/api/v1/tokens", { username: tokenUsername.value, project_id: tokenProject.value, label: tokenLabel.value });
-    tokenSecret.value = result.token; tokenID.value = result.id; tokenLabel.value = "";
+    const result = await request("/api/v1/tokens", { username: tokenUsername.value, project_id: project, label: tokenLabel.value });
+    tokenReplies.value[project] = { secret: result.token, id: result.id };
+    if (selected.value?.id === project) tokenLabel.value = "";
   }, "令牌已创建，请立即妥善保存。");
 }
+
 async function revoke(id: string) {
   await action(async () => { await request("/api/v1/tokens/revoke", { id }); }, "令牌已撤销。");
 }
@@ -176,24 +227,26 @@ async function view(id: string) {
   connectDashboard(null);
   clearPreview();
   selectedTask.value = ""; artifacts.value = []; taskContext.value = null;
+  clients.value = []; projectConfiguration.value = null; panelError.value = "";
   try {
     const project = await request(`/api/v1/projects/${encodeURIComponent(id)}`);
     if (epoch !== projectGeneration || !session.value) return;
     selected.value = project;
+    memberProject.value = project.id; tokenProject.value = project.id;
     connectDashboard(project, session.value.csrf, clearSession, () => {
-      workspaceMode.value = false; selected.value = null; connectDashboard(null); void action(refresh, "项目访问权限已变化。");
+      projectGeneration++; workspaceMode.value = false; selected.value = null; connectDashboard(null);
+      clients.value = []; projectConfiguration.value = null; selectedTask.value = ""; artifacts.value = []; taskContext.value = null; clearPreview();
+      tokenReplies.value = {}; notice.value = "";
+      error.value = "当前项目访问权限已变化，请选择有权限的项目。";
+      void refresh().catch(() => { error.value = "项目权限核对未完成，请刷新或重新登录。"; });
     });
     sessionStorage.setItem("ael-remote-project:" + session.value.csrf, id);
     const url = new URL(location.hash.slice(1) || "/tasks", location.origin);
     if (url.searchParams.get("project") !== id) navigate("/tasks?project=" + encodeURIComponent(id));
     workspaceMode.value = true;
+    await loadPanel();
   } catch (e) { if (epoch === projectGeneration) error.value = String(e); }
   finally { if (epoch === projectGeneration) busy.value = false; }
-}
-async function showServerProject() {
-  workspaceMode.value = false;
-  connectDashboard(null);
-  await action(refresh, "");
 }
 
 async function loadTaskContext(base: string, id: string) {
@@ -310,68 +363,59 @@ async function preview(item: Artifact) {
   finally { busy.value = false; }
 }
 
-watch(() => route.value.query.get("project"), (id) => {
+watch(() => route.value.key, () => {
+  pickerOpen.value = false;
+  if (accountMenu.value) accountMenu.value.open = false;
+  const id = route.value.query.get("project");
   if (id && workspaceMode.value && id !== selected.value?.id) {
     if (projects.value.some(project => project.id === id)) void view(id);
     else { workspaceMode.value = false; selected.value = null; connectDashboard(null); error.value = "当前账号无法访问此项目。"; }
+    return;
   }
+  void loadPanel();
 });
-onMounted(() => { void restore(); previewTimer = setInterval(() => { void checkPreview(); void checkContext(); }, 2000); });
-onUnmounted(() => { if (previewTimer) clearInterval(previewTimer); clearPreview(); sessionChannel?.close(); });
+watch(refreshRevision, () => { void loadPanel(); });
+onMounted(() => { document.addEventListener("click", closePicker); void restore(); previewTimer = setInterval(() => { void checkPreview(); void checkContext(); }, 2000); });
+onUnmounted(() => { document.removeEventListener("click", closePicker); if (previewTimer) clearInterval(previewTimer); clearPreview(); sessionChannel?.close(); });
 </script>
 
 <template>
   <WorkspaceApp v-if="session && selected && workspaceMode" :key="selected.id + session.csrf">
-    <template #workspace-controls>
-      <label class="remote-project-picker">项目<select aria-label="切换项目" :value="selected.id" @change="view(($event.target as HTMLSelectElement).value)"><option v-for="project in projects" :key="project.id" :value="project.id">{{ project.name }}</option></select></label>
-      <button @click="showServerProject">执行依据与附件</button>
-      <button @click="showServerProject">项目与账户</button>
-      <button @click="logout">退出登录</button>
+    <template #workspace>
+      <div ref="pickerRoot" class="project-switcher" @keydown.esc="pickerOpen = false">
+        <button class="workspace project-switcher-button" aria-label="切换项目" :aria-expanded="pickerOpen" aria-controls="remote-project-options" @click.stop="openPicker">
+          <span class="workspace-avatar" aria-hidden="true">{{ selected.name.slice(0, 2).toUpperCase() }}</span>
+          <span class="workspace-info"><strong>{{ selected.name }}</strong><small>{{ roles[selected.role] || selected.role }}</small></span><span aria-hidden="true">⌄</span>
+        </button>
+        <div v-if="pickerOpen" id="remote-project-options" class="project-options" role="region" aria-label="选择项目">
+          <label class="search"><span class="visually-hidden">搜索项目</span><AppIcon name="search"/><input ref="pickerInput" v-model="projectSearch" type="search" placeholder="搜索项目名称或 ID" /></label>
+          <p v-if="!filteredProjects.length" class="secondary">没有匹配的项目。</p>
+          <div class="project-options-list"><button v-for="project in filteredProjects" :key="project.id" :aria-current="selected.id === project.id ? 'true' : undefined" @click="chooseProject(project.id)"><span><strong>{{ project.name }}</strong><small>{{ roles[project.role] || project.role }}</small></span><small v-if="selected.id === project.id">当前</small></button></div>
+        </div>
+      </div>
     </template>
-  </WorkspaceApp>
-  <div v-else class="standalone-shell">
-    <header class="standalone-header">
-      <div><strong class="standalone-brand">AEL</strong><span>工程工作台</span></div>
-      <div v-if="session" class="standalone-account"><span>{{ session.username }}</span><button type="button" :disabled="busy" @click="logout">退出登录</button></div>
-    </header>
-    <main id="main-content" class="standalone-main">
-      <p v-if="loading" role="status">正在连接服务…</p>
-      <template v-else-if="!session">
-        <section class="standalone-login">
-          <p class="standalone-eyebrow">AEL SERVER</p>
-          <h1>登录工作台</h1>
-          <p class="secondary">使用管理员创建的账号访问项目。</p>
-          <p v-if="error" class="standalone-error" role="alert">{{ error }}</p>
-          <form class="standalone-form" @submit.prevent="login">
-            <label>用户名<input v-model="username" autocomplete="username" required /></label>
-            <label>密码<input v-model="password" type="password" autocomplete="current-password" required /></label>
-            <button class="primary" type="submit" :disabled="busy">登录</button>
-          </form>
-        </section>
-      </template>
-      <template v-else>
-        <div class="standalone-title"><div><p class="standalone-eyebrow">PROJECTS</p><h1>项目</h1><p class="secondary">查看你有权访问的项目和身份。</p></div><button type="button" :disabled="busy" @click="action(refresh, '已刷新。')">刷新</button></div>
-        <p v-if="error" class="standalone-error" role="alert">{{ error }}</p>
-        <p v-if="notice" class="standalone-notice" role="status">{{ notice }}</p>
-        <section class="standalone-card" aria-label="项目列表">
-          <p v-if="!projects.length" class="secondary">当前账号还没有可访问的项目。</p>
-          <ul v-else class="standalone-list">
-            <li v-for="project in projects" :key="project.id">
-              <div><strong>{{ project.name }}</strong><small>{{ project.id }} · {{ roles[project.role] || project.role }}</small></div>
-              <button type="button" :disabled="busy" @click="view(project.id)">查看项目</button>
-            </li>
-          </ul>
-          <button v-if="selected" @click="view(selected.id)">返回项目工作台</button>
-          <p v-if="selected" class="standalone-selection">{{ selected.name }} · {{ roles[selected.role] || selected.role }}</p>
-        </section>
-        <section v-if="selected" class="standalone-card" aria-label="项目证据">
+    <template #sidebar-controls>
+      <a :href="href('/settings')" :class="{ chosen: panel === 'settings' }"><AppIcon name="settings"/>项目设置</a>
+      <a v-if="session.admin" :href="href('/service')" :class="{ chosen: panel === 'service' }"><AppIcon name="layers"/>服务管理</a>
+      <details ref="accountMenu" class="account-menu"><summary aria-label="账户菜单"><AppIcon name="user"/><span>{{ session.username }}</span><span aria-hidden="true">⌄</span></summary><div><a :href="href('/account')">身份与个人设置</a><button :disabled="busy" @click="logout">退出登录</button></div></details>
+    </template>
+    <template #workspace-feedback><p v-if="error" role="alert" class="notice">{{ error }}</p><p v-if="notice" role="status" class="notice">{{ notice }}</p></template>
+    <template #remote-page="{ area }">
+      <p v-if="panelLoading" role="status" class="secondary">正在读取页面信息…</p>
+      <p v-if="panelError" role="alert" class="notice">{{ panelError }} <button @click="loadPanel">重试</button></p>
+      <template v-if="area === 'settings'">
+        <section class="standalone-card remote-connection" aria-label="项目接入"><div class="section-heading"><h2>项目接入</h2><button :disabled="panelLoading" @click="loadPanel">刷新接入信息</button></div><p><span class="status active">中心项目已连接</span> {{ selected.name }}</p><dl class="remote-facts"><div><dt>项目 ID</dt><dd>{{ selected.id }}</dd></div><div><dt>当前身份</dt><dd>{{ session.username }} · {{ roles[selected.role] || selected.role }}</dd></div><div><dt>规范资料</dt><dd>{{ specificationNames[projectConfiguration?.specification_state] || '正在核对' }}</dd></div><div><dt>工作准备</dt><dd>领取前核对候选、规范上下文和当前责任</dd></div></dl><details class="remote-diagnostics"><summary>连接新机器与配置来源</summary><p class="secondary">使用稳定项目 ID 连接同一中心项目。</p><pre>{{ `ael init --server ${locationOrigin} --remote-project ${selected.id}` }}</pre><p v-if="projectConfiguration" class="secondary">API {{ projectConfiguration.api_protocol }} · Skill {{ projectConfiguration.skill_protocol }} · 政策来源 {{ projectConfiguration.configuration_source }}</p><p v-if="projectConfiguration?.critical_knowledge?.length">关键依据 {{ projectConfiguration.critical_knowledge.join('、') }}</p><ul v-if="projectConfiguration?.checks?.length"><li v-for="check in projectConfiguration.checks" :key="check.id">{{ check.id }} · {{ check.kind }} · {{ check.method || '未声明方法' }}</li></ul></details></section>
+        <section class="standalone-card" aria-label="客户端最近上报"><div class="section-heading"><h2>客户端最近上报</h2></div><p class="secondary">版本和策略来自客户端最近一次接入或会话准备上报。宿主运行状态未知。</p><p v-if="!clients.length && !panelLoading" class="secondary">尚无接入上报。使用 ael init 接入后可在此查看。</p><div v-if="clients.length" class="client-report-list"><article v-for="client in clients" :key="client.client_id"><div><strong>{{ client.runner || client.actor }}</strong><small>{{ client.session_id ? '工具会话' : '初始化接入' }} · {{ stamp(client.reported_at) }}</small></div><div><span>CLI {{ client.cli_version }}</span><small>Skill {{ client.skill_version }}</small></div><div><span>{{ policyNames[client.update_policy] || client.update_policy }}</span><small>{{ client.compatible ? '版本兼容' : '客户端版本不兼容' }}</small></div><div><span>{{ specificationNames[client.specification_state] || '资料状态待核对' }}</span><small>{{ hookSummary(client) }}</small></div><details class="remote-diagnostics"><summary>诊断引用</summary><p>客户端 {{ client.client_id }}</p><p v-if="client.session_id">会话 {{ client.session_id }}</p><p v-if="client.cli_build">构建 {{ client.cli_build }}</p></details></article></div></section>
+        <div v-if="session.admin" class="standalone-grid"><section class="standalone-card"><h2>设置项目成员</h2><form class="standalone-form" @submit.prevent="addMember"><label>用户名<input v-model="memberUsername" required /></label><label>角色<select v-model="memberRole"><option value="executor">执行者</option><option value="reviewer">验收者</option><option value="reader">只读者</option></select></label><button :disabled="busy">保存成员</button></form></section><section class="standalone-card"><h2>创建 Agent 令牌</h2><p class="secondary">令牌只用于所选项目，权限取自当前成员角色。</p><form class="standalone-form" @submit.prevent="createToken"><label>成员用户名<input v-model="tokenUsername" required /></label><label>用途<input v-model="tokenLabel" required maxlength="100" /></label><button :disabled="busy">创建令牌</button></form><div v-if="tokenSecret" class="standalone-secret"><strong>令牌仅显示一次</strong><p class="secondary">请现在妥善保存。令牌 ID：{{ tokenID }}</p><textarea :value="tokenSecret" rows="3" readonly aria-label="新令牌" /></div></section></div>
+        <template v-if="session.admin"><section class="standalone-card"><h2>Agent 令牌</h2><p v-if="!projectTokens.length" class="secondary">尚无令牌。</p><ul v-else class="standalone-list"><li v-for="item in projectTokens" :key="item.id"><div><strong>{{ item.label }}</strong><small>{{ item.username }} · {{ item.project_id }} · {{ item.revoked ? "已撤销" : "有效" }}</small></div><button type="button" :disabled="busy || item.revoked" @click="revoke(item.id)">撤销令牌</button></li></ul></section></template>
+        <details class="remote-diagnostics"><summary>按任务检索执行依据与附件</summary>        <section v-if="selected" class="remote-evidence-search" aria-label="项目证据">
           <h2>{{ selected.name }} · 任务与证据</h2>
           <form class="standalone-evidence-lookup" @submit.prevent="findTask"><label>按任务 ID 查找<input v-model="taskLookup" required /></label><button type="submit" :disabled="busy">查找任务</button></form>
           <p v-if="!tasks.length" class="secondary">此项目暂无任务。</p>
           <ul v-else class="standalone-list">
             <li v-for="item in tasks" :key="item.task.definition.id">
               <div><strong>{{ item.task.definition.title }}</strong><small>{{ item.task.definition.id }} · {{ item.task.status }}</small></div>
-              <button type="button" :disabled="busy" @click="viewArtifacts(item.task.definition.id)">查看证据</button>
+              <div class="standalone-evidence-actions"><a :href="taskHref(item.task.definition.id, 'checks')">任务详情与证据</a><button type="button" :disabled="busy" @click="viewArtifacts(item.task.definition.id)">读取快照</button></div>
             </li>
           </ul>
           <div v-if="selectedTask" class="standalone-evidence">
@@ -429,15 +473,54 @@ onUnmounted(() => { if (previewTimer) clearInterval(previewTimer); clearPreview(
             </div>
           </div>
         </section>
-        <template v-if="session.admin">
-          <div class="standalone-grid">
-            <section class="standalone-card"><h2>注册项目</h2><form class="standalone-form" @submit.prevent="createProject"><label>项目 ID<input v-model="projectID" required pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,63}" /></label><label>项目名称<input v-model="projectName" required maxlength="200" /></label><button class="primary" :disabled="busy">注册项目</button></form></section>
-            <section class="standalone-card"><h2>创建账号</h2><form class="standalone-form" @submit.prevent="createUser"><label>用户名<input v-model="newUsername" required pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,63}" /></label><label>初始密码<input v-model="newPassword" type="password" autocomplete="new-password" minlength="12" required /></label><button :disabled="busy">创建账号</button></form></section>
-            <section class="standalone-card"><h2>设置项目成员</h2><form class="standalone-form" @submit.prevent="addMember"><label>项目<select v-model="memberProject" required><option value="" disabled>选择项目</option><option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option></select></label><label>用户名<input v-model="memberUsername" required /></label><label>角色<select v-model="memberRole"><option value="executor">执行者</option><option value="reviewer">验收者</option><option value="reader">只读者</option></select></label><button :disabled="busy">保存成员</button></form></section>
-            <section class="standalone-card"><h2>创建 Agent 令牌</h2><p class="secondary">令牌只用于所选项目，权限取自当前成员角色。</p><form class="standalone-form" @submit.prevent="createToken"><label>项目<select v-model="tokenProject" required><option value="" disabled>选择项目</option><option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option></select></label><label>成员用户名<input v-model="tokenUsername" required /></label><label>用途<input v-model="tokenLabel" required maxlength="100" /></label><button :disabled="busy">创建令牌</button></form><div v-if="tokenSecret" class="standalone-secret"><strong>令牌仅显示一次</strong><p class="secondary">请现在妥善保存。令牌 ID：{{ tokenID }}</p><textarea :value="tokenSecret" rows="3" readonly aria-label="新令牌" /></div></section>
-          </div>
-          <section class="standalone-card"><h2>Agent 令牌</h2><p v-if="!tokens.length" class="secondary">尚无令牌。</p><ul v-else class="standalone-list"><li v-for="item in tokens" :key="item.id"><div><strong>{{ item.label }}</strong><small>{{ item.username }} · {{ item.project_id }} · {{ item.revoked ? "已撤销" : "有效" }}</small></div><button type="button" :disabled="busy || item.revoked" @click="revoke(item.id)">撤销令牌</button></li></ul></section>
-        </template>
+</details>
+      </template>
+      <RemoteAccountPanel v-else-if="area === 'account'" :username="session.username" :admin="session.admin" :busy="busy" @logout="logout" />
+      <template v-else-if="area === 'service'"><p v-if="!session.admin" role="alert" class="notice">当前账号没有服务管理权限。</p><RemoteServicePanel v-else :key="session.csrf" :info="serviceInfo" :loading="panelLoading" :platform="servicePlatform" :request="request" @refresh="loadPanel" @platform="changeServicePlatform" @created="serviceProjectCreated" /></template>
+    </template>
+  </WorkspaceApp>
+  <div v-else class="standalone-shell">
+    <header class="standalone-header">
+      <div><strong class="standalone-brand">AEL</strong><span>工程工作台</span></div>
+      <nav v-if="session" class="standalone-account" aria-label="服务与账户"><a href="#/tasks">项目</a><a v-if="session.admin" href="#/service">服务管理</a><a href="#/account">账户设置</a><span>{{ session.username }}</span><button type="button" :disabled="busy" @click="logout">退出登录</button></nav>
+    </header>
+    <main id="main-content" class="standalone-main">
+      <p v-if="loading" role="status">正在连接服务…</p>
+      <template v-else-if="!session">
+        <section class="standalone-login">
+          <p class="standalone-eyebrow">AEL SERVER</p>
+          <h1>登录工作台</h1>
+          <p class="secondary">使用管理员创建的账号访问项目。</p>
+          <p v-if="error" class="standalone-error" role="alert">{{ error }}</p>
+          <form class="standalone-form" @submit.prevent="login">
+            <label>用户名<input v-model="username" autocomplete="username" required /></label>
+            <label>密码<input v-model="password" type="password" autocomplete="current-password" required /></label>
+            <button class="primary" type="submit" :disabled="busy">登录</button>
+          </form>
+        </section>
+      </template>
+      <template v-else-if="panel === 'account'">
+        <h1>账户</h1><RemoteAccountPanel :username="session.username" :admin="session.admin" :busy="busy" @logout="logout" />
+      </template>
+      <template v-else-if="panel === 'service'">
+        <h1>服务管理</h1><p v-if="!session.admin" role="alert" class="notice">当前账号没有服务管理权限。</p><p v-if="panelError" role="alert" class="notice">{{ panelError }}</p><RemoteServicePanel v-if="session.admin" :key="session.csrf" :info="serviceInfo" :loading="panelLoading" :platform="servicePlatform" :request="request" @refresh="loadPanel" @platform="changeServicePlatform" @created="serviceProjectCreated" />
+      </template>
+      <template v-else>
+        <div class="standalone-title"><div><p class="standalone-eyebrow">PROJECTS</p><h1>项目</h1><p class="secondary">查看你有权访问的项目和身份。</p></div><button type="button" :disabled="busy" @click="action(refresh, '已刷新。')">刷新</button></div>
+        <p v-if="error" class="standalone-error" role="alert">{{ error }}</p>
+        <p v-if="notice" class="standalone-notice" role="status">{{ notice }}</p>
+        <section class="standalone-card" aria-label="项目列表">
+          <p v-if="!projects.length" class="secondary">当前账号还没有可访问的项目。</p>
+          <ul v-else class="standalone-list">
+            <li v-for="project in projects" :key="project.id">
+              <div><strong>{{ project.name }}</strong><small>{{ project.id }} · {{ roles[project.role] || project.role }}</small></div>
+              <button type="button" :disabled="busy" @click="view(project.id)">查看项目</button>
+            </li>
+          </ul>
+          <button v-if="selected" @click="view(selected.id)">返回项目工作台</button>
+          <p v-if="selected" class="standalone-selection">{{ selected.name }} · {{ roles[selected.role] || selected.role }}</p>
+        </section>
+        <a v-if="session.admin && !projects.length" class="button" href="#/service">创建项目与管理服务</a>
       </template>
     </main>
   </div>

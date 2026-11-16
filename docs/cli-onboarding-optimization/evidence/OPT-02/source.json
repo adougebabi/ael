@@ -1,0 +1,24 @@
+{
+  "baseline": "259cd8139c4bedac1ab8d91c6b6466bc536ec79d",
+  "packaged_build": "259cd81-591d4fd687b8",
+  "source_hashes": {
+    "assets/project-launcher.sh": "b312b10d2f9af17b9d2765b13fa7db5d494cf7e7dfbedac8d4a7a8d7262c559f",
+    "assets/skills/ael-work/references/remote-agent.md": "63697beae1320f3b4857688ba313a2286b8475cfcfbdd9e211e33c27b63c868e",
+    "cmd/ael/main.go": "f42a22927767dca05177a29615fc1f47b26bd94894d70f2dcea2effd533b5598",
+    "cmd/ael/onboarding.go": "16e110631a5a6dcb17cf8fd0cd5078a0c7ab03c69afdd404d3b249a9d89c38cd",
+    "cmd/ael/onboarding_finish.go": "1920998683ff68773e721fdbd888355b9b2be04df1a5b04aeb89eaf569ac161e",
+    "cmd/ael/onboarding_test.go": "5a52236de73010a19348fdc0d11adfd38522ff4c101ad8676471c2f84d568773",
+    "cmd/ael/server_session.go": "a8d20cace2c12833a56a36d76b46a627abac41719e0d1f3fcc33ce58145e1daf",
+    "cmd/ael/server_maintenance.go": "520df87a6abcb45c034c12e67ca59ba6ee659c1737f9c02b23d07278ed3af13c",
+    "cmd/ael/remote_test.go": "847161855be98a0592b5eaceadf4b16f06db3492b6e43e4c8a4b65a5355e11a8",
+    "internal/bootstrap/remote_client.go": "ae97a93f614e73b3e22434f4a131bd939be1b138976542bef19a9b108d14b84a",
+    "internal/remote/profile.go": "33c9f9f64f77df051a6f2222aa0ab5cea342a0c37a1a23733fb29f4e6a285c5a",
+    "internal/server/onboarding.go": "c74434f3a461a0dbd3fbc09aab80204b2f97760064ba6157bf24d4985c1afb4f",
+    "internal/server/onboarding_test.go": "b5696f419f89bbb0bd597024b14cb2e6d10bc07ce26b62369ca7c2eb8909939f",
+    "internal/server/standalone_http.go": "4d82a38beab8dfcb53b87a09a9cb1ad146ac84534f71870982beb0e3a5659d37",
+    "internal/server/portable_candidate.go": "ea54ca1cae9449751fb622b841b73b405e1fea9670f3faeddd97f418f9e679dc",
+    "go.mod": "0b172e2d14acd29c0a5bc5280d78bf474ca8053a7df911aabc85924fbbbd5439",
+    "scripts/onboarding_acceptance.py": "aec165f0ac35db86538a46819826e3968816a947e13bd8a8885c29eb853a7eea"
+  },
+  "asset_documentation_note": "remote-agent.md onboarding guidance was clarified after packaged mechanism tests, managed entry tests rerun"
+}

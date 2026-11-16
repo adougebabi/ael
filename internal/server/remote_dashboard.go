@@ -1,7 +1,6 @@
 package server
 
 import (
-	"ael/internal/bootstrap"
 	"ael/internal/core"
 	"ael/internal/knowledge"
 	"database/sql"
@@ -184,7 +183,7 @@ func (h *standaloneHandler) remoteDashboard(w http.ResponseWriter, r *http.Reque
 	case "info":
 		var name string
 		err = h.server.store.DB.QueryRow("SELECT name FROM server_projects WHERE id=?", project).Scan(&name)
-		result = map[string]any{"project": "remote:" + project + ":" + principal.UserID + ":" + hex.EncodeToString(principal.CSRFHash), "project_name": name, "project_id": project, "remote": true, "role": role, "actor": principal.Username, "config": map[string]string{"mode": "remote"}, "service_version": bootstrap.Version, "service_build": bootstrap.Build, "knowledge_health": map[string]any{"sources": []any{}, "state": "central_snapshots"}}
+		result = map[string]any{"project": "remote:" + project + ":" + principal.UserID + ":" + hex.EncodeToString(principal.CSRFHash), "project_name": name, "project_id": project, "remote": true, "role": role, "actor": principal.Username, "config": map[string]string{"mode": "remote"}, "service_version": h.version, "service_build": h.build, "knowledge_health": map[string]any{"sources": []any{}, "state": "central_snapshots"}}
 	case "tasks":
 		days, _ := strconv.Atoi(q.Get("days"))
 		offsets := map[string]int{}

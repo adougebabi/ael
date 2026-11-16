@@ -1,25 +1,82 @@
 name: AEL distribution
 on:
+  push:
+    branches: [main]
+    tags: ['v*']
   workflow_dispatch:
     inputs:
       publication:
-        description: 'Explicit publication action. Build uploads workflow artifacts only.'
+        description: 'Build artifacts, create a draft, or publish a signed release.'
         type: choice
         default: build_artifact
         options: [build_artifact, draft, released]
+      release_tag:
+        description: 'Existing version tag to build. Required only when selecting an older release commit.'
+        type: string
+        default: ''
 concurrency:
-  group: ael-distribution
+  group: >-
+    ael-distribution-${{
+      startsWith(github.ref, 'refs/tags/') && format('dispatch-{0}', github.ref_name) ||
+      github.event_name == 'workflow_dispatch' && inputs.publication != 'build_artifact' && format('publish-{0}', inputs.release_tag || github.sha) ||
+      'build-main'
+    }}
   cancel-in-progress: false
 permissions:
   contents: read
 jobs:
-  build:
+  dispatch-release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch trusted main release workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          request = {'ref': 'main', 'inputs': {'publication': 'released', 'release_tag': os.environ['RELEASE_TAG']}}
+          Path(os.environ['RUNNER_TEMP'], 'release-dispatch.json').write_text(json.dumps(request))
+          PY
+          gh api --method POST "repos/$GH_REPO/actions/workflows/release.yml/dispatches" --input "$RUNNER_TEMP/release-dispatch.json"
+  build:
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      publication: ${{ steps.metadata.outputs.publication }}
+      source_commit: ${{ steps.metadata.outputs.source_commit }}
     permissions:
       contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag || github.sha }}
+          fetch-depth: 0
+      - name: Validate source and publication
+        id: metadata
+        env:
+          PUBLICATION: ${{ inputs.publication || 'build_artifact' }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          source_commit=$(git rev-parse HEAD)
+          version=$(sed -n 's/^const Version = "\(.*\)"/\1/p' internal/bootstrap/bootstrap.go)
+          if [ "$PUBLICATION" != build_artifact ]; then
+            [ "$WORKFLOW_REF" = refs/heads/main ] || { echo 'Run publication from the main workflow.' >&2; exit 1; }
+            expected_tag="v$version"
+            [ -z "$RELEASE_TAG" ] || [ "$RELEASE_TAG" = "$expected_tag" ] || { echo 'Tag and source version differ.' >&2; exit 1; }
+            tag_commit=$(git rev-parse --verify "refs/tags/$expected_tag^{commit}")
+            [ "$tag_commit" = "$source_commit" ] || { echo 'Tag and source commit differ.' >&2; exit 1; }
+            git merge-base --is-ancestor "$source_commit" origin/main
+          fi
+          echo "publication=$PUBLICATION" >> "$GITHUB_OUTPUT"
+          echo "source_commit=$source_commit" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -33,7 +90,7 @@ jobs:
           cosign-release: v3.1.4
       - name: Test and build all packages
         env:
-          RELEASE_PUBLICATION: ${{ inputs.publication }}
+          RELEASE_PUBLICATION: ${{ steps.metadata.outputs.publication }}
         run: |
           go test ./... -count=1
           sh scripts/package.sh
@@ -52,21 +109,23 @@ jobs:
           path: dist/release/
           if-no-files-found: error
   publish:
-    if: inputs.publication != 'build_artifact'
+    if: needs.build.outputs.publication == 'draft' || needs.build.outputs.publication == 'released'
     needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.build.outputs.source_commit }}
       - uses: actions/download-artifact@v4
         with:
           name: ael-distribution
           path: release
-      - name: Create explicitly selected release
+      - name: Publish verified tagged source
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          PUBLICATION: ${{ inputs.publication }}
-          SOURCE_COMMIT: ${{ github.sha }}
+          PUBLICATION: ${{ needs.build.outputs.publication }}
+          SOURCE_COMMIT: ${{ needs.build.outputs.source_commit }}
         run: python3 scripts/release_publish.py --manifest release/manifest.json --publication "$PUBLICATION"

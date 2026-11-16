@@ -1,0 +1,39 @@
+{
+  "result": "PASS",
+  "project": "local-ai-companion",
+  "directory": "/Users/vinson/Documents/project/个人/local-ai-companion",
+  "mode": "remote",
+  "online": true,
+  "authoritative": true,
+  "server_url": "https://ael.adoumi.site",
+  "project_id": "local-ai-companion",
+  "server_version": "0.1.26",
+  "server_build": "259cd81-b393c60af771",
+  "client_version": "0.1.27",
+  "client_build": "259cd81-536b3a1781e8",
+  "compatible": true,
+  "tasks": 90,
+  "task_counts": {
+    "cancelled": 2,
+    "completed": 46,
+    "confirmation": 42
+  },
+  "file_reference_status": {
+    "available": 1594,
+    "missing": 3,
+    "unavailable_unsafe_path": 4
+  },
+  "parent_links_verified": 60,
+  "current_specification_sources": 4,
+  "specification_state": "readable_snapshots_require_checkout_verification",
+  "source_differences": [],
+  "hook_status": {
+    "claude": "pending_host_trust",
+    "codex": "pending_host_trust"
+  },
+  "update_policy": "notify",
+  "local_recovery_export": "/Users/vinson/Library/Application Support/ael/transfers/local-ai-companion-20261116",
+  "local_authority": "frozen",
+  "old_local_dashboard": "stopped",
+  "business_work_started": false
+}

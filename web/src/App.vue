@@ -21,12 +21,16 @@ const titles: Record<string, string> = {
   knowledge: "规范与决策",
   evolution: "项目演进",
   settings: "项目设置",
+  account: "账户",
+  service: "服务管理",
 };
 const subtitles: Record<string, string> = {
   tasks: "让工作继续向前，让需要你处理的事项一目了然。",
   knowledge: "当前规则、设计取舍和历史依据，各在其位。",
   evolution: "看清改变了什么、为什么改变，以及结果到了哪一步。",
   settings: "把接入状态、资料来源和运行问题放在清楚的位置。",
+  account: "查看身份与个人外观设置。",
+  service: "查看服务版本、兼容范围与可信发行信息。",
 };
 const projectName = computed(() => remoteProject.value?.name || info.value.project?.split("/").filter(Boolean).pop() || "正在连接");
 const projectInitials = computed(() => {
@@ -70,7 +74,7 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener('keydown', 
       <a class="brand" href="#/tasks"
         @click="mobileMenu = false"><AppIcon name="loop"/><span class="mark">ael<span>/</span></span></a
       >
-      <div class="workspace">
+      <slot name="workspace"><div class="workspace">
         <span class="workspace-avatar" aria-hidden="true">{{ projectInitials }}</span><span class="workspace-info"><strong>{{ projectName }}</strong
         ><small>{{
           info.config?.mode === "remote" ? "中心协作项目" : info.config?.mode === "shadow"
@@ -79,8 +83,7 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener('keydown', 
               ? "活动工作区"
               : "等待读取项目身份"
         }}</small></span>
-      </div>
-      <slot name="workspace-controls" />
+      </div></slot>
       <p class="sidebar-label">WORKSPACE</p><nav aria-label="主导航" @click="mobileMenu = false">
         <a
           v-for="[key, name] in [
@@ -95,19 +98,21 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener('keydown', 
           ><AppIcon :name="key"/>{{ name }}<span v-if="key === 'tasks' && attentionCount" class="sidebar-attention-count" :aria-label="(attentionTruncated ? '至少 ' : '') + attentionCount + ' 项需要处理'">{{ attentionTruncated ? '≥' : '' }}{{ attentionCount }}</span></a
         >
       </nav>
-      <div class="sidebar-bottom">
+      <div class="sidebar-bottom" @click="($event.target as HTMLElement).closest('a') && (mobileMenu = false)">
+        <slot name="sidebar-controls">
         <a
           v-if="!remoteProject" href="#/settings"
           :class="{ chosen: area === 'settings' }"
           :aria-current="area === 'settings' ? 'page' : undefined"
           @click="mobileMenu = false"><AppIcon name="settings"/>项目设置</a
         >
+        </slot>
         <button class="theme-switch" :aria-label="theme === 'indigo' ? '切换到石墨外观' : '切换到靛蓝外观'" @click="toggleTheme"><AppIcon name="theme"/>外观：{{ theme === 'indigo' ? '靛蓝' : '石墨' }}</button>
         <footer>
           <span :class="['dot', { offline: infoError }]"></span
           >{{ infoError ? "连接或数据异常" : remoteProject ? "中心服务已连接" : "本机服务已连接"
           }}<small
-            >v{{ info.service_version || "…" }} · 内嵌离线资源<br />更新于
+            ><template v-if="!remoteProject">v{{ info.service_version || "…" }} · 内嵌看板<br /></template>更新于
             {{ infoLast || "等待连接" }}</small
           >
         </footer>
@@ -130,10 +135,11 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener('keydown', 
         <span>{{ notices }}</span
         ><button @click="notices = ''" aria-label="关闭操作反馈">×</button>
       </div>
+      <slot name="workspace-feedback" />
       <template v-if="area === 'tasks'"><TaskList v-if="!id || id === 'new'" /><CreateTask v-if="id === 'new' && !remoteProject" /><TaskPage v-else-if="id" :id="id" /></template><KnowledgePage
         v-else-if="area === 'knowledge'"
         :id="id"
-      /><EvolutionPage v-else-if="area === 'evolution'" :id="id" /><SettingsPage
+      /><EvolutionPage v-else-if="area === 'evolution'" :id="id" /><slot v-else-if="remoteProject && ['settings', 'account', 'service'].includes(area)" name="remote-page" :area="area" /><SettingsPage
         v-else-if="area === 'settings' && !remoteProject"
       />
       <section v-else class="empty">

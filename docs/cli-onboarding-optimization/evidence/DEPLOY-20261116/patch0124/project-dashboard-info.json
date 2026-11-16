@@ -1,0 +1,11 @@
+{
+  "project": "/Users/vinson/Documents/project/\u4e2a\u4eba/local-ai-companion",
+  "data_dir": "/Users/vinson/Library/Application Support/ael/runtime/fce9d4d9a08cc35017a5b61c",
+  "service_version": "0.1.24",
+  "service_build": "259cd81-ca59ab062a95",
+  "executable": "/Users/vinson/Documents/project/\u4e2a\u4eba/local-ai-companion/.ael/bin/darwin-arm64/ael",
+  "warnings": [
+    "No automatic checks unless configured in task definitions",
+    "Runtime DB/WAL/logs/artifacts are outside business repository"
+  ]
+}

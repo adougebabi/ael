@@ -97,6 +97,11 @@ func remoteCommand(cmd string, a args, binding remote.Binding) (any, error) {
 		return nil, err
 	}
 	flags := map[string][]string{
+		"session start":      {"session", "runner", "prefix"},
+		"session show":       {"session"},
+		"session end":        {"session"},
+		"recovery save":      {"session", "runner", "parent", "task", "file"},
+		"recovery check":     {"session"},
 		"finding decide":     {"file", "finding", "expected-revision", "operation-id", "idempotency-key"},
 		"finding repair":     {"file", "finding", "expected-revision", "operation-id", "idempotency-key"},
 		"finding revalidate": {"file", "finding", "expected-revision", "operation-id", "idempotency-key"},
@@ -144,7 +149,7 @@ func remoteCommand(cmd string, a args, binding remote.Binding) (any, error) {
 	if !supported {
 		return nil, core.Error("REMOTE_COMMAND_UNSUPPORTED", "this command is not available for the remote authority; local fallback is disabled")
 	}
-	allowed := map[string]bool{"project": true, "config-dir": true, "json": true, "verbose": true, "no-color": true}
+	allowed := map[string]bool{"session": true, "project": true, "config-dir": true, "json": true, "verbose": true, "no-color": true}
 	for _, flag := range commandFlags {
 		allowed[flag] = true
 	}
@@ -164,6 +169,12 @@ func remoteCommand(cmd string, a args, binding remote.Binding) (any, error) {
 		return nil, err
 	}
 	project, id := a.get("project", "."), a.get("task", "")
+	if strings.HasPrefix(cmd, "session ") {
+		return remoteSessionCommand(cmd, a, config, project, binding)
+	}
+	if strings.HasPrefix(cmd, "recovery ") {
+		return recoveryCommand(cmd, a, config, project, binding)
+	}
 	if strings.HasPrefix(cmd, "finding ") {
 		return remoteFindingCommand(cmd, a, config, project, binding)
 	}

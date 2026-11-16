@@ -1,0 +1,22 @@
+{
+  "result": "PASS",
+  "project_id": "local-ai-companion",
+  "import_id": "import-c3ba51a4aba21bdc542a9113fb53e8bd",
+  "archive_digest": "c3ba51a4aba21bdc542a9113fb53e8bd0ad2aa7d50e97357a6d8fd51fd986f75",
+  "state": "active",
+  "tasks": 90,
+  "status_counts": {
+    "open": 42,
+    "cancelled": 2,
+    "completed": 46
+  },
+  "parent_links_verified": 60,
+  "file_reference_status": {
+    "available": 1594,
+    "missing": 3,
+    "unavailable_unsafe_path": 4
+  },
+  "artifact_objects": 1591,
+  "current_context_sources": 4,
+  "active_responsibilities": 0
+}

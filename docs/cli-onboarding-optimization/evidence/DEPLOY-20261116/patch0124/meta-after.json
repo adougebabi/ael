@@ -1,0 +1,46 @@
+{
+  "build": "259cd81-ca59ab062a95",
+  "capabilities": [
+    "client_releases",
+    "onboarding",
+    "login",
+    "projects",
+    "project_roles",
+    "revocable_tokens",
+    "remote_tasks",
+    "remote_plans",
+    "operation_receipts",
+    "artifacts",
+    "portable_candidates",
+    "portable_contexts",
+    "remote_runners",
+    "findings",
+    "authority_imports",
+    "remote_integration",
+    "remote_failure_review"
+  ],
+  "cli_output_protocol": 1,
+  "client_release": {
+    "asset_downloaded": false,
+    "available": false,
+    "platform": "linux-arm64",
+    "publisher_identity": "unverified",
+    "status": "no_configured_source"
+  },
+  "maintenance": {
+    "deadline": "2026-11-16T01:28:37.337136Z",
+    "epoch": 4,
+    "mode": "quiesced"
+  },
+  "minimum_client_version": "0.1.22",
+  "mode": "server",
+  "protocol": 1,
+  "protocol_range": {
+    "api_max": 1,
+    "api_min": 1,
+    "skill_max": 1,
+    "skill_min": 1
+  },
+  "skill_protocol": 1,
+  "version": "0.1.24"
+}

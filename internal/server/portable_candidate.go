@@ -184,7 +184,7 @@ func portableError(w http.ResponseWriter, err error) {
 	code, detail, _ := strings.Cut(err.Error(), ": ")
 	status := http.StatusInternalServerError
 	switch code {
-	case "FINDING_NOT_FOUND", "REPOSITORY_NOT_FOUND", "TASK_NOT_FOUND", "CANDIDATE_NOT_FOUND", "CONTEXT_NOT_FOUND", "OBSERVATION_NOT_FOUND", "CHECK_NOT_FOUND", "RUNNER_NOT_FOUND":
+	case "PROJECT_NOT_FOUND", "FINDING_NOT_FOUND", "REPOSITORY_NOT_FOUND", "TASK_NOT_FOUND", "CANDIDATE_NOT_FOUND", "CONTEXT_NOT_FOUND", "OBSERVATION_NOT_FOUND", "CHECK_NOT_FOUND", "RUNNER_NOT_FOUND":
 		status = http.StatusNotFound
 	case "FINDING_EVIDENCE_INVALID", "FINDING_SOURCE_MISMATCH", "REMOTE_HANDOFF_TARGET", "WORKSPACE_CONFIRMATION_REQUIRED", "REVISION_CONFLICT", "IDEMPOTENCY_CONFLICT", "CANDIDATE_CONFLICT", "CONTEXT_SOURCE_MISMATCH", "KNOWLEDGE_MISSING", "KNOWLEDGE_CONFLICT", "KNOWLEDGE_UNVERIFIED", "CANDIDATE_CHANGED", "REMOTE_WORKSPACE_MISMATCH", "STALE_TOKEN", "STALE_EXECUTION_UNIT", "CLAIM_CONFLICT", "RUNNER_WIP", "NEXT_WORK_CHANGED", "PARENT_SCOPE_REQUIRED", "NOT_RUNNABLE", "PLAN_APPLY_IN_PROGRESS", "DEPENDENCY_BLOCKED", "DELIVERY_MANUAL_REQUIRED", "PLAN_APPROVAL_REQUIRED", "HUMAN_REVIEW_REQUIRED", "RUNNER_CAPABILITY_MISSING", "CHECK_REQUIRED", "PARENT_WRITE_FORBIDDEN", "ROOT_CAUSE_REVIEW_REQUIRED", "ROOT_CAUSE_REVIEW_NOT_EXPECTED", "ROOT_CAUSE_NEW_EVIDENCE_REQUIRED", "BUDGET_EXHAUSTED", "POLICY_CHANGED", "INSPECTION_WRITE_DETECTED", "ARTIFACT_REQUIRED", "ARTIFACT_MISSING", "CHECK_METHOD_MISMATCH", "CHECK_RESULT_INVALID", "ASSESSMENT_EVIDENCE_REQUIRED", "SCREENSHOT_REQUIRED", "TASK_CONTEXT_REQUIRED", "KNOWLEDGE_OUTCOME_REQUIRED", "KNOWLEDGE_ARTIFACT_REQUIRED", "TRUSTED_CHECK_REQUIRED", "TERMINAL_TASK", "WRONG_UNIT":
 		status = http.StatusConflict
@@ -194,6 +194,12 @@ func portableError(w http.ResponseWriter, err error) {
 		status = http.StatusBadRequest
 	case "FORBIDDEN":
 		status = http.StatusForbidden
+	case "ONBOARDING_GRANT_REVOKED":
+		status = http.StatusForbidden
+	case "ONBOARDING_INVALID":
+		status = http.StatusBadRequest
+	case "PROJECT_ID_CONFLICT":
+		status = http.StatusConflict
 	default:
 		standaloneFail(w, http.StatusInternalServerError, "CANDIDATE_STORAGE_ERROR")
 		return
@@ -263,6 +269,7 @@ func (h *standaloneHandler) remotePortable(w http.ResponseWriter, r *http.Reques
 			portableError(w, err)
 			return
 		}
+		result["project_role"] = role
 		standaloneReply(w, http.StatusOK, result)
 		return
 	}
@@ -611,8 +618,9 @@ func portableDigestID(id string) bool {
 }
 
 func decodePortable(r *http.Request, target any, p *portableStore) error {
-	raw, err := io.ReadAll(io.LimitReader(r.Body, core.RemoteJSONRequestLimit+1))
-	if err != nil || len(raw) > core.RemoteJSONRequestLimit {
+	limit := jsonRequestLimit(r)
+	raw, err := io.ReadAll(io.LimitReader(r.Body, limit+1))
+	if err != nil || int64(len(raw)) > limit {
 		return errors.New("REMOTE_REQUEST_INVALID")
 	}
 	r.Body = io.NopCloser(bytes.NewReader(raw))
