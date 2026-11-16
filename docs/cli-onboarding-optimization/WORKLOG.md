@@ -2,7 +2,7 @@
 
 ## 当前检查点
 
-- 既有实施、Online迁移及v0.1.28正式发行已完成。当前唯一任务为用户要求的GHCR镜像发布、Oracle定期安全更新与CLI自动更新实际接通。
+- 既有实施、Online迁移及v0.1.28正式发行已完成。当前唯一任务按用户收窄为GitHub Actions自动构建推送Docker Hub及CLI自动更新实际接通。Oracle使用手动pull流程。
 - 分支为 main，基线为 259cd8139c4bedac1ab8d91c6b6466bc536ec79d，全部修改保留在工作区。
 - 当前客户端/入口0.1.27 / 259cd81-536b3a1781e8，Oracle Server/Dashboard0.1.26 / 259cd81-b393c60af771，协议兼容。publication为local_unpublished，既往版本证据保留。
 - 最终包初始化、恢复、签名并发升级、手动升级/回退、Remote 协作、Local T01 至 T12、内嵌 Dashboard 两项真实浏览器及全 Go 回归全部通过。适用源码 hash 与回执位于 evidence/OPT-05。
@@ -236,3 +236,12 @@ OPT-00 DONE，OPT-01 DONE，OPT-02 DONE，OPT-03 DONE，OPT-04 DONE，OPT-05 DON
 - 独立复核发现恢复路径的维护归属/未知状态/active重新认领竞争，已修正。后端提供基于完整维护状态hash的expected_state条件转换，保留原幂等回执与quiescing原请求续跑，旧存储和备份格式不变。更新器使用单个内存HTTPS管理员session，已对真实入口只读验证复用会话，避免多次登录限流。恢复未知状态不修改部署，own quiesced可读中央状态证明屏障，active回滚重新drain并重查责任，外部.env和维护状态均保护。
 - 最终Python23项（含注册表与恢复竞争）与维护API条件回归通过，全Go0.1.29通过。定时命令要求条件维护支持；从当前旧0.1.26进行一次明确协调的--bootstrap-legacy初始化，初始化成功后systemd定时入口不带该参数。
 - 当前准备推送0.1.29实现并启动CI发布，CLI自动更新实际状态已完成，Oracle定时器尚未安装或启用。
+
+- 用户明确缩小范围：取消Oracle定时器，Oracle由用户手动pull；镜像目标明确为Docker Hub。此前timer/controller尚未部署。已移除oneshot/systemd与其专用维护CAS/API/version字段扩展，原Server维护实现保持现有稳定接口。当前范围仅GitHub Actions构建推送Docker Hub与已经实际启用的CLI自动更新。
+- Docker Hub需要用户在GitHub Secrets配置DOCKERHUB_USERNAME/DOCKERHUB_TOKEN，默认镜像为用户名/ael-server，可由DOCKERHUB_IMAGE变量覆盖。已通过异步问题请求真实仓库/secret名称确认，Token在GitHub配置。
+
+- 用户确认DockerHub凭据Secret名为DOCKER_HUB_USERNAME、DOCKER_HUB_ACCESS_TOKEN，已按实际名称接线。main push测试构建后推main多架构镜像，版本tag正式发布版本镜像及latest。原GitHub签名manifest保持，Oracle手动pull，无timer/controller扩展。CLI自动策略已持久配置并实际从27升28。
+
+- 用户已给出实际DockerHub Secret名，当前改为DOCKER_HUB_USERNAME/DOCKER_HUB_ACCESS_TOKEN。已移除Oracle controller/systemd与专用维护CAS扩展（从既有稳定提交恢复相关Go文件），Oracle全程没有安装定时器。准备推送Docker Hub最终接线并实测main与版本镜像，CLI持久auto及27→28实测已完成。
+
+- 进一步按用户“做多了”的收窄保持CI最简：main push直接构建推送Docker Hub main/latest，版本tag继续版本镜像+正式Release。撤去新增OCI签名/稳定别名单独晋级，原CLI发行manifest签名保留。运行时代码恢复既有0.1.28，CI镜像用main/latest跟踪通过测试的主分支；CLI兼容稳定版自动更新已实测启用0.1.28。后续正式CLI版本由版本tag发布。

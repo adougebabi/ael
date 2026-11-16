@@ -4,12 +4,11 @@ import (
 	"ael/internal/bootstrap"
 	"ael/internal/core"
 	"ael/internal/remote"
-	"ael/internal/server"
 	"os"
 )
 
 func versionCommand(a args) (any, error) {
-	result := map[string]any{"version": bootstrap.Version, "build": build, "cli_output_protocol": 1, "api_protocol": 1, "skill_protocol": 1, "server_data_format": server.DataFormatVersion}
+	result := map[string]any{"version": bootstrap.Version, "build": build, "cli_output_protocol": 1, "api_protocol": 1, "skill_protocol": 1}
 	for flag, value := range a.Flags {
 		if flag != "session" && flag != "check" && flag != "project" && flag != "config-dir" && flag != "json" && flag != "verbose" && flag != "no-color" {
 			return nil, core.Error("UNKNOWN_FLAG", flag)

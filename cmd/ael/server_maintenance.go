@@ -12,7 +12,7 @@ import (
 )
 
 func serverMaintenanceCommand(a args) (any, error) {
-	allowed := map[string]bool{"url": true, "username": true, "password-stdin": true, "ca-file": true, "action": true, "reason": true, "deadline": true, "request-key": true, "expected-state": true, "json": true, "verbose": true, "no-color": true}
+	allowed := map[string]bool{"url": true, "username": true, "password-stdin": true, "ca-file": true, "action": true, "reason": true, "deadline": true, "request-key": true, "json": true, "verbose": true, "no-color": true}
 	for flag, value := range a.Flags {
 		if !allowed[flag] {
 			return nil, core.Error("UNKNOWN_FLAG", flag)
@@ -64,9 +64,6 @@ func serverMaintenanceCommand(a args) (any, error) {
 	body := map[string]any{"action": action, "reason": a.get("reason", ""), "request_key": a.get("request-key", "")}
 	if a.get("deadline", "") != "" {
 		body["deadline"] = a.get("deadline", "")
-	}
-	if a.get("expected-state", "") != "" {
-		body["expected_state"] = a.get("expected-state", "")
 	}
 	return session.call(http.MethodPost, "/api/v1/admin/maintenance", body)
 }

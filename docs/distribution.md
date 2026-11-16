@@ -88,8 +88,10 @@ ael release download --source /absolute/path/source.json --kind client --platfor
 
 0.1.19 可用 `upgrade --source TRUSTED_JSON --version EXACT --prefix DIR --check` 核对实际目标安装和签名发行，正式升级对下载与内包执行完整校验。`release download` 保持只下载的独立入口。
 
-## GHCR Server 镜像
+## Docker Hub Server 镜像
 
-从0.1.29开始，正式发行将已校验的双架构Server镜像归档载入发布job，再分别推送到GHCR、创建版本多架构索引并以同一main身份签名。发布job按版本串行化，在任何镜像写入前检查GitHub版本不可覆盖条件。正式Release增加registry回执，现有签名manifest的schema与asset种类保持兼容。
+Actions 使用仓库 Secrets `DOCKER_HUB_USERNAME` 和 `DOCKER_HUB_ACCESS_TOKEN` 登录 Docker Hub。默认镜像为 `docker.io/<用户名>/ael-server`，可通过仓库变量 `DOCKERHUB_IMAGE` 指定仓库。
 
-稳定发行之后的晋级job使用独立串行组，重新读取最高已发布stable版本并验证其OCI签名，再更新latest别名，避免较旧发行晚完成导致别名降级。Oracle更新器以正式Release清单、OCI签名与固定digest共同选择候选。
+推送 main 会自动测试、构建并推送双架构 `main` 与 `latest` 镜像。推送版本标签会自动推送对应版本镜像并发布签名的 GitHub Release。Linux amd64 与 arm64 通过同一多架构标签拉取。版本发布前保留不可覆盖检查，main 工作流按串行组更新最新主分支镜像。
+
+Oracle 由维护者手动 pull 和部署，沿用现有维护、备份与健康验证流程。客户端在新工作会话和领取前按安装级 auto 策略检查兼容稳定版，由 CLI 下载、验证签名并安装。

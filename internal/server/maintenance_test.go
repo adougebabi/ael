@@ -153,30 +153,3 @@ func TestMaintenanceQuiesceWaitsForInflightAuthorizationAndResumesPartialWork(t 
 		t.Fatalf("partial retry duplicated completed project %d %v", count, err)
 	}
 }
-
-func TestMaintenanceConditionalStateRejectsStaleWriterAndPreservesReplay(t *testing.T) {
-	f := newArtifactFixture(t)
-	path := "/api/v1/admin/maintenance"
-	status := standaloneJSON(t, standaloneRequest(t, f.h, http.MethodGet, path, nil, f.admin, f.csrf, "", "http://server.test", "1"), 200)
-	revision := status["revision"].(string)
-	input := map[string]any{"action": "drain", "reason": "first conditional controller", "request_key": "conditional-first", "deadline": time.Now().Add(time.Minute).UTC().Format(time.RFC3339Nano), "expected_state": revision}
-	first := standaloneJSON(t, standaloneRequest(t, f.h, http.MethodPost, path, input, f.admin, f.csrf, "", "http://server.test", "1"), 200)
-	replay := standaloneJSON(t, standaloneRequest(t, f.h, http.MethodPost, path, input, f.admin, f.csrf, "", "http://server.test", "1"), 200)
-	if replay["replayed"] != true {
-		t.Fatal("original conditional request did not replay")
-	}
-	input["request_key"] = "conditional-second"
-	input["reason"] = "stale second operator"
-	response := standaloneRequest(t, f.h, http.MethodPost, path, input, f.admin, f.csrf, "", "http://server.test", "1")
-	if response.Code != 409 {
-		t.Fatalf("stale state accepted %d %s", response.Code, response.Body.String())
-	}
-	current, err := f.s.Maintenance()
-	if err != nil || current.Reason != "first conditional controller" {
-		t.Fatal("stale writer changed ownership", current, err)
-	}
-	input = map[string]any{"action": "quiesce", "reason": "first conditional controller", "request_key": "conditional-quiesce", "expected_state": first["current_revision"]}
-	quiesced := standaloneJSON(t, standaloneRequest(t, f.h, http.MethodPost, path, input, f.admin, f.csrf, "", "http://server.test", "1"), 200)
-	input = map[string]any{"action": "resume", "reason": "first conditional controller", "request_key": "conditional-resume", "expected_state": quiesced["current_revision"]}
-	standaloneJSON(t, standaloneRequest(t, f.h, http.MethodPost, path, input, f.admin, f.csrf, "", "http://server.test", "1"), 200)
-}

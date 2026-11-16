@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish verified Server image archives and maintain the signed stable alias."""
+"""Publish verified Server image archives to Docker Hub."""
 import argparse
 import hashlib
 import json
@@ -24,45 +24,13 @@ def image_digest(reference):
     return match[1]
 
 
-def verify_reference(image, version):
-    identity = 'https://github.com/' + os.environ['GH_REPO'] + '/.github/workflows/release.yml@refs/heads/main'
-    verified = json.loads(command('cosign', 'verify', '--certificate-identity', identity,
-                                  '--certificate-oidc-issuer', 'https://token.actions.githubusercontent.com',
-                                  '--output', 'json', image + ':' + version.replace('+', '_')))
-    digests = {item['critical']['image']['docker-manifest-digest'] for item in verified}
-    if len(digests) != 1 or not re.fullmatch(r'sha256:[0-9a-f]{64}', next(iter(digests))):
-        raise RuntimeError('image signature returned conflicting digests')
-    return image + '@' + next(iter(digests))
-
-
-def promote(image):
-    versions = []
-    for page in range(1, 1001):
-        releases = json.loads(command('gh', 'api', 'repos/' + os.environ['GH_REPO'] + '/releases?per_page=100&page=' + str(page)))
-        for release in releases:
-            match = re.fullmatch(r'v(\d+)\.(\d+)\.(\d+)(?:\+[0-9A-Za-z.-]+)?', release['tag_name'])
-            if match and not release['draft'] and not release['prerelease']:
-                versions.append((tuple(map(int, match.groups())), release['tag_name'][1:]))
-        if len(releases) < 100:
-            break
-    else:
-        raise RuntimeError('release catalog exceeds the bounded lookup')
-    if not versions:
-        raise RuntimeError('no published stable release exists')
-    version = max(versions, key=lambda item: item[0])[1]
-    reference = verify_reference(image, version)
-    command('docker', 'buildx', 'imagetools', 'create', '--tag', image + ':latest', reference)
-    if image_digest(image + ':latest') != reference.split('@', 1)[1]:
-        raise RuntimeError('stable alias does not match the verified index')
-    return {'status': 'stable_alias_updated', 'version': version, 'reference': reference, 'latest': image + ':latest'}
-
-
-def publish(path, image):
+def publish(path, image, main=False):
     manifest = json.loads(path.read_text())
-    if manifest['dirty'] or manifest['publication'] != 'released':
-        raise RuntimeError('registry publication requires a clean released manifest')
+    expected_publication = 'build_artifact' if main else 'released'
+    if manifest['dirty'] or manifest['publication'] != expected_publication:
+        raise RuntimeError('registry publication requires a clean matching manifest')
     version = manifest['version']
-    tag = version.replace('+', '_')
+    tag = 'main' if main else version.replace('+', '_')
     if not re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}', tag):
         raise RuntimeError('version cannot be represented as an OCI tag')
     references = []
@@ -94,9 +62,12 @@ def publish(path, image):
         raise RuntimeError('registry index is missing a required Server platform')
     digest = image_digest(image + ':' + tag)
     reference = image + '@' + digest
-    command('cosign', 'sign', '--yes', reference)
+    if main:
+        command('docker', 'buildx', 'imagetools', 'create', '--tag', image + ':latest', reference)
+        if image_digest(image + ':latest') != digest:
+            raise RuntimeError('latest does not match the verified main index')
     receipt = {'image': image, 'version': version, 'commit': manifest['commit'], 'build': manifest['build'],
-               'digest': digest, 'reference': reference, 'platforms': ['linux/amd64', 'linux/arm64']}
+               'tag': tag, 'digest': digest, 'reference': reference, 'platforms': ['linux/amd64', 'linux/arm64']}
     (path.parent / 'server-registry.json').write_text(json.dumps(receipt, indent=2) + '\n')
     if os.environ.get('GITHUB_OUTPUT'):
         with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
@@ -106,15 +77,13 @@ def publish(path, image):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--manifest', type=Path)
+    parser.add_argument('--manifest', type=Path, required=True)
     parser.add_argument('--image', required=True)
-    parser.add_argument('--promote-latest', action='store_true')
+    parser.add_argument('--main', action='store_true', help='publish the main and latest branch images')
     args = parser.parse_args()
-    if not re.fullmatch(r'ghcr\.io/[a-z0-9][a-z0-9_.-]*/[a-z0-9][a-z0-9_.-]*', args.image):
-        parser.error('provide an explicit lowercase GHCR image repository')
-    if not args.promote_latest and not args.manifest:
-        parser.error('--manifest is required for image publication')
-    result = promote(args.image) if args.promote_latest else publish(args.manifest.resolve(), args.image)
+    if not re.fullmatch(r'docker\.io/[a-z0-9][a-z0-9_.-]*/[a-z0-9][a-z0-9_.-]*', args.image):
+        parser.error('provide an explicit lowercase Docker Hub image repository')
+    result = publish(args.manifest.resolve(), args.image, args.main)
     print(json.dumps(result))
 
 

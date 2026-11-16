@@ -51,7 +51,6 @@ jobs:
       publication: ${{ steps.metadata.outputs.publication }}
       source_commit: ${{ steps.metadata.outputs.source_commit }}
       version_tag: ${{ steps.metadata.outputs.version_tag }}
-      stable: ${{ steps.metadata.outputs.stable }}
     permissions:
       contents: read
       id-token: write
@@ -80,11 +79,6 @@ jobs:
           echo "publication=$PUBLICATION" >> "$GITHUB_OUTPUT"
           echo "source_commit=$source_commit" >> "$GITHUB_OUTPUT"
           echo "version_tag=v$version" >> "$GITHUB_OUTPUT"
-          if [[ "${version%%+*}" == *-* ]]; then
-            echo "stable=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "stable=true" >> "$GITHUB_OUTPUT"
-          fi
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -120,7 +114,7 @@ jobs:
           path: dist/release/
           if-no-files-found: error
   publish:
-    if: needs.build.outputs.publication == 'draft' || needs.build.outputs.publication == 'released'
+    if: needs.build.outputs.publication == 'draft' || needs.build.outputs.publication == 'released' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     needs: build
     runs-on: ubuntu-latest
     concurrency:
@@ -130,8 +124,6 @@ jobs:
       image: ${{ steps.registry.outputs.image }}
     permissions:
       contents: write
-      packages: write
-      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -140,57 +132,43 @@ jobs:
         with:
           name: ael-distribution
           path: release
-      - name: Check immutable publication before registry changes
+      - name: Check immutable version publication
+        if: needs.build.outputs.publication != 'build_artifact'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           PUBLICATION: ${{ needs.build.outputs.publication }}
           SOURCE_COMMIT: ${{ needs.build.outputs.source_commit }}
         run: python3 scripts/release_publish.py --manifest release/manifest.json --publication "$PUBLICATION" --check
-      - uses: sigstore/cosign-installer@v4.1.3
-        if: needs.build.outputs.publication == 'released'
-        with:
-          cosign-release: v3.1.4
-      - name: Publish signed multi-platform Server image
+      - name: Push multi-platform image to Docker Hub
         id: registry
-        if: needs.build.outputs.publication == 'released'
+        if: needs.build.outputs.publication != 'draft'
         env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          GH_USER: ${{ github.actor }}
+          DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
+          DOCKER_HUB_ACCESS_TOKEN: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+          DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE }}
+          PUBLICATION: ${{ needs.build.outputs.publication }}
         run: |
-          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GH_USER" --password-stdin
-          python3 scripts/server_registry.py --manifest release/manifest.json --image "ghcr.io/${GH_REPO,,}-server"
+          [ -n "$DOCKER_HUB_USERNAME" ] && [ -n "$DOCKER_HUB_ACCESS_TOKEN" ] || { echo 'Configure DOCKER_HUB_USERNAME and DOCKER_HUB_ACCESS_TOKEN repository secrets.' >&2; exit 1; }
+          printf '%s' "$DOCKER_HUB_ACCESS_TOKEN" | docker login docker.io --username "$DOCKER_HUB_USERNAME" --password-stdin
+          image="${DOCKERHUB_IMAGE:-${DOCKER_HUB_USERNAME,,}/ael-server}"
+          case "$image" in docker.io/*) ;; *) image="docker.io/$image" ;; esac
+          if [ "$PUBLICATION" = build_artifact ]; then
+            python3 scripts/server_registry.py --manifest release/manifest.json --image "$image" --main
+          else
+            python3 scripts/server_registry.py --manifest release/manifest.json --image "$image"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: needs.build.outputs.publication != 'draft'
+        with:
+          name: ael-dockerhub
+          path: release/server-registry.json
+          if-no-files-found: error
       - name: Publish verified tagged source
+        if: needs.build.outputs.publication != 'build_artifact'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           PUBLICATION: ${{ needs.build.outputs.publication }}
           SOURCE_COMMIT: ${{ needs.build.outputs.source_commit }}
         run: python3 scripts/release_publish.py --manifest release/manifest.json --publication "$PUBLICATION"
-  promote-stable-image:
-    if: needs.build.outputs.publication == 'released' && needs.build.outputs.stable == 'true'
-    needs: [build, publish]
-    runs-on: ubuntu-latest
-    concurrency:
-      group: ael-server-stable-image
-      cancel-in-progress: false
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.build.outputs.source_commit }}
-      - uses: sigstore/cosign-installer@v4.1.3
-        with:
-          cosign-release: v3.1.4
-      - name: Promote highest published stable image
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          GH_USER: ${{ github.actor }}
-          IMAGE: ${{ needs.publish.outputs.image }}
-        run: |
-          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GH_USER" --password-stdin
-          python3 scripts/server_registry.py --image "$IMAGE" --promote-latest

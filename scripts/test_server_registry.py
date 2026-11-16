@@ -1,4 +1,4 @@
-"""Exercise registry publication using explicitly offline Docker/Cosign fixtures."""
+"""Exercise registry publication using explicitly offline Docker/Hub fixtures."""
 import hashlib
 import json
 import os
@@ -28,13 +28,9 @@ if name=='docker' and args[:2]==['image','inspect']:
 elif name=='docker' and args[:3]==['buildx','imagetools','inspect']:
  if '--raw' in args: print(json.dumps({'manifests':[{'platform':{'os':'linux','architecture':a}} for a in ['amd64','arm64']]}))
  else: print('Name: fixture\\nDigest: sha256:'+'c'*64)
-elif name=='cosign' and args[0]=='verify':
- print(json.dumps([{'critical':{'image':{'docker-manifest-digest':'sha256:'+'c'*64}}}]))
-elif name=='gh':
- print(json.dumps([{'tag_name':'v1.2.2','draft':False,'prerelease':False},{'tag_name':'v1.2.3','draft':False,'prerelease':False},{'tag_name':'v1.3.0-rc.1','draft':False,'prerelease':True}]))
 ''')
         fake.chmod(0o755)
-        for name in ['docker', 'cosign', 'gh']:
+        for name in ['docker']:
             (self.root / name).symlink_to(fake)
         assets = []
         for arch in ['amd64', 'arm64']:
@@ -51,17 +47,17 @@ elif name=='gh':
         self.script = Path(__file__).with_name('server_registry.py')
 
     def run_script(self, *arguments):
-        return subprocess.run([sys.executable, str(self.script), '--image', 'ghcr.io/fixture/ael-server', *arguments],
+        return subprocess.run([sys.executable, str(self.script), '--image', 'docker.io/fixture/ael-server', *arguments],
                               env=self.environment, text=True, capture_output=True, timeout=30)
 
-    def test_publishes_both_platforms_and_signs_exact_index(self):
+    def test_publishes_both_platforms_and_reports_exact_index(self):
         result = self.run_script('--manifest', str(self.manifest))
         self.assertEqual(result.returncode, 0, result.stderr)
         receipt = json.loads((self.root / 'server-registry.json').read_text())
         self.assertEqual(receipt['platforms'], ['linux/amd64', 'linux/arm64'])
         calls = json.loads(self.state.read_text())['calls']
         self.assertEqual(len([c for c in calls if c[:3] == ['docker', 'image', 'push']]), 2)
-        self.assertIn(['cosign', 'sign', '--yes', 'ghcr.io/fixture/ael-server@sha256:' + 'c' * 64], calls)
+        self.assertEqual(receipt['reference'], 'docker.io/fixture/ael-server@sha256:' + 'c' * 64)
 
     def test_tampered_image_never_reaches_docker(self):
         (self.root / 'image-amd64.tar.gz').write_bytes(b'changed fixture bytes')
@@ -69,14 +65,16 @@ elif name=='gh':
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(json.loads(self.state.read_text())['calls'], [])
 
-    def test_stable_alias_uses_highest_published_stable_signature(self):
-        result = self.run_script('--promote-latest')
+    def test_main_build_pushes_main_without_replacing_version_tags(self):
+        manifest = json.loads(self.manifest.read_text())
+        manifest['publication'] = 'build_artifact'
+        self.manifest.write_text(json.dumps(manifest))
+        result = self.run_script('--manifest', str(self.manifest), '--main')
         self.assertEqual(result.returncode, 0, result.stderr)
-        value = json.loads(result.stdout)
-        self.assertEqual(value['version'], '1.2.3')
-        calls = json.loads(self.state.read_text())['calls']
-        verification = next(c for c in calls if c[:2] == ['cosign', 'verify'])
-        self.assertEqual(verification[-1], 'ghcr.io/fixture/ael-server:1.2.3')
+        receipt = json.loads((self.root / 'server-registry.json').read_text())
+        self.assertEqual(receipt['tag'], 'main')
+        pushes = [c[-1] for c in json.loads(self.state.read_text())['calls'] if c[:3] == ['docker', 'image', 'push']]
+        self.assertEqual(pushes, ['docker.io/fixture/ael-server:main-amd64', 'docker.io/fixture/ael-server:main-arm64'])
 
 
 if __name__ == '__main__':
