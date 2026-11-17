@@ -120,7 +120,7 @@ func Call(config, project string, binding Binding, method, suffix string, payloa
 		if !responseCode.MatchString(code) {
 			code = "REMOTE_REJECTED"
 		}
-		if detail, ok := result["detail"].(string); ok && len(detail) <= 500 && !strings.ContainsAny(detail, "\r\n\x00") && (code == "KNOWLEDGE_MISSING" || code == "KNOWLEDGE_CONFLICT" || code == "CONTEXT_SOURCE_MISMATCH" || code == "REVISION_CONFLICT" || code == "CANDIDATE_CHANGED" || code == "ARTIFACT_REQUIRED" || code == "RUNNER_INVALID") {
+		if detail, ok := result["detail"].(string); ok && len(detail) <= 500 && !strings.ContainsAny(detail, "\r\n\x00") && (code == "KNOWLEDGE_MISSING" || code == "KNOWLEDGE_CONFLICT" || code == "CONTEXT_SOURCE_MISMATCH" || code == "REVISION_CONFLICT" || code == "CANDIDATE_CHANGED" || code == "ARTIFACT_REQUIRED" || code == "RUNNER_INVALID" || code == "QUOTA_EXCEEDED") {
 			return nil, fmt.Errorf("%s: %s", code, detail)
 		}
 		return nil, fmt.Errorf("%s: remote server rejected the request", code)

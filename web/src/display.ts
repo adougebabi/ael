@@ -236,6 +236,9 @@ export function nextAction(s: any) {
 }
 export function readableError(error: string) {
   const messages: Record<string, string> = {
+    QUOTA_EXCEEDED: "项目附件容量已达上限，请打开项目设置中的存储与附件，查看占用并调整额度。",
+    QUOTA_TOO_SMALL: "新容量上限小于已用与预留容量，请提高上限或先处理上传与可回收原件。",
+    PRUNE_STALE: "可清理范围已变化，请重新预览后确认。",
     NOT_RUNNABLE: "当前条件不允许领取，请先处理阻塞。",
     REVIEW_VERSION_REQUIRED: "验收版本信息缺失，请刷新任务后重新审阅。",
     REVIEW_VERSION_MISMATCH: "验收候选或修订已变化，请刷新后重新审阅。",

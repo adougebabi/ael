@@ -167,6 +167,10 @@ try:
                 found = True
                 assert all(row[2].upper() != "BLOB" for table in ("artifact_objects", "artifact_uploads") for row in db.execute(f"PRAGMA table_info({table})"))
     assert found
+    pending_data = b"pending browser storage upload" * 100
+    pending_body = {"operation_id":"browser-pending", "idempotency_key":"browser-pending", "expected_revision":revision, "task_id":"task", "filename":"pending-browser.txt", "mime":"text/plain", "size":len(pending_data), "sha256":hashlib.sha256(pending_data).hexdigest(), "source":"storage-ui-fixture"}
+    pending_upload = api("POST", "/api/v1/projects/shared/artifacts/uploads", pending_body, bearer=tokens["a"], expected=201)
+    api("POST", f"/api/v1/projects/shared/artifacts/uploads/{pending_upload['upload_id']}/chunks", {"offset":0, "data":base64.b64encode(pending_data[:100]).decode()}, bearer=tokens["a"])
     manifest = out / "manifest.json"
     manifest.write_text(json.dumps({"isolated": True, "out": str(out), "url": base}))
     ui_env = dict(env, AEL_ARTIFACT_FIXTURE=str(manifest), AEL_UI_OUT=str(out / "browser"))
@@ -179,7 +183,7 @@ try:
     for name, project in projects.items():
         assert not (project / ".ael" / "work-items").exists()
         assert not (out / f"runtime-{name}").exists()
-    print(json.dumps({"status": "passed", "isolated": True, "clients": 2, "artifacts": 3, "browser": "reader preview and purge"}))
+    print(json.dumps({"status": "passed", "isolated": True, "clients": 2, "artifacts": 3, "browser": "storage administration and evidence lifecycle"}))
 finally:
     if proc and proc.poll() is None:
         proc.terminate()

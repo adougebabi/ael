@@ -100,6 +100,8 @@ jobs:
           python3 scripts/release_publish_acceptance.py --out "$RUNNER_TEMP/publish-tests.json"
           sh scripts/package.sh
           python3 scripts/remote_agent_acceptance.py --binary dist/ael-linux-amd64 --out "$RUNNER_TEMP/remote-agent-acceptance" --verify-recovery --verify-delivery
+          (cd web && npx playwright install --with-deps chromium)
+          python3 scripts/remote_artifacts_acceptance.py --bundle dist --out "$RUNNER_TEMP/artifact-storage-acceptance"
           python3 scripts/server_image.py --manifest dist/release/manifest.json --platform linux-amd64 --tag ael-server:ci-amd64
           python3 scripts/server_image.py --manifest dist/release/manifest.json --platform linux-arm64 --tag ael-server:ci-arm64
           dist/ael-linux-amd64 release verify --manifest dist/release/manifest.json --json

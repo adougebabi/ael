@@ -7,6 +7,7 @@ import { navigate, route, href, taskHref } from "./router";
 import AppIcon from "./components/AppIcon.vue";
 import RemoteServicePanel from "./components/RemoteServicePanel.vue";
 import RemoteAccountPanel from "./components/RemoteAccountPanel.vue";
+import ProjectStoragePanel from "./components/ProjectStoragePanel.vue";
 import { refreshRevision } from "./api";
 import { stamp } from "./display";
 const workspaceMode = ref(false);
@@ -44,6 +45,7 @@ async function loadPanel() {
   const generation = projectGeneration, currentPanel = panel.value, requestID = ++panelRequest;
   panelLoading.value = true; panelError.value = "";
   try {
+    if (currentPanel === "settings" && route.value.query.get("section") === "storage") return;
     if (currentPanel === "settings" && selected.value) {
       const base = `/api/v1/projects/${encodeURIComponent(selected.value.id)}`;
       const [configuration, reports, page, tokenPage] = await Promise.all([request(base + "/onboarding"), request(base + "/client-onboarding"), request(base + "/tasks?limit=100"), session.value.admin ? request("/api/v1/tokens") : Promise.resolve({ tokens: [] })]);
@@ -116,18 +118,23 @@ async function request(path: string, body?: unknown) {
     if (session.value?.csrf === expectedSession) clearSession();
     throw new Error("登录状态已变化，请重新打开工作台。");
   }
-  if (path.startsWith("/api/v1/projects/") && (expectedGeneration !== projectGeneration || ((path.includes("/artifacts") || path.includes("/contexts")) && expectedTask !== selectedTask.value))) throw new Error("项目或任务已切换，旧请求已失效。");
+  if (path.startsWith("/api/v1/projects/") && (expectedGeneration !== projectGeneration || ((/\/artifacts\/artifact_[^/?]+(?:\/content)?(?:\?|$)/.test(path) || path.includes("/contexts") || /\/tasks\/[^/]+\/artifacts/.test(path)) && expectedTask !== selectedTask.value))) throw new Error("项目或任务已切换，旧请求已失效。");
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
     if (response.status === 401 && session.value) clearSession();
     const message: Record<string, string> = {
+      QUOTA_EXCEEDED: "项目附件容量已达上限，请在项目设置的存储与附件中查看占用或调整额度。",
+      QUOTA_TOO_SMALL: "新上限小于已占用和已预留容量，请提高上限或先处理上传与可回收原件。",
+      REVISION_CONFLICT: "设置已被其他操作修改，请刷新后重新保存。",
+      PRUNE_STALE: "可回收范围已变化，请重新预览。",
+      UPLOAD_CONFLICT: "上传状态已变化，请刷新后核对。",
       INVALID_CREDENTIALS: "账号或密码不正确。", LOGIN_THROTTLED: "尝试次数过多，请稍后再试。",
       AUTH_REQUIRED: "登录已失效，请重新登录。", FORBIDDEN: "当前账号没有执行此操作的权限。",
       PROJECT_REJECTED: "项目未创建，请检查项目 ID 是否有效且未被占用。",
       USER_REJECTED: "账号未创建，请检查用户名和至少 12 位的密码。",
       MEMBERSHIP_REJECTED: "成员未添加，请检查项目和用户名。", TOKEN_REJECTED: "令牌操作未完成，请检查成员和项目。",
     };
-    throw new Error(message[data.code] || `请求未完成（${data.code || response.status}）。`);
+    throw Object.assign(new Error(message[data.code] || `请求未完成（${data.code || response.status}）。`), { code: data.code });
   }
   return response.json();
 }
@@ -404,6 +411,12 @@ onUnmounted(() => { document.removeEventListener("click", closePicker); if (prev
       <p v-if="panelLoading" role="status" class="secondary">正在读取页面信息…</p>
       <p v-if="panelError" role="alert" class="notice">{{ panelError }} <button @click="loadPanel">重试</button></p>
       <template v-if="area === 'settings'">
+        <nav class="tabs project-settings-tabs" aria-label="项目设置分区">
+          <a :href="href('/settings')" :class="{ chosen: route.query.get('section') !== 'storage' }" :aria-current="route.query.get('section') !== 'storage' ? 'page' : undefined">项目接入</a>
+          <a :href="href('/settings', { section: 'storage' })" :class="{ chosen: route.query.get('section') === 'storage' }" :aria-current="route.query.get('section') === 'storage' ? 'page' : undefined">存储与附件</a>
+        </nav>
+        <ProjectStoragePanel v-if="route.query.get('section') === 'storage'" :key="selected.id + session.csrf" :project-id="selected.id" :admin="session.admin" :request="request" />
+        <template v-else>
         <section class="standalone-card remote-connection" aria-label="项目接入"><div class="section-heading"><h2>项目接入</h2><button :disabled="panelLoading" @click="loadPanel">刷新接入信息</button></div><p><span class="status active">中心项目已连接</span> {{ selected.name }}</p><dl class="remote-facts"><div><dt>项目 ID</dt><dd>{{ selected.id }}</dd></div><div><dt>当前身份</dt><dd>{{ session.username }} · {{ roles[selected.role] || selected.role }}</dd></div><div><dt>规范资料</dt><dd>{{ specificationNames[projectConfiguration?.specification_state] || '正在核对' }}</dd></div><div><dt>工作准备</dt><dd>领取前核对候选、规范上下文和当前责任</dd></div></dl><details class="remote-diagnostics"><summary>连接新机器与配置来源</summary><p class="secondary">使用稳定项目 ID 连接同一中心项目。</p><pre>{{ `ael init --server ${locationOrigin} --remote-project ${selected.id}` }}</pre><p v-if="projectConfiguration" class="secondary">API {{ projectConfiguration.api_protocol }} · Skill {{ projectConfiguration.skill_protocol }} · 政策来源 {{ projectConfiguration.configuration_source }}</p><p v-if="projectConfiguration?.critical_knowledge?.length">关键依据 {{ projectConfiguration.critical_knowledge.join('、') }}</p><ul v-if="projectConfiguration?.checks?.length"><li v-for="check in projectConfiguration.checks" :key="check.id">{{ check.id }} · {{ check.kind }} · {{ check.method || '未声明方法' }}</li></ul></details></section>
         <section class="standalone-card" aria-label="客户端最近上报"><div class="section-heading"><h2>客户端最近上报</h2></div><p class="secondary">版本和策略来自客户端最近一次接入或会话准备上报。宿主运行状态未知。</p><p v-if="!clients.length && !panelLoading" class="secondary">尚无接入上报。使用 ael init 接入后可在此查看。</p><div v-if="clients.length" class="client-report-list"><article v-for="client in clients" :key="client.client_id"><div><strong>{{ client.runner || client.actor }}</strong><small>{{ client.session_id ? '工具会话' : '初始化接入' }} · {{ stamp(client.reported_at) }}</small></div><div><span>CLI {{ client.cli_version }}</span><small>Skill {{ client.skill_version }}</small></div><div><span>{{ policyNames[client.update_policy] || client.update_policy }}</span><small>{{ client.compatible ? '版本兼容' : '客户端版本不兼容' }}</small></div><div><span>{{ specificationNames[client.specification_state] || '资料状态待核对' }}</span><small>{{ hookSummary(client) }}</small></div><details class="remote-diagnostics"><summary>诊断引用</summary><p>客户端 {{ client.client_id }}</p><p v-if="client.session_id">会话 {{ client.session_id }}</p><p v-if="client.cli_build">构建 {{ client.cli_build }}</p></details></article></div></section>
         <div v-if="session.admin" class="standalone-grid"><section class="standalone-card"><h2>设置项目成员</h2><form class="standalone-form" @submit.prevent="addMember"><label>用户名<input v-model="memberUsername" required /></label><label>角色<select v-model="memberRole"><option value="executor">执行者</option><option value="reviewer">验收者</option><option value="reader">只读者</option></select></label><button :disabled="busy">保存成员</button></form></section><section class="standalone-card"><h2>创建 Agent 令牌</h2><p class="secondary">令牌只用于所选项目，权限取自当前成员角色。</p><form class="standalone-form" @submit.prevent="createToken"><label>成员用户名<input v-model="tokenUsername" required /></label><label>用途<input v-model="tokenLabel" required maxlength="100" /></label><button :disabled="busy">创建令牌</button></form><div v-if="tokenSecret" class="standalone-secret"><strong>令牌仅显示一次</strong><p class="secondary">请现在妥善保存。令牌 ID：{{ tokenID }}</p><textarea :value="tokenSecret" rows="3" readonly aria-label="新令牌" /></div></section></div>
@@ -474,6 +487,7 @@ onUnmounted(() => { document.removeEventListener("click", closePicker); if (prev
           </div>
         </section>
 </details>
+        </template>
       </template>
       <RemoteAccountPanel v-else-if="area === 'account'" :username="session.username" :admin="session.admin" :busy="busy" @logout="logout" />
       <template v-else-if="area === 'service'"><p v-if="!session.admin" role="alert" class="notice">当前账号没有服务管理权限。</p><RemoteServicePanel v-else :key="session.csrf" :info="serviceInfo" :loading="panelLoading" :platform="servicePlatform" :request="request" @refresh="loadPanel" @platform="changeServicePlatform" @created="serviceProjectCreated" /></template>
@@ -527,6 +541,8 @@ onUnmounted(() => { document.removeEventListener("click", closePicker); if (prev
 </template>
 
 <style scoped>
+.project-settings-tabs a { padding: 10px 3px; border-bottom: 2px solid transparent; text-decoration: none; }
+.project-settings-tabs a.chosen { border-color: var(--brand); }
 .standalone-shell { min-height: 100vh; }
 .standalone-header { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 18px max(24px, calc((100vw - 1120px) / 2)); background: var(--paper); border-bottom: 1px solid var(--line); }
 .standalone-header > div { display: flex; align-items: center; gap: 14px; }

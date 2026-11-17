@@ -3,13 +3,21 @@ package server
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"mime"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
 func artifactError(w http.ResponseWriter, err error) {
+	var quota *artifactQuotaError
 	switch {
+	case errors.As(err, &quota):
+		standaloneReply(w, http.StatusRequestEntityTooLarge, map[string]any{
+			"code": "QUOTA_EXCEEDED", "error": "QUOTA_EXCEEDED", "stats": quota.Stats, "requested_bytes": quota.Requested,
+			"detail": fmt.Sprintf("project attachment quota exceeded: used=%d reserved=%d requested=%d limit=%d bytes; open Project settings > Storage and attachments to inspect usage or change the quota", quota.Stats.Used, quota.Stats.Reserved, quota.Requested, quota.Stats.Quota),
+		})
 	case strings.Contains(err.Error(), "IMPORT_NOT_ACTIVE"):
 		standaloneFail(w, http.StatusConflict, "IMPORT_NOT_ACTIVE")
 	case err.Error() == "RUNNER_ISOLATION_REQUIRED":
@@ -76,6 +84,31 @@ func (h *standaloneHandler) remoteArtifacts(w http.ResponseWriter, r *http.Reque
 	a, err := h.server.artifacts(project, service)
 	if err != nil {
 		artifactError(w, err)
+		return
+	}
+	if len(parts) == 1 && parts[0] == "inventory" && r.Method == http.MethodGet {
+		limit, limitErr := strconv.Atoi(r.URL.Query().Get("limit"))
+		if r.URL.Query().Get("limit") == "" {
+			limit, limitErr = 25, nil
+		}
+		offset, offsetErr := strconv.Atoi(r.URL.Query().Get("offset"))
+		if r.URL.Query().Get("offset") == "" {
+			offset, offsetErr = 0, nil
+		}
+		if limitErr != nil || offsetErr != nil {
+			artifactError(w, errors.New("ARTIFACT_INVALID"))
+			return
+		}
+		kind := r.URL.Query().Get("kind")
+		if kind == "" {
+			kind = "files"
+		}
+		result, err := a.inventory(principal, role == "admin" || role == "executor" || role == "reviewer", kind, r.URL.Query().Get("q"), limit, offset)
+		if err != nil {
+			artifactError(w, err)
+			return
+		}
+		standaloneReply(w, http.StatusOK, result)
 		return
 	}
 	if len(parts) == 1 && parts[0] == "stats" && r.Method == http.MethodGet {

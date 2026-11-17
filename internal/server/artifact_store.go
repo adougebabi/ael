@@ -24,6 +24,13 @@ const artifactDefaultQuota int64 = 100 << 20
 
 var artifactDigest = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
+type artifactQuotaError struct {
+	Stats     artifactStats
+	Requested int64
+}
+
+func (e *artifactQuotaError) Error() string { return "QUOTA_EXCEEDED" }
+
 type artifactStore struct {
 	service *core.Service
 	project string
@@ -122,7 +129,8 @@ CREATE TABLE IF NOT EXISTS artifact_objects(id TEXT PRIMARY KEY,project_id TEXT 
 CREATE TABLE IF NOT EXISTS artifact_references(artifact_id TEXT NOT NULL,task_id TEXT NOT NULL,purpose TEXT NOT NULL,candidate TEXT NOT NULL,actor TEXT NOT NULL,actor_name TEXT NOT NULL,operation_id TEXT NOT NULL,idempotency_key TEXT NOT NULL,request_hash TEXT NOT NULL,created TEXT NOT NULL,PRIMARY KEY(actor,idempotency_key));
 CREATE TABLE IF NOT EXISTS portable_context_sources(context_id TEXT NOT NULL,id TEXT NOT NULL,path TEXT NOT NULL,artifact_id TEXT NOT NULL,sha256 TEXT NOT NULL,status TEXT NOT NULL,kind TEXT NOT NULL,reason TEXT NOT NULL,PRIMARY KEY(context_id,id));
 CREATE TABLE IF NOT EXISTS remote_artifact_leases(upload_id TEXT PRIMARY KEY,runner_id TEXT NOT NULL,attempt_id TEXT NOT NULL,fence INTEGER NOT NULL,token_hash TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS artifact_settings(key TEXT PRIMARY KEY,value INTEGER NOT NULL);`)
+CREATE TABLE IF NOT EXISTS artifact_settings(key TEXT PRIMARY KEY,value INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS artifact_upload_state ON artifact_uploads(status);`)
 	return err
 }
 
@@ -365,8 +373,8 @@ func (a *artifactStore) begin(principal standalonePrincipal, in artifactStartInp
 		if err != nil {
 			return err
 		}
-		if stats.Used+stats.Reserved+in.Size > stats.Quota {
-			return errors.New("QUOTA_EXCEEDED")
+		if stats.Quota > 0 && stats.Used+stats.Reserved+in.Size > stats.Quota {
+			return &artifactQuotaError{Stats: stats, Requested: in.Size}
 		}
 		created := time.Now().UTC().Format(time.RFC3339Nano)
 		_, err = tx.Exec("INSERT INTO artifact_uploads("+uploadColumns+") VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", uploadID, artifactID, a.project, in.TaskID, in.AttemptID, in.Candidate, in.Filename, in.MIME, in.Size, in.SHA256, in.Source, principal.UserID, principal.Username, in.OperationID, in.IdempotencyKey, hash, "open", 0, created)

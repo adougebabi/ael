@@ -44,19 +44,27 @@ func artifactDirectorySizes(dir string) (int64, map[string]int64, error) {
 }
 
 func (a *artifactStore) usage(tx *store.Tx) (artifactStats, error) {
+	_, objects, err := artifactDirectorySizes(a.objects)
+	if err != nil {
+		return artifactStats{}, err
+	}
+	_, uploads, err := artifactDirectorySizes(a.uploads)
+	if err != nil {
+		return artifactStats{}, err
+	}
+	return a.usageFromSizes(tx, objects, uploads)
+}
+
+func (a *artifactStore) usageFromSizes(tx *store.Tx, objects, uploads map[string]int64) (artifactStats, error) {
 	result := artifactStats{Quota: artifactDefaultQuota}
 	if err := tx.Row("SELECT value FROM artifact_settings WHERE key='quota'").Scan(&result.Quota); err != nil && err != sql.ErrNoRows {
 		return result, err
 	}
-	var err error
-	var uploadSizes map[string]int64
-	result.Temporary, uploadSizes, err = artifactDirectorySizes(a.uploads)
-	if err != nil {
-		return result, err
+	for _, size := range uploads {
+		result.Temporary += size
 	}
-	result.Artifacts, _, err = artifactDirectorySizes(a.objects)
-	if err != nil {
-		return result, err
+	for _, size := range objects {
+		result.Artifacts += size
 	}
 	result.Used = result.Temporary + result.Artifacts
 	rows, err := tx.Conn.QueryContext(context.Background(), "SELECT id,size FROM artifact_uploads WHERE status IN ('open','purging')")
@@ -70,7 +78,7 @@ func (a *artifactStore) usage(tx *store.Tx) (artifactStats, error) {
 		if err = rows.Scan(&id, &size); err != nil {
 			return result, err
 		}
-		if remaining := size - uploadSizes[id]; remaining > 0 {
+		if remaining := size - uploads[id]; remaining > 0 {
 			result.Reserved += remaining
 		}
 	}
@@ -96,7 +104,7 @@ type artifactQuotaInput struct {
 
 func (a *artifactStore) setQuota(principal standalonePrincipal, input artifactQuotaInput) (artifactStats, error) {
 	var result artifactStats
-	if input.LimitBytes <= 0 || input.LimitBytes > 1<<40 || input.ExpectedQuotaBytes <= 0 || !standaloneID.MatchString(input.OperationID) || !standaloneID.MatchString(input.IdempotencyKey) {
+	if input.LimitBytes < 0 || input.LimitBytes > 1<<40 || input.ExpectedQuotaBytes < 0 || !standaloneID.MatchString(input.OperationID) || !standaloneID.MatchString(input.IdempotencyKey) {
 		return result, errors.New("ARTIFACT_INVALID")
 	}
 	raw, _ := json.Marshal(struct {
@@ -132,7 +140,7 @@ func (a *artifactStore) setQuota(principal standalonePrincipal, input artifactQu
 		if result.Quota != input.ExpectedQuotaBytes {
 			return errors.New("REVISION_CONFLICT")
 		}
-		if input.LimitBytes < result.Used+result.Reserved {
+		if input.LimitBytes > 0 && input.LimitBytes < result.Used+result.Reserved {
 			return errors.New("QUOTA_TOO_SMALL")
 		}
 		if _, err = tx.Exec("INSERT INTO artifact_settings(key,value) VALUES('quota',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", input.LimitBytes); err != nil {
@@ -227,6 +235,8 @@ type artifactPruneInput struct {
 
 type artifactPruneItem struct {
 	ID         string   `json:"id"`
+	Filename   string   `json:"filename,omitempty"`
+	TaskID     string   `json:"task_id,omitempty"`
 	Kind       string   `json:"kind"`
 	ArtifactID string   `json:"artifact_id,omitempty"`
 	Size       int64    `json:"size"`
@@ -406,7 +416,7 @@ func (a *artifactStore) pruneCandidates(tx *store.Tx, cutoff time.Time) ([]artif
 		}
 		blocked, revisions := protected(associated)
 		if !blocked {
-			items = append(items, artifactPruneItem{ID: item.ID, Kind: "artifact", Size: item.Size, SHA256: item.SHA256, Revisions: revisions})
+			items = append(items, artifactPruneItem{ID: item.ID, Filename: item.Filename, TaskID: item.TaskID, Kind: "artifact", Size: item.Size, SHA256: item.SHA256, Revisions: revisions})
 		}
 	}
 	if err = rows.Err(); err != nil {
@@ -414,14 +424,14 @@ func (a *artifactStore) pruneCandidates(tx *store.Tx, cutoff time.Time) ([]artif
 		return nil, err
 	}
 	rows.Close()
-	rows, err = tx.Conn.QueryContext(context.Background(), "SELECT id,artifact_id,task_id,size,sha256,created FROM artifact_uploads WHERE status='open'")
+	rows, err = tx.Conn.QueryContext(context.Background(), "SELECT id,artifact_id,task_id,size,sha256,created,filename FROM artifact_uploads WHERE status='open'")
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
-		var id, artifactID, taskID, digest, created string
+		var id, artifactID, taskID, digest, created, filename string
 		var size int64
-		if err = rows.Scan(&id, &artifactID, &taskID, &size, &digest, &created); err != nil {
+		if err = rows.Scan(&id, &artifactID, &taskID, &size, &digest, &created, &filename); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -454,7 +464,7 @@ func (a *artifactStore) pruneCandidates(tx *store.Tx, cutoff time.Time) ([]artif
 			rows.Close()
 			return nil, statErr
 		}
-		items = append(items, artifactPruneItem{ID: id, Kind: "upload", ArtifactID: artifactID, Size: size, SHA256: digest, Revisions: revisions})
+		items = append(items, artifactPruneItem{ID: id, Filename: filename, TaskID: taskID, Kind: "upload", ArtifactID: artifactID, Size: size, SHA256: digest, Revisions: revisions})
 	}
 	if err = rows.Err(); err != nil {
 		rows.Close()

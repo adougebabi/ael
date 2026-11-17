@@ -269,3 +269,14 @@ OPT-00 DONE，OPT-01 DONE，OPT-02 DONE，OPT-03 DONE，OPT-04 DONE，OPT-05 DON
 - Server claim/show 暴露 claim_revision 和已登记输出，recovery 区分输入 context 与当前输出，保留具体 context/knowledge 原因。服务端与客户端传递受长度/换行限制的版本、附件、路径及哈希错误详情。owner、租约、fence、候选、规范和真实证据门禁继续校验。
 - 两轮独立复核发现并修正 profile/attempt 控制凭据在元数据、源码/报告、候选路径的遗漏检测，以及同键其他原始 submit 被误当作交付子记录的情况。补充对应回归。安全扫描的三条结果均为既有私钥头检测字符串和测试凭据拼接，人工核实无实际密钥；质量脚本未识别 Go 文件，使用 Go 测试/vet 与独立代码复核验证。
 - 实际隔离 CLI/Server 验收 PASS，含两叶子 define→analysis→execute→verify、失败修复重验、TSX 自动交付/直接上传、预检、丢提交响应、固定报告重放、runner retry、权限撤销及恢复查询。验收位于 /tmp/ael-flow-acceptance-20261117e。最终 0.1.29 的 go test ./... 全包 PASS，新增诊断/凭据/幂等回归 PASS，go vet ./...、actionlint 与 git diff --check PASS。更新随包 Skill、help、README 与架构/远程说明，发布流程已加入相同隔离 CLI 全链路验收。准备发布 0.1.29，Oracle 镜像由用户手动拉取。
+
+- 发布 DONE。源码 ad45442bd4d465af77dfab1b2378fdaa24c1d95a 已推 main，tag v0.1.29 指向同提交。main run43994607814、tag调度43995288506、正式发行43995298057均SUCCESS，CI在打包二进制上完成新增隔离全链路验收。正式 build ad45442-3a189bc8a1cc，manifest dirty=false/publication=released，公开13个资产含独立镜像回执。
+- 独立固定main身份签名核对PASS，正式Darwin arm64包SHA108257ee24212f1b27b5341f403ac85fee22f908fdf3ca8978c5413e98ce0cc5已由原0.1.28 updater下载验签并安装。共享CLI与local-ai-companion受管入口/Skill实际升到0.1.29，普通项目version --check显示entry=current、Remote权威、协议兼容。原用户内容沿受管更新保留，有一致备份。
+- DockerHub 0.1.29实际公开，双架构linux/amd64+linux/arm64，index digest sha256:c21a9218a6587f36bacb3dfe62731ad7d90d0b0a4b58d0985620e18c0b54d379，main/latest的index digest sha256:c970a33c418764b9e2c22ebdcf453078ed75e9210d208d9811659973f5c5f2b2。Oracle只读核实仍运行0.1.28（855a2e7-6ba16d92ffa0），Compose目录/opt/ael-v2、镜像adoumibaba/ael-server:latest，留用户手动pull与重建server。业务任务由原执行Agent恢复后继续。
+
+## 2026-11-17 附件容量设置与占用明细
+
+- 用户指出默认100MiB限制缺少设置和查看入口。线上只读核对得到3168个原件、104807690字节（约99.95MiB）、临时文件0、预留0，上限104857600字节。当前阻塞来自附件原件累积。
+- 在远程项目设置加入「存储与附件」，显示真实目录占用、剩余上传预留、按任务汇总、按文件/任务搜索分页、原件下载。成员读取明细，服务管理员设置上限或显式选择不限制。quota=0与expected=0支持无上限状态，原有限设置与CAS/幂等保护继续有效。
+- 未完成上传通过原owner/admin权限和原键取消，原件清理通过日期预览/digest确认与原保护闭包。错误携带用量/请求大小和可见设置入口。项目/会话响应隔离及原证据预览路径继续复用。
+- 已通过后端相关包回归与新增配额/明细测试，真实隔离浏览器通过管理员修改/关闭额度、过小额度拒绝、取消上传、搜索、移动布局、只读成员预览及管理员界面清理。证据 /tmp/ael-storage-ui-20261117e。0.1.30 全包Go回归、前端类型检查/构建、go vet、actionlint通过；最终附件相关包再次回归通过。独立复核修正了末页删除回退、无效日期busy恢复，并将明细查询改为只读快照、单次目录扫描、按实际占用/有效预留筛选元数据及相关任务标题。清理预览增加文件名与所属任务。发布CI加入同一真实浏览器验收，随后发布供Oracle手动拉取。

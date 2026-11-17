@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 
 const manifestPath = process.env.AEL_ARTIFACT_FIXTURE;
 if (!manifestPath) throw new Error("AEL_ARTIFACT_FIXTURE is required");
@@ -9,13 +10,93 @@ if (!fixture.isolated || !fs.existsSync(path.join(fixture.out, "ISOLATED-ARTIFAC
 const output = process.env.AEL_UI_OUT || "/tmp/ael-artifact-browser";
 fs.mkdirSync(output, { recursive: true });
 
-test("授权用户预览真实证据，清理后不显示假预览", async ({ page, request }) => {
-  await page.goto(fixture.url);
+test("管理员在项目设置查看占用、修改额度和放弃未完成上传", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.goto(fixture.url + "/#/tasks?project=shared");
+  await page.getByLabel("用户名", { exact: true }).fill("owner");
+  await page.getByLabel("密码", { exact: true }).fill("fixture-admin-password");
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await page.getByRole("link", { name: "项目设置", exact: true }).click();
+  await page.getByRole("link", { name: "存储与附件", exact: true }).click();
+  const storage = page.getByRole("region", { name: "存储与附件", exact: true });
+  await expect(storage.getByText("report.txt", { exact: true })).toBeVisible();
+  await expect(storage.getByText("100.00 MiB", { exact: false }).first()).toBeVisible();
+  await storage.getByLabel("不限制附件容量").check();
+  await storage.getByRole("button", { name: "保存容量设置", exact: true }).click();
+  await expect(storage.getByRole("status")).toContainText("已关闭此项目的附件容量限制");
+  await storage.getByLabel("不限制附件容量").uncheck();
+  await storage.getByLabel("容量上限（MiB）").fill("0.000001");
+  await storage.getByRole("button", { name: "保存容量设置", exact: true }).click();
+  await expect(storage.getByRole("alert")).toContainText("新上限小于");
+  await storage.getByLabel("容量上限（MiB）").fill("100");
+  await storage.getByRole("button", { name: "保存容量设置", exact: true }).click();
+  await expect(storage.getByRole("status")).toContainText("附件容量上限已设为 100.00 MiB");
+  await storage.getByRole("button", { name: "未完成上传", exact: true }).click();
+  const pending = storage.getByRole("row").filter({ hasText:"pending-browser.txt" });
+  await expect(pending).toBeVisible();
+  await pending.getByRole("button", { name:"放弃上传", exact:true }).click();
+  await page.getByRole("dialog").getByRole("button", { name:"确认放弃未完成上传", exact:true }).click();
+  await expect(storage.getByText("当前没有未完成上传。", { exact:true })).toBeVisible();
+  // Shrinking the last page returns to the remaining valid page.
+  const session = await (await page.request.get(fixture.url + "/api/v1/auth/session")).json();
+  const headers = { "Content-Type":"application/json", "X-AEL-Protocol":"1", "X-AEL-CSRF":session.csrf, Origin:fixture.url };
+  const task = await (await page.request.get(fixture.url + "/api/v1/projects/shared/tasks/task")).json();
+  const uploads: { upload_id:string; operation_id:string; idempotency_key:string }[] = [];
+  for (let index=0; index<26; index++) {
+    const key = "storage-page-" + index;
+    const response = await page.request.post(fixture.url + "/api/v1/projects/shared/artifacts/uploads", { headers, data:{ operation_id:key, idempotency_key:key, expected_revision:task.revision, task_id:"task", filename:key+".txt", mime:"text/plain", size:1, sha256:crypto.createHash("sha256").update("x").digest("hex"), source:"pagination-fixture" } });
+    expect(response.status()).toBe(201);
+    uploads.push({ ...(await response.json()), operation_id:key, idempotency_key:key });
+  }
+  await storage.getByRole("button", { name:"刷新容量", exact:true }).click();
+  await expect(storage.getByRole("navigation", { name:"附件分页" })).toContainText("共 26 项");
+  await storage.getByRole("button", { name:"下一页", exact:true }).click();
+  await expect(storage.locator("tbody tr")).toHaveCount(1);
+  await storage.locator("tbody tr").getByRole("button", { name:"放弃上传", exact:true }).click();
+  await page.getByRole("dialog").getByRole("button", { name:"确认放弃未完成上传", exact:true }).click();
+  await expect(storage.getByRole("navigation", { name:"附件分页" })).toContainText("共 25 项 · 第 1 / 1 页");
+  await expect(storage.locator("tbody tr")).toHaveCount(25);
+  for (const upload of uploads) {
+    const response = await page.request.post(fixture.url + `/api/v1/projects/shared/artifacts/uploads/${upload.upload_id}/cancel`, { headers, data:{ operation_id:upload.operation_id, idempotency_key:upload.idempotency_key } });
+    expect(response.status()).toBe(200);
+  }
+  await storage.getByRole("button", { name:"刷新容量", exact:true }).click();
+  await expect(storage.getByText("当前没有未完成上传。", { exact:true })).toBeVisible();
+  await storage.getByLabel("创建日期早于").evaluate((input:HTMLInputElement) => { input.value="10000-01-01"; input.dispatchEvent(new Event("input", { bubbles:true })); });
+  await storage.getByRole("button", { name:"预览可清理项", exact:true }).click();
+  await expect(storage.getByRole("alert")).toContainText("请选择有效的清理日期");
+  await expect(storage.getByRole("button", { name:"刷新容量", exact:true })).toBeEnabled();
+  await storage.getByRole("button", { name:"保存容量设置", exact:true }).click();
+  await storage.getByRole("button", { name:"附件原件", exact:true }).click();
+  await storage.getByLabel("搜索附件或任务").fill("report.txt");
+  await expect(storage.getByRole("row").filter({ hasText:"report.txt" })).toBeVisible();
+  await expect(storage.getByRole("row").filter({ hasText:"screen.png" })).toHaveCount(0);
+  await storage.getByRole("button", { name:"清除搜索", exact:true }).click();
+  await expect(storage.getByText("screen.png", { exact:true })).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0,0));
+  await page.screenshot({ path:path.join(output,"storage-desktop.png"), fullPage:true, animations:"disabled" });
+  await page.setViewportSize({ width:390, height:844 });
+  await expect(storage.getByRole("button", { name:"保存容量设置", exact:true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+  await expect(page.locator(".sidebar")).toBeHidden();
+  await page.evaluate(() => window.scrollTo(0,0));
+  await page.screenshot({ path:path.join(output,"storage-mobile.png"), fullPage:true, animations:"disabled" });
+  expect(errors).toEqual([]);
+});
+
+test("授权用户预览真实证据，清理后不显示假预览", async ({ page, request, browser }) => {
+  await page.goto(fixture.url + "/#/tasks?project=shared");
   await page.getByLabel("用户名", { exact: true }).fill("reader");
   await page.getByLabel("密码", { exact: true }).fill("fixture-reader-password");
   await page.getByRole("button", { name: "登录", exact: true }).click();
-  await page.getByLabel("项目列表").getByRole("listitem").filter({ hasText: "Shared Evidence" }).getByRole("button", { name: "查看项目" }).click();
-  await page.getByRole("button", { name: "执行依据与附件", exact: true }).click();
+  await page.getByRole("link", { name: "项目设置", exact: true }).click();
+  await page.getByRole("link", { name: "存储与附件", exact: true }).click();
+  const storage = page.getByRole("region", { name: "存储与附件", exact: true });
+  await expect(storage.getByText("report.txt", { exact: true })).toBeVisible();
+  await expect(storage.getByLabel("不限制附件容量")).toHaveCount(0);
+  await page.getByRole("link", { name: "项目接入", exact: true }).click();
+  await page.getByText("按任务检索执行依据与附件", { exact: true }).click();
   const evidence = page.getByLabel("项目证据");
   await evidence.getByLabel("按任务 ID 查找").fill("task");
   await evidence.getByRole("button", { name: "查找任务" }).click();
@@ -38,16 +119,25 @@ test("授权用户预览真实证据，清理后不显示假预览", async ({ pa
   const current = await (await request.get(fixture.url + "/api/v1/projects/shared/tasks/task")).json();
   const cancelled = await request.post(fixture.url + "/api/v1/projects/shared/tasks/task/cancel", { headers: adminHeaders, data: { operation_id: "browser-cancel", idempotency_key: "browser-cancel", expected_revision: current.revision, reason: "isolated cleanup fixture" } });
   expect(cancelled.status()).toBe(200);
-  const before = new Date(Date.now() + 60_000).toISOString().replace(/\.\d{3}Z$/, "Z");
-  const preview = await request.post(fixture.url + "/api/v1/projects/shared/artifacts/prune", { headers: adminHeaders, data: { before } });
-  expect(preview.status()).toBe(200);
-  const dryRun = await preview.json();
-  expect(dryRun.count).toBe(3);
-  const apply = await request.post(fixture.url + "/api/v1/projects/shared/artifacts/prune", { headers: adminHeaders, data: { before, apply: true, digest: dryRun.digest, operation_id: "browser-prune", idempotency_key: "browser-prune" } });
-  expect(apply.status()).toBe(200);
+  const adminContext = await browser.newContext();
+  const adminPage = await adminContext.newPage();
+  await adminPage.goto(fixture.url + "/#/tasks?project=shared");
+  await adminPage.getByLabel("用户名", { exact:true }).fill("owner");
+  await adminPage.getByLabel("密码", { exact:true }).fill("fixture-admin-password");
+  await adminPage.getByRole("button", { name:"登录", exact:true }).click();
+  await adminPage.getByRole("link", { name:"项目设置", exact:true }).click();
+  await adminPage.getByRole("link", { name:"存储与附件", exact:true }).click();
+  const adminStorage = adminPage.getByRole("region", { name:"存储与附件", exact:true });
+  await adminStorage.getByLabel("创建日期早于").fill(new Date(Date.now()+2*86400000).toISOString().slice(0,10));
+  await adminStorage.getByRole("button", { name:"预览可清理项", exact:true }).click();
+  await expect(adminPage.getByRole("dialog")).toContainText("本次可清理 3 项");
+  await adminPage.getByRole("dialog").getByRole("button", { name:"确认清理原件", exact:true }).click();
+  await expect(adminStorage.getByRole("status")).toContainText("已清理 3 项原件");
+  await adminPage.screenshot({ path:path.join(output,"storage-cleanup.png"), fullPage:true, animations:"disabled" });
+  await adminContext.close();
   await expect(page.getByLabel("证据预览")).toHaveCount(0);
   await expect(evidence).toContainText("预览已关闭");
-  await page.getByRole("button", { name: "刷新", exact: true }).click();
+  await evidence.getByRole("button", { name: "读取快照", exact: true }).first().click();
   await expect(imageRow).toContainText("原件已清理");
   await expect(reportRow).toContainText("原件已清理");
   await expect(evidence.getByRole("button", { name: "预览" })).toHaveCount(0);

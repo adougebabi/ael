@@ -57,6 +57,10 @@ ael artifact reference --artifact ARTIFACT_ID --task TASK_ID --purpose reference
 
 项目容量可通过 `GET /api/v1/projects/PROJECT_ID/artifacts/stats` 查询，返回已用、临时文件、附件及预留字节。管理员浏览器会话可向对应的 `/artifacts/quota` 提交 `limit_bytes`、从统计读取的 `expected_quota_bytes`、`operation_id` 和 `idempotency_key`；旧配额值冲突时需重新读取，相同请求可用同一键安全重放。新上限不能小于已用与预留之和。
 
+浏览器入口位于项目设置的「存储与附件」。成员可查看附件原件、上传临时文件、剩余预留容量及按任务汇总，并按文件名或任务搜索分页明细、下载原件。未完成上传按当前账号展示，服务管理员可查看并放弃项目中的未完成上传。管理员可在界面修改容量上限，或选择「不限制附件容量」。quota 的 limit_bytes=0 表示关闭项目附件总额限制，expected_quota_bytes=0 对应当前无限制状态，有限上限继续核对已用与预留空间。未配置项目使用原默认 100 MiB。
+
+「清理可回收原件」先按日期预览，再确认删除，复用任务、父子依赖、引用和依据快照的保护规则。附件占用统计按附件目录文件长度计数，数据库和备份单独占用服务器存储。GET `/artifacts/inventory?kind=files|uploads&q=关键词&limit=25&offset=0` 返回实际文件与预留字节，按占用降序分页，包含任务汇总及待核对目录占用。QUOTA_EXCEEDED 响应携带当前统计、本次请求大小和设置入口提示。
+
 ## 跨设备候选与规范依据
 
 先明确在项目内注册仓库 ID；不要用目录名或 remote URL 推断仓库身份。每个客户端提供自己的 checkout、workspace 和 runner 标识，它们是观察来源，不参与候选内容 ID，也不替代 Server 从令牌识别的操作者。以下命令均在已连接的 **Git checkout 根目录**执行：
