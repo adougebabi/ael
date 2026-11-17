@@ -39,6 +39,9 @@ func TestRemoteRunnerClaimIsOwnedFencedAndIdempotent(t *testing.T) {
 	endpoint := "/api/v1/projects/shared/runners/runner-a/claim"
 	first := standaloneRequest(t, f.h, "POST", endpoint, claim, nil, "", f.uploader, "", "1")
 	receipt := standaloneJSON(t, first, http.StatusCreated)
+	if receipt["claim_revision"] != f.revision {
+		t.Fatalf("claim did not expose frozen write revision: %+v", receipt)
+	}
 	attempt, ok := receipt["attempt"].(map[string]any)
 	if !ok || attempt["token"] == "" || attempt["fence"].(float64) < 1 {
 		t.Fatalf("missing lease: %+v", receipt)
@@ -52,6 +55,11 @@ func TestRemoteRunnerClaimIsOwnedFencedAndIdempotent(t *testing.T) {
 	}
 	heartbeat := map[string]any{"task_id": "task", "attempt_id": attempt["id"], "token": attempt["token"], "fence": attempt["fence"], "operation_id": "beat", "idempotency_key": "beat"}
 	standaloneJSON(t, standaloneRequest(t, f.h, "POST", "/api/v1/projects/shared/runners/runner-a/heartbeat", heartbeat, nil, "", f.uploader, "", "1"), http.StatusOK)
+	runnerView := standaloneJSON(t, standaloneRequest(t, f.h, "GET", "/api/v1/projects/shared/runners/runner-a", nil, nil, "", f.uploader, "", ""), http.StatusOK)
+	assignment := runnerView["assignments"].([]any)[0].(map[string]any)
+	if assignment["claim_revision"] != f.revision {
+		t.Fatalf("runner recovery omitted claim revision: %+v", assignment)
+	}
 	contextView := standaloneJSON(t, standaloneRequest(t, f.h, "GET", "/api/v1/projects/shared/contexts/"+contextID, nil, nil, "", f.reader, "", ""), http.StatusOK)
 	if contextView["validity"] != "current" {
 		t.Fatalf("heartbeat invalidated unchanged context: %+v", contextView)
@@ -64,12 +72,30 @@ func TestRemoteRunnerClaimIsOwnedFencedAndIdempotent(t *testing.T) {
 		t.Fatalf("progress replay differed: %d %s", progressReplay.Code, progressReplay.Body.String())
 	}
 	output := map[string]any{"task_id": "task", "attempt_id": attempt["id"], "token": attempt["token"], "fence": attempt["fence"], "expected_revision": f.revision, "candidate": candidate, "operation_id": "output", "idempotency_key": "output"}
+	// Heartbeat/progress changes the live task revision. Attempt writes retain
+	// the revision of their original claim, independent of read-time revision.
+	liveTask, err := service.Get("task")
+	if err != nil {
+		t.Fatal(err)
+	}
+	liveRevision := core.RemoteRevision(liveTask)
+	if liveRevision == f.revision {
+		t.Fatal("fixture did not advance the live task revision")
+	}
+	output["expected_revision"], output["operation_id"], output["idempotency_key"] = liveRevision, "output-live-revision", "output-live-revision"
+	wrongRevision := standaloneRequest(t, f.h, "POST", "/api/v1/projects/shared/runners/runner-a/observe", output, nil, "", f.uploader, "", "1")
+	if wrongRevision.Code != http.StatusConflict || !strings.Contains(wrongRevision.Body.String(), "REVISION_CONFLICT") {
+		t.Fatalf("live revision did not reproduce claim-bound conflict: %d %s", wrongRevision.Code, wrongRevision.Body.String())
+	}
+	output["expected_revision"], output["operation_id"], output["idempotency_key"] = f.revision, "output", "output"
 	outputReceipt := standaloneJSON(t, standaloneRequest(t, f.h, "POST", "/api/v1/projects/shared/runners/runner-a/observe", output, nil, "", f.uploader, "", "1"), http.StatusOK)
 	if outputReceipt["candidate_id"] != candidate.ID {
 		t.Fatalf("wrong output candidate: %+v", outputReceipt)
 	}
 	data := []byte("runner evidence\n")
-	start := map[string]any{"task_id": "task", "attempt_id": attempt["id"], "candidate": candidate.ID, "runner_id": "runner-a", "lease_token": attempt["token"], "fence": attempt["fence"], "expected_revision": f.revision, "filename": "result.txt", "mime": "text/plain", "size": len(data), "sha256": store.Hash(data), "source": "runner", "operation_id": "artifact", "idempotency_key": "artifact"}
+	// Upload names and candidate binding paths are independent. Binary uploads
+	// preserve source bytes even when their original extensions are unsupported.
+	start := map[string]any{"task_id": "task", "attempt_id": attempt["id"], "candidate": candidate.ID, "runner_id": "runner-a", "lease_token": attempt["token"], "fence": attempt["fence"], "expected_revision": f.revision, "filename": "result.bin", "mime": "application/octet-stream", "size": len(data), "sha256": store.Hash(data), "source": "runner", "operation_id": "artifact", "idempotency_key": "artifact"}
 	created := standaloneJSON(t, standaloneRequest(t, f.h, "POST", "/api/v1/projects/shared/artifacts/uploads", start, nil, "", f.uploader, "", "1"), http.StatusCreated)
 	uploadID := created["upload_id"].(string)
 	chunk := map[string]any{"offset": 0, "data": data, "runner_id": "runner-a", "lease_token": attempt["token"], "fence": attempt["fence"]}

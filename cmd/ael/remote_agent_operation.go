@@ -19,19 +19,22 @@ import (
 )
 
 type agentOperationRecord struct {
-	Schema       int                  `json:"schema"`
-	Origin       string               `json:"origin"`
-	Profile      string               `json:"profile"`
-	ProjectID    string               `json:"project_id"`
-	Checkout     string               `json:"checkout"`
-	IdentityHash string               `json:"identity_hash"`
-	Action       string               `json:"action"`
-	Runner       string               `json:"runner"`
-	PayloadHash  string               `json:"payload_hash"`
-	RequestHash  string               `json:"request_hash"`
-	Payload      map[string]any       `json:"payload"`
-	Receipt      map[string]any       `json:"receipt,omitempty"`
-	Upload       *agentRetainedUpload `json:"upload,omitempty"`
+	Schema         int                  `json:"schema"`
+	Origin         string               `json:"origin"`
+	Profile        string               `json:"profile"`
+	ProjectID      string               `json:"project_id"`
+	Checkout       string               `json:"checkout"`
+	IdentityHash   string               `json:"identity_hash"`
+	Action         string               `json:"action"`
+	Runner         string               `json:"runner"`
+	PayloadHash    string               `json:"payload_hash"`
+	RequestHash    string               `json:"request_hash"`
+	Payload        map[string]any       `json:"payload"`
+	Receipt        map[string]any       `json:"receipt,omitempty"`
+	Upload         *agentRetainedUpload `json:"upload,omitempty"`
+	Delivery       *agentDeliveryPlan   `json:"delivery,omitempty"`
+	DeliveryHash   string               `json:"delivery_hash,omitempty"`
+	DeliveryParent string               `json:"delivery_parent,omitempty"`
 }
 
 type agentRetainedUpload struct {
@@ -44,7 +47,7 @@ type agentRetainedUpload struct {
 func readAgentOperation(path string) (agentOperationRecord, error) {
 	var record agentOperationRecord
 	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 || info.Size() > 20<<20 || securityfs.NoACL(path) != nil || securityfs.SingleLinkRegular(path) != nil {
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 || info.Size() > 96<<20 || securityfs.NoACL(path) != nil || securityfs.SingleLinkRegular(path) != nil {
 		return record, core.Error("AGENT_OPERATION_INVALID", "operation record must be private, regular and unlinked")
 	}
 	raw, err := os.ReadFile(path)
@@ -74,6 +77,12 @@ func readAgentOperation(path string) (agentOperationRecord, error) {
 		}{record.Upload.Flags, record.Upload.Filename, store.Hash(record.Upload.Data)})
 		if record.RequestHash != store.Hash(signature) {
 			return record, core.Error("AGENT_OPERATION_INVALID", "retained upload bytes or metadata changed")
+		}
+	}
+	if record.Delivery != nil {
+		raw, _ := json.Marshal(record.Delivery)
+		if record.DeliveryHash != store.Hash(raw) {
+			return record, core.Error("AGENT_OPERATION_INVALID", "retained delivery bytes or candidate changed")
 		}
 	}
 	return record, nil
@@ -279,6 +288,10 @@ func executeAgentOperation(config, project string, binding remote.Binding, path 
 	if err != nil {
 		return nil, core.Error("AGENT_OPERATION_PENDING", "communication budget exhausted; retain drafts and run runner retry --pending "+path)
 	}
+	if record.Action == "claim" {
+		revision, _ := record.Payload["expected_revision"].(string)
+		agentClaimLease(response, record.Runner, revision)
+	}
 	record.Receipt = response
 	if err = saveAgentOperation(path, record); err != nil {
 		return nil, core.Error("AGENT_OPERATION_PENDING", "server may have accepted; retry the retained operation "+path)
@@ -292,7 +305,11 @@ func runAgentOperation(a args, config, project string, binding remote.Binding, a
 	if key == "" {
 		return nil, core.Error("REMOTE_OPERATION_REQUIRED", "provide operation_id and idempotency_key in the request")
 	}
-	path, record, err := agentOperationLocation(config, project, binding, action, runner, key)
+	storageAction := action
+	if action == "submit" && a.get("repository", "") != "" {
+		storageAction = "delivery"
+	}
+	path, record, err := agentOperationLocation(config, project, binding, storageAction, runner, key)
 	if err != nil {
 		return nil, err
 	}
@@ -302,9 +319,10 @@ func runAgentOperation(a args, config, project string, binding remote.Binding, a
 	}
 	defer unlock()
 	request, _ := json.Marshal(struct {
-		Body       map[string]any
-		Repository string
-	}{body, a.get("repository", "")})
+		Body         map[string]any
+		Repository   string
+		ArtifactsDir string `json:",omitempty"`
+	}{body, a.get("repository", ""), a.get("artifacts-dir", "")})
 	hash := store.Hash(request)
 	recovering := false
 	if _, err = os.Lstat(path); err == nil {
@@ -315,10 +333,25 @@ func runAgentOperation(a args, config, project string, binding remote.Binding, a
 		if record.RequestHash != hash {
 			return nil, core.Error("IDEMPOTENCY_CONFLICT", "the operation request changed; the original record is retained")
 		}
+		if parent := a.get("delivery-parent", ""); parent != "" && parent != record.DeliveryParent {
+			return nil, core.Error("IDEMPOTENCY_CONFLICT", "submit key already belongs to a different delivery")
+		}
 		recovering = true
 	} else if !os.IsNotExist(err) {
 		return nil, err
 	} else {
+		if action == "submit" && a.get("repository", "") != "" {
+			profile, profileErr := remote.LoadProfile(config, project, binding.Profile)
+			if profileErr != nil {
+				return nil, profileErr
+			}
+			record.Delivery, err = buildAgentDelivery(a, project, body, profile.Token)
+			if err != nil {
+				return nil, err
+			}
+			raw, _ := json.Marshal(record.Delivery)
+			record.DeliveryHash = store.Hash(raw)
+		}
 		if action == "observe" && a.get("repository", "") != "" {
 			if _, exists := body["candidate"]; exists {
 				return nil, core.Error("AGENT_REQUEST_INVALID", "choose supplied candidate or --repository capture")
@@ -330,9 +363,13 @@ func runAgentOperation(a args, config, project string, binding remote.Binding, a
 			body["candidate"] = candidate
 		}
 		record.RequestHash, record.Payload = hash, body
+		record.DeliveryParent = a.get("delivery-parent", "")
 		if err = saveAgentOperation(path, record); err != nil {
 			return nil, err
 		}
+	}
+	if record.Delivery != nil {
+		return executeAgentDelivery(config, project, binding, path, record)
 	}
 	return executeAgentOperation(config, project, binding, path, record, recovering)
 }
@@ -364,7 +401,9 @@ func retryAgentOperation(a args, config, project string, binding remote.Binding)
 		defer output.Close()
 	}
 	var result map[string]any
-	if record.Upload != nil {
+	if record.Delivery != nil {
+		result, err = executeAgentDelivery(config, project, binding, path, record)
+	} else if record.Upload != nil {
 		result, err = executeAgentUpload(config, project, binding, path, record)
 	} else {
 		result, err = executeAgentOperation(config, project, binding, path, record, true)

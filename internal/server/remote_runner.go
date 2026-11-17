@@ -136,14 +136,14 @@ func (p *portableStore) getRunner(principal standalonePrincipal, runnerID string
 	connection := "no_responsibility"
 	responsibility := "none"
 	assignments := []map[string]any{}
-	rows, err := p.service.Store.DB.Query(`SELECT a.attempt_id,a.context_id,t.body,coalesce((SELECT e.body FROM events e WHERE e.task_id=a.task_id AND e.kind='work_progress' AND json_extract(e.body,'$.actor')=a.runner_id ORDER BY e.id DESC LIMIT 1),'') FROM remote_runner_attempts a JOIN tasks t ON t.id=a.task_id WHERE a.runner_id=? AND a.state IN ('running','interrupted')`, runnerID)
+	rows, err := p.service.Store.DB.Query(`SELECT a.attempt_id,a.context_id,a.claim_revision,a.output_candidate,t.body,coalesce((SELECT e.body FROM events e WHERE e.task_id=a.task_id AND e.kind='work_progress' AND json_extract(e.body,'$.actor')=a.runner_id ORDER BY e.id DESC LIMIT 1),'') FROM remote_runner_attempts a JOIN tasks t ON t.id=a.task_id WHERE a.runner_id=? AND a.state IN ('running','interrupted')`, runnerID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, contextID, body, progressBody string
-		if err := rows.Scan(&id, &contextID, &body, &progressBody); err != nil {
+		var id, contextID, claimRevision, outputCandidate, body, progressBody string
+		if err := rows.Scan(&id, &contextID, &claimRevision, &outputCandidate, &body, &progressBody); err != nil {
 			return nil, err
 		}
 		var task core.Task
@@ -154,7 +154,7 @@ func (p *portableStore) getRunner(principal standalonePrincipal, runnerID string
 			if attempt.ID == id {
 				connection, responsibility = remoteResponsibilityState(task, attempt)
 				if attempt.Status == "running" || attempt.Status == "interrupted" {
-					assignment := map[string]any{"task_id": task.Definition.ID, "attempt_id": id, "context_id": contextID, "unit": attempt.Unit, "responsibility_state": responsibility}
+					assignment := map[string]any{"task_id": task.Definition.ID, "attempt_id": id, "context_id": contextID, "unit": attempt.Unit, "claim_revision": claimRevision, "output_candidate": outputCandidate, "responsibility_state": responsibility}
 					var progress core.Progress
 					if json.Unmarshal([]byte(progressBody), &progress) == nil && !progress.At.Before(attempt.Started) {
 						assignment["progress_next"] = progress.Next
@@ -256,7 +256,7 @@ func (p *portableStore) claimRunner(principal standalonePrincipal, role, runnerI
 		if _, err = tx.Exec("INSERT INTO remote_runner_attempts(attempt_id,task_id,runner_id,actor,context_id,candidate_id,claim_revision,fence,token_hash) VALUES(?,?,?,?,?,?,?,?,?)", attempt.ID, taskID, runnerID, principal.UserID, input.ContextID, candidateID, input.ExpectedRevision, attempt.Fence, store.Hash([]byte(token))); err != nil {
 			return nil, err
 		}
-		return map[string]any{"task": core.RemoteTaskView(task), "attempt": attempt, "context_id": input.ContextID, "revision": core.RemoteRevision(task), "operation_id": input.OperationID}, nil
+		return map[string]any{"task": core.RemoteTaskView(task), "attempt": attempt, "context_id": input.ContextID, "claim_revision": input.ExpectedRevision, "revision": core.RemoteRevision(task), "operation_id": input.OperationID}, nil
 	})
 }
 
@@ -322,8 +322,11 @@ func (p *portableStore) observeRunner(principal standalonePrincipal, runnerID st
 		if err = tx.Row("SELECT a.claim_revision,r.repository FROM remote_runner_attempts a JOIN remote_runners r ON r.id=a.runner_id WHERE a.attempt_id=?", input.AttemptID).Scan(&revision, &repository); err != nil {
 			return nil, err
 		}
-		if revision != input.ExpectedRevision || input.Candidate.Repository != repository {
-			return nil, errors.New("REVISION_CONFLICT")
+		if revision != input.ExpectedRevision {
+			return nil, core.Error("REVISION_CONFLICT", "expected_revision must equal attempt claim_revision "+revision)
+		}
+		if input.Candidate.Repository != repository {
+			return nil, core.Error("CANDIDATE_CHANGED", "candidate repository must match runner repository")
 		}
 		if strings.HasPrefix(attempt.Unit, "check:") && input.Candidate.ID != attempt.Input {
 			return nil, errors.New("CANDIDATE_CHANGED")

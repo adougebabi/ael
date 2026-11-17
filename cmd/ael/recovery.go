@@ -45,6 +45,9 @@ type recoveryIndex struct {
 	Attempt                  string                `json:"attempt,omitempty"`
 	Context                  string                `json:"context,omitempty"`
 	Revision                 string                `json:"source_revision,omitempty"`
+	ClaimRevision            string                `json:"claim_revision,omitempty"`
+	ContextReasons           []string              `json:"context_reasons,omitempty"`
+	KnowledgeIssue           string                `json:"knowledge_issue,omitempty"`
 	DefinitionRevision       int                   `json:"definition_revision,omitempty"`
 	PlanRevision             int                   `json:"plan_revision,omitempty"`
 	Candidate                string                `json:"candidate,omitempty"`
@@ -266,7 +269,9 @@ func refreshRecovery(prior recoveryIndex, a args, config, project string, bindin
 		return index, core.Error("RECOVERY_SERVER_UNSUPPORTED", "Server must expose current runner assignments")
 	}
 	taskID := a.get("task", prior.Task)
-	index.Attempt, index.Context = "", ""
+	index.Attempt, index.Context, index.ClaimRevision = "", "", ""
+	index.ContextReasons, index.KnowledgeIssue = nil, ""
+	outputCandidate := ""
 	responsibility := "none"
 	reportedNext := ""
 	if len(assignments) > 1 {
@@ -280,6 +285,8 @@ func refreshRecovery(prior recoveryIndex, a args, config, project string, bindin
 		taskID, _ = assignment["task_id"].(string)
 		index.Attempt, _ = assignment["attempt_id"].(string)
 		index.Context, _ = assignment["context_id"].(string)
+		index.ClaimRevision, _ = assignment["claim_revision"].(string)
+		outputCandidate, _ = assignment["output_candidate"].(string)
 		responsibility, _ = assignment["responsibility_state"].(string)
 		reportedNext, _ = assignment["progress_next"].(string)
 	}
@@ -402,11 +409,24 @@ func refreshRecovery(prior recoveryIndex, a args, config, project string, bindin
 		if contextErr != nil {
 			return index, contextErr
 		}
-		if context["candidate_id"] != index.LocalCandidate {
+		if context["candidate_id"] != index.LocalCandidate && outputCandidate != index.LocalCandidate {
 			index.State, index.Next = "workspace_changed", "inspect local HEAD and uncommitted changes against the responsibility context candidate before continuing"
 		}
-		if context["validity"] != "current" || knowledge.CheckFresh(project) != nil {
-			index.State, index.Next = "context_changed", "read the current task and specification versions and refresh context through the existing explicit protocol"
+		candidateOnly := false
+		if reasons, ok := context["validity_reasons"].([]any); ok {
+			candidateOnly = len(reasons) > 0
+			for _, value := range reasons {
+				reason, _ := value.(string)
+				index.ContextReasons = append(index.ContextReasons, reason)
+				candidateOnly = candidateOnly && reason == "a newer candidate observation differs"
+			}
+		}
+		if context["validity"] != "current" && !(responsibility == "active" && candidateOnly) {
+			index.State, index.Next = "context_changed", "inspect context_reasons and current specifications; preserve the existing attempt input context and use its claim lease for output submission"
+		}
+		if err := knowledge.CheckFresh(project); err != nil {
+			index.KnowledgeIssue = err.Error()
+			index.State, index.Next = "context_changed", "run knowledge index, inspect changed specification sources, then recheck recovery; preserve the current attempt input context"
 		}
 	}
 	if role, reported := runner["project_role"].(string); reported && role != "executor" && role != "admin" && role != "reviewer" {

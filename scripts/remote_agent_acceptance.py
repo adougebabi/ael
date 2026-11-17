@@ -25,6 +25,7 @@ source.add_argument("--binary")
 source.add_argument("--bundle")
 parser.add_argument("--out", required=True)
 parser.add_argument("--verify-recovery", action="store_true")
+parser.add_argument("--verify-delivery", action="store_true")
 args = parser.parse_args()
 out = Path(args.out).resolve()
 if out.exists() and any(out.iterdir()):
@@ -68,8 +69,9 @@ git(origin, "config", "user.email", "fixture@example.invalid")
 (origin / "spec").mkdir()
 (origin / "spec" / "rules.md").write_text("# Fixture rules\nDo not publish.\n")
 (origin / "app.txt").write_text("original\n")
+(origin / "Page.tsx").write_text("export const Page = () => null\n")
 (origin / ".gitignore").write_text(".ael/\n")
-git(origin, "add", "--", ".gitignore", "app.txt", "spec/rules.md")
+git(origin, "add", "--", ".gitignore", "app.txt", "Page.tsx", "spec/rules.md")
 git(origin, "commit", "-m", "fixture baseline")
 projects = {name: out / f"checkout-{name}" for name in ("a", "b")}
 for directory in projects.values():
@@ -178,6 +180,8 @@ try:
     client("a", "knowledge", "index")
     definition = {"id": "task", "parent":"epic", "title": "Repair fixture", "type": "bug", "goal": "verified", "scope": ["app.txt"], "acceptance": ["fixed"],
                   "knowledge": ["source:spec/rules.md"], "checks": [{"id": "unit", "kind": "functional", "method": "command", "command": check_command, "artifacts": ["runtime:report.json"], "covers": ["fixed"], "required": True}]}
+    if args.verify_delivery:
+        definition["preset"] = "standard"
     parent_file = out / "epic.json"
     parent_file.write_text(json.dumps({"id":"epic", "title":"External sequence", "type":"epic", "goal":"verified", "acceptance":["both children and integration"]}))
     client("a", "task", "create", "--file", parent_file, "--operation-id", "epic", "--idempotency-key", "epic")
@@ -196,7 +200,7 @@ try:
         path = out / f"request-{serial}.json"
         path.write_text(json.dumps(body)); path.chmod(0o600)
         argv = ["runner", action, "--runner", runner, "--file", path]
-        for name, value in flags.items(): argv.extend(["--"+name, str(value)])
+        for name, value in flags.items(): argv.append("--"+name+"="+str(value))
         return client("a", *argv, expect_ok=ok)
 
     register = out / "agent.json"
@@ -232,7 +236,11 @@ try:
         lease = {"task_id":task_id, "attempt_id":attempt["id"], "token":attempt["token"], "fence":attempt["fence"]}
         # Read-only principals cannot borrow another Agent's responsibility.
         client("b", "runner", "claim", "--runner", "agent-a", "--file", out / f"request-{serial}.json", "--out", out / f"forbidden-claim-{iteration}.json", expect_ok=False)
-        request("heartbeat", lease)
+        if args.verify_delivery:
+            assert private["claim_revision"] == revision and private["expected_revision"] == revision
+            request("heartbeat", {}, **{"lease-file":claim_path})
+        else:
+            request("heartbeat", lease)
         request("progress", dict(lease, summary="external driver working", next="submit actual observations", stage=step))
         if args.verify_recovery:
             saved = client("a", "recovery", "save", "--session", "deterministic-a", "--runner", "agent-a")
@@ -265,6 +273,11 @@ try:
             receipt = client("a", "artifact", "upload", "--task", task_id, "--attempt", attempt["id"], "--candidate", candidate["id"], "--file", path, "--lease-file", lease_path, "--expected-revision", revision, "--operation-id", key, "--idempotency-key", key)
             client("b", "artifact", "upload", "--task", task_id, "--attempt", attempt["id"], "--candidate", candidate["id"], "--file", path, "--lease-file", lease_path, "--expected-revision", revision, "--operation-id", key+"-forbidden", "--idempotency-key", key+"-forbidden", expect_ok=False)
             return {"path":ref, "artifact_id":receipt["id"]}
+        if args.verify_delivery and step == "execute":
+            source_upload = client("a", "artifact", "upload", "--lease-file", claim_path,
+                "--candidate", candidate["id"], "--file", projects["a"] / "Page.tsx",
+                "--operation-id", f"direct-source-{iteration}", "--idempotency-key", f"direct-source-{iteration}")
+            assert source_upload["status"] == "finalized", source_upload
         result = {"status":"pass", "summary":"External host completed "+step}
         bindings = []
         extra = {}
@@ -311,7 +324,20 @@ try:
             api("POST", "/api/v1/projects/shared/members", {"username":"writer", "role":"executor"}, expected=201)
         if iteration == 0:
             proxy.drop_next_submit = True
-        submitted = request("submit", body)
+        submit_flags = {}
+        if args.verify_delivery:
+            result_paths = []
+            if step == "execute":
+                result_paths = ["Page.tsx", "app.txt"]
+            if step == "verify":
+                (out / "report.json").write_text(json.dumps(report))
+                result_paths = ["runtime:report.json"]
+            body = dict(result=dict(result, artifacts=result_paths), **extra)
+            submit_flags = {"lease-file":claim_path, "repository":"fixture-repo", "artifacts-dir":out}
+        if args.verify_delivery:
+            preview = request("submit", body, **dict(submit_flags, **{"dry-run":"true"}))
+            assert preview["status"] == "ready" and preview["candidate_id"] == candidate["id"], preview
+        submitted = request("submit", body, **submit_flags)
         if args.verify_recovery:
             refreshed = client("a", "recovery", "save", "--session", "deterministic-a", "--runner", "agent-a")
             assert refreshed["online_verified"], refreshed
@@ -319,10 +345,16 @@ try:
                 assert not refreshed["summary"].get("task"), refreshed
         if iteration == 0:
             assert proxy.drop_count == 1
+        # A delivery retry uses its frozen bytes after the original report changes.
+        if args.verify_delivery and step == "verify":
+            (out / "report.json").write_text("changed after accepted submission\n")
         # Replaying the exact accepted submission returns the same immutable receipt.
         replay_file = out / f"request-{serial}.json"
-        replay = client("a", "runner", "submit", "--runner", "agent-a", "--file", replay_file)
+        replay = client("a", "runner", "submit", "--runner", "agent-a", "--file", replay_file, *[part for name,value in submit_flags.items() for part in ("--"+name,str(value))])
         assert {k:v for k,v in submitted.items() if k != "observed_at"} == {k:v for k,v in replay.items() if k != "observed_at"}
+        if args.verify_delivery:
+            recovered = client("a", "runner", "retry", "--pending", submitted["operation_file"])
+            assert recovered["next"] == submitted["next"], recovered
         key = json.loads(replay_file.read_text())["idempotency_key"]
         found = client("a", "runner", "receipt", "--runner", "agent-a", "--idempotency-key", key)
         assert found["found"] is True
@@ -336,7 +368,7 @@ try:
     assert choice["action"] != "completed", choice
     # Revoking write capability does not turn an old receipt into new authority.
     api("POST", "/api/v1/projects/shared/members", {"username":"writer", "role":"reader"}, expected=201)
-    client("a", "runner", "submit", "--runner", "agent-a", "--file", replay_file)
+    client("a", "runner", "submit", "--runner", "agent-a", "--file", replay_file, *[part for name,value in submit_flags.items() for part in ("--"+name,str(value))])
     assert client("a", "runner", "receipt", "--runner", "agent-a", "--idempotency-key", key)["found"] is True
     assert not (out / "runtime-a").exists() and not (out / "runtime-b").exists()
     assert not (projects["a"] / ".ael" / "work-items").exists()

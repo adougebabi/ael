@@ -55,6 +55,21 @@ func remoteAgentCommand(cmd string, a args, config, project string, binding remo
 		return retryAgentOperation(a, config, project, binding)
 	}
 	runner := a.get("runner", "")
+	var lease agentUploadLease
+	var leaseReceipt map[string]any
+	if a.get("lease-file", "") != "" {
+		if action != "heartbeat" && action != "progress" && action != "observe" && action != "submit" && action != "interrupt" {
+			return nil, core.Error("AGENT_LEASE_INVALID", "--lease-file is for current attempt operations")
+		}
+		var err error
+		lease, leaseReceipt, err = readAgentLease(a.get("lease-file", ""))
+		if err != nil {
+			return nil, err
+		}
+		if runner == "" {
+			runner = lease.RunnerID
+		}
+	}
 	if action != "register" && (runner == "" || strings.ContainsAny(runner, "/\\?#\r\n")) {
 		return nil, core.Error("AGENT_REQUEST_INVALID", "provide --runner ID")
 	}
@@ -85,6 +100,11 @@ func remoteAgentCommand(cmd string, a args, config, project string, binding remo
 		if body == nil {
 			return nil, core.Error("AGENT_REQUEST_INVALID", "request must be an object")
 		}
+		if leaseReceipt != nil {
+			if err := applyAgentLease(body, lease, action, runner); err != nil {
+				return nil, err
+			}
+		}
 		if action == "register" {
 			path = "/runners"
 			for _, key := range []string{"operation-id", "idempotency-key"} {
@@ -99,6 +119,24 @@ func remoteAgentCommand(cmd string, a args, config, project string, binding remo
 	default:
 		return nil, core.Error("REMOTE_COMMAND_UNSUPPORTED", cmd)
 	}
+	if a.has("dry-run") {
+		if action != "submit" || a.get("repository", "") == "" {
+			return nil, core.Error("AGENT_REQUEST_INVALID", "dry-run requires runner submit --repository REPO")
+		}
+		profile, err := remote.LoadProfile(config, project, binding.Profile)
+		if err != nil {
+			return nil, err
+		}
+		plan, err := buildAgentDelivery(a, project, payload.(map[string]any), profile.Token)
+		if err != nil {
+			return nil, err
+		}
+		files := []map[string]any{}
+		for _, artifact := range plan.Artifacts {
+			files = append(files, map[string]any{"path": artifact.Path, "size": len(artifact.Data), "mime": artifact.MIME})
+		}
+		return map[string]any{"status": "ready", "validation": "local_candidate_and_artifact_bytes", "candidate_id": plan.Candidate.ID, "artifacts": files}, nil
+	}
 	output, err := reserveAgentClaimOutput(action, a.get("out", ""))
 	if err != nil {
 		return nil, err
@@ -111,6 +149,9 @@ func remoteAgentCommand(cmd string, a args, config, project string, binding remo
 		response, err = runAgentOperation(a, config, project, binding, action, runner, payload.(map[string]any))
 	} else {
 		response, err = agentCommunicationCall(config, project, binding, method, path, nil)
+	}
+	if err == nil && action == "heartbeat" && leaseReceipt != nil {
+		err = updateAgentLease(a.get("lease-file", ""), leaseReceipt, response)
 	}
 	return finishAgentOutput(response, err, output, a.get("out", ""))
 }

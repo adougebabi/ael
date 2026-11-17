@@ -63,6 +63,10 @@ verify 结果必须携带 runtime:report.json，绑定 candidate/check/definitio
 
 ## V2-13 双客户端恢复
 
+2026-11-17 远程 CLI 可执行路径修复。claim 回执与 runner assignments 显式公开冻结 claim_revision，保留 live revision 的原含义。私有 claim 回执同时作为后续命令的 lease-file，heartbeat 原子更新租约时间。submit --repository 从显式选定路径采集字节，复用候选、附件上传和既有 submit 状态机，原始请求和选定字节先固定到私有操作记录，再执行 observe、上传与提交。最终提交子记录绑定父请求和交付摘要，同键其他请求拒绝复用。重试先查已固定最终请求回执，接受后即使租约结束也能读取原结果，未接受请求继续验证有效责任。
+
+交付仅采集 Agent 显式选择的仓库文件与 runtime 文件。源码逐项匹配候选哈希并检测控制凭据，runtime 文本复用凭据清理，元数据拒绝包含 profile/attempt 控制凭据。凭据只进入私有操作与租约文件，公开回执删除 token 字段。Server 继续校验 owner、runner、fence、有效租约、任务/定义/计划、候选和 finalized 字节。恢复查询将输入 context 与已登记输出候选分别处理，知识或定义变化保留具体原因。
+
 正式通信入口将固定请求和上传快照保存到项目外私有配置目录，使用操作文件锁防止同一操作并发改写。最多三次有界通信尝试。重连先查服务端持久回执，命中后校验原请求摘要，未命中则用原 token/fence 续租核对责任，再重放原请求。服务端从严格解码前的规范化 JSON 计算 request_digest，与普通操作回执或提交事务一起持久化。旧回执继续使用原接口完整幂等校验恢复。
 
 新增 remote_workspace_holds 记录已声明工作区的未知旧责任，metadata 保存一次交接的接收方领取约束。runner recover 复用 Store.Write、领域 save、事件、任务版本和 p.mutate。显式确认停工或选择独立工作区后撤销旧接口责任，旧 Attempt 保留历史。实施已完成时可把完全相同候选交给另一身份验收，历史 PASS 保留，接收工作区重新提交检查。对未知声明工作区的后续领取保持拒绝，直至停工确认或独立交接。

@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path"
 	"slices"
 	"strings"
@@ -79,8 +80,14 @@ func (p *portableStore) submitRunner(principal standalonePrincipal, runnerID str
 		if err := tx.Row("SELECT claim_revision,output_candidate,context_id FROM remote_runner_attempts WHERE attempt_id=?", input.AttemptID).Scan(&revision, &output, &contextID); err != nil {
 			return nil, err
 		}
-		if revision != input.ExpectedRevision || output != input.CandidateID || task.ContextAttempt != attempt.ID {
-			return nil, errors.New("REVISION_CONFLICT")
+		if revision != input.ExpectedRevision {
+			return nil, core.Error("REVISION_CONFLICT", "expected_revision must equal attempt claim_revision "+revision)
+		}
+		if output != input.CandidateID {
+			return nil, core.Error("CANDIDATE_CHANGED", "register candidate_id with runner observe for this attempt before submit")
+		}
+		if task.ContextAttempt != attempt.ID {
+			return nil, core.Error("REVISION_CONFLICT", "task context belongs to a different attempt; inspect runner show before recovery")
 		}
 		var candidateBody string
 		if err := tx.Row("SELECT body FROM portable_candidates WHERE id=?", input.CandidateID).Scan(&candidateBody); err != nil {
@@ -137,7 +144,7 @@ func (p *portableStore) submitRunner(principal standalonePrincipal, runnerID str
 			}
 			item, err := scanArtifact(tx.Row("SELECT "+artifactColumns+" FROM artifact_objects WHERE id=?", binding.ArtifactID))
 			if err != nil || item.Status != "finalized" || item.TaskID != input.TaskID || item.AttemptID != input.AttemptID || item.Candidate != input.CandidateID {
-				return nil, errors.New("ARTIFACT_REQUIRED")
+				return nil, core.Error("ARTIFACT_REQUIRED", "all result artifacts must be finalized, bound, and uploaded for this task, attempt and candidate")
 			}
 			var owner, recordedRunner, recordedAttempt, tokenHash string
 			var recordedFence int
@@ -146,7 +153,7 @@ func (p *portableStore) submitRunner(principal standalonePrincipal, runnerID str
 			}
 			data, err := artifacts.read(item)
 			if err != nil {
-				return nil, errors.New("ARTIFACT_REQUIRED")
+				return nil, core.Error("ARTIFACT_REQUIRED", "all result artifacts must be finalized, bound, and uploaded for this task, attempt and candidate")
 			}
 			total += int64(len(data))
 			if total > 64<<20 {
@@ -159,13 +166,13 @@ func (p *portableStore) submitRunner(principal standalonePrincipal, runnerID str
 		}
 		for _, id := range input.Result.Artifacts {
 			if !byID[id] {
-				return nil, errors.New("ARTIFACT_REQUIRED")
+				return nil, core.Error("ARTIFACT_REQUIRED", "all result artifacts must be finalized, bound, and uploaded for this task, attempt and candidate")
 			}
 		}
 		if input.Result.Knowledge != nil {
 			for _, id := range input.Result.Knowledge.Artifacts {
 				if !byID[id] {
-					return nil, errors.New("ARTIFACT_REQUIRED")
+					return nil, core.Error("ARTIFACT_REQUIRED", "all result artifacts must be finalized, bound, and uploaded for this task, attempt and candidate")
 				}
 			}
 		}
@@ -187,18 +194,23 @@ func (p *portableStore) submitRunner(principal standalonePrincipal, runnerID str
 					}
 					continue
 				}
-				if file, ok := env.Files[name]; ok && file.Hash == item.SHA256 && slices.Contains(input.Result.Artifacts, item.ID) {
+				file, exists := env.Files[name]
+				if !exists {
+					return nil, core.Error("CANDIDATE_CHANGED", "binding path is absent from candidate: "+name)
+				}
+				if file.Hash != item.SHA256 {
+					return nil, core.Error("CANDIDATE_CHANGED", fmt.Sprintf("binding %s expected sha256=%s received=%s", name, file.Hash, item.SHA256))
+				}
+				if slices.Contains(input.Result.Artifacts, item.ID) {
 					matched = true
-				} else {
-					return nil, errors.New("CANDIDATE_CHANGED")
 				}
 			}
 			if task.Definition.Intent == "inspect" {
 				if !report {
-					return nil, errors.New("ARTIFACT_REQUIRED")
+					return nil, core.Error("ARTIFACT_REQUIRED", "all result artifacts must be finalized, bound, and uploaded for this task, attempt and candidate")
 				}
 			} else if !matched {
-				return nil, errors.New("ARTIFACT_REQUIRED")
+				return nil, core.Error("ARTIFACT_REQUIRED", "execute pass needs actual candidate file bytes; use runner submit --lease-file CLAIM --repository REPO with result.artifacts containing repository paths")
 			}
 		}
 		if task.Step == "verify" {
@@ -259,7 +271,7 @@ func (p *portableStore) submitRunner(principal standalonePrincipal, runnerID str
 			return nil, errors.New("CHECK_RESULT_INVALID")
 		}
 		if input.Result.Status != "blocked" && len(input.Result.Artifacts) == 0 {
-			return nil, errors.New("ARTIFACT_REQUIRED")
+			return nil, core.Error("ARTIFACT_REQUIRED", "all result artifacts must be finalized, bound, and uploaded for this task, attempt and candidate")
 		}
 		if (input.Method == "model" || input.Method == "scenario") && input.Result.Status != "blocked" && len(input.Inputs) == 0 {
 			return nil, errors.New("ASSESSMENT_EVIDENCE_REQUIRED")
@@ -275,7 +287,7 @@ func (p *portableStore) submitRunner(principal standalonePrincipal, runnerID str
 		for _, name := range check.Artifacts {
 			item, ok := byPath[name]
 			if (!ok || !slices.Contains(input.Result.Artifacts, item.ID)) && input.Result.Status != "blocked" {
-				return nil, errors.New("ARTIFACT_REQUIRED")
+				return nil, core.Error("ARTIFACT_REQUIRED", "all result artifacts must be finalized, bound, and uploaded for this task, attempt and candidate")
 			}
 		}
 		image := false
@@ -289,7 +301,7 @@ func (p *portableStore) submitRunner(principal standalonePrincipal, runnerID str
 			return nil, errors.New("SCREENSHOT_REQUIRED")
 		}
 		if check.Kind == "ux" && input.Result.Status != "blocked" && len(input.Result.Artifacts) == 0 {
-			return nil, errors.New("ARTIFACT_REQUIRED")
+			return nil, core.Error("ARTIFACT_REQUIRED", "all result artifacts must be finalized, bound, and uploaded for this task, attempt and candidate")
 		}
 		if input.Result.Status != "blocked" {
 			item, ok := byPath["runtime:report.json"]

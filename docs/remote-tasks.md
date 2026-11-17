@@ -97,6 +97,10 @@ ael context record-check --context CONTEXT_ID --task TASK_ID --check CHECK_ID --
 
 ## AD-AGENT-DRIVEN-01 执行者接入
 
+领取的私有 --out 回执可直接传给 heartbeat、progress、observe、submit、interrupt 和 artifact upload 的 --lease-file。客户端使用固定 claim_revision 填充责任字段，显式传入不一致字段会在网络写入前拒绝。heartbeat 更新该文件的租约期限。
+
+常规交付使用 `runner submit --runner RUNNER --lease-file CLAIM_RECEIPT --repository REPO --file RESULT_JSON`，result.artifacts 与 result.knowledge.artifacts 接受实际仓库相对路径。客户端自动采集候选、固定选定字节、登记输出、上传并绑定原路径。报告与截图使用 runtime: 路径并指定 --artifacts-dir 绝对目录。--dry-run 仅核对本地候选与选定字节。失败后的 operation_file 可交给 runner retry，原 idempotency_key 可查询 runner receipt。原手写 bindings/附件 ID 接口继续可用。完整请求示例随下方 Skill 分发。
+
 正式执行链路见 [远程 Agent 协议](../assets/skills/ael-work/references/remote-agent.md)。Agent 自行执行，runner API 标识兼容保留；不要求客户端 Docker。托管执行及其恢复入口已退出，当前验收从外部驱动主动调用 CLI 开始。
 
 V2-13 的双客户端领取、持久待提交记录、固定字节恢复与显式工作区交接已接入正式 CLI。具体请求和恢复条件见 [远程 Agent 协议](../assets/skills/ael-work/references/remote-agent.md)。

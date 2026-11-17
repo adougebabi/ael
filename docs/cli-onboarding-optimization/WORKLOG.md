@@ -2,9 +2,9 @@
 
 ## 当前检查点
 
-- 既有实施、Online迁移及v0.1.28正式发行已完成。当前唯一任务按用户收窄为GitHub Actions自动构建推送Docker Hub及CLI自动更新实际接通。Oracle使用手动pull流程。
-- 分支为 main，基线为 259cd8139c4bedac1ab8d91c6b6466bc536ec79d，全部修改保留在工作区。
-- 当前客户端/入口0.1.27 / 259cd81-536b3a1781e8，Oracle Server/Dashboard0.1.26 / 259cd81-b393c60af771，协议兼容。publication为local_unpublished，既往版本证据保留。
+- 既有实施、Online迁移及v0.1.28正式发行已完成。用户收窄的Docker Hub自动构建推送与CLI自动更新接线已完成，当前任务DONE。Oracle使用手动pull流程。
+- 分支为 main，实施基线259cd8139c4bedac1ab8d91c6b6466bc536ec79d，产品代码与CI已推送，最新实现提交855a2e7。本地保存收尾回执和截图。
+- 当前客户端/入口为正式0.1.28 / a176ada-42b8537d40ba，策略auto。Oracle Server/Dashboard0.1.26 / 259cd81-b393c60af771，使用手动pull流程。DockerHub main/latest来自通过CI的主分支。
 - 最终包初始化、恢复、签名并发升级、手动升级/回退、Remote 协作、Local T01 至 T12、内嵌 Dashboard 两项真实浏览器及全 Go 回归全部通过。适用源码 hash 与回执位于 evidence/OPT-05。
 - 用户原有归档.zip 曾出现在未提交基线，后续 Git 状态已消失，本轮没有修改或删除它。
 - Claude 完整真实交互按用户指示暂缓。Codex 精确 resume 已实测，真实 compact 和完整真实工程 Agent 压缩恢复闭环尚未验收。正式在线发行尚无可用版本。
@@ -245,3 +245,27 @@ OPT-00 DONE，OPT-01 DONE，OPT-02 DONE，OPT-03 DONE，OPT-04 DONE，OPT-05 DON
 - 用户已给出实际DockerHub Secret名，当前改为DOCKER_HUB_USERNAME/DOCKER_HUB_ACCESS_TOKEN。已移除Oracle controller/systemd与专用维护CAS扩展（从既有稳定提交恢复相关Go文件），Oracle全程没有安装定时器。准备推送Docker Hub最终接线并实测main与版本镜像，CLI持久auto及27→28实测已完成。
 
 - 进一步按用户“做多了”的收窄保持CI最简：main push直接构建推送Docker Hub main/latest，版本tag继续版本镜像+正式Release。撤去新增OCI签名/稳定别名单独晋级，原CLI发行manifest签名保留。运行时代码恢复既有0.1.28，CI镜像用main/latest跟踪通过测试的主分支；CLI兼容稳定版自动更新已实测启用0.1.28。后续正式CLI版本由版本tag发布。
+
+- 最终DockerHub接线DONE。提交855a2e7c57534f69185f88ae7def0989835bf11c已推送，真实run43833763815的build与publish全部SUCCESS。使用用户实际Secrets DOCKER_HUB_USERNAME/DOCKER_HUB_ACCESS_TOKEN，发布docker.io/adoumibaba/ael-server:main及:latest，多架构index digest sha256:f7b4db0f1c01e471bcf3cdb184d3c9852881d14afe52c1c91f9266df899ab8d7，独立imagetools检查与DockerHub公开tag元数据均通过，包含linux/amd64和linux/arm64。CI回执artifact ael-dockerhub id14209184645。
+- CLI自动更新已持久启用mode=auto+固定main身份可信发行源+持久Cosign验证器，新工作会话实际完成0.1.27→正式0.1.28自动下载验签安装，测试会话已结束。项目入口及上报对齐0.1.28/auto。后续新正式CLI版本随version tag发布到GitHub Release，运行在新会话/领取前查询兼容稳定版。
+- Oracle定时器/controller及专用维护接口扩展已按用户要求从当前源码撤回，Oracle采用用户手动pull流程。CI层保留main自动push main/latest与版本tag版本镜像+正式Release。当前运行时代码仍为正式0.1.28，撤回0.1.29开发版本。最终本地验收回执 evidence/AUTOUPDATE-20261116，产品代码与CI配置已推送。
+
+## 2026-11-16 远程提交 REVISION_CONFLICT 定位
+
+- 对用户提供的 r24-p1-01-wardrobe-load-error-bare-card 线上记录进行只读核查。AT-1429630f6bb351fbdc2b 的 claim_revision 为 62886cef030cc5a6316ea79b527603e8758ad4e2b38c7adca38fd29de54a9a24，用户核对的当前任务/source revision 为 697bb76805d07497d5b7371e4732b3fe0336ef0eb07f4bd3b570a20f2909489a。observe 与 submit 按冻结领取版本校验，heartbeat/progress 后的 live revision 无法用于该 attempt 写入。
+- 该 attempt 的 output_candidate 为空，ContextAttempt 仍正确关联原 attempt。原/新 context 的三份来源路径与哈希完全一致，更新候选使旧 context 被标 stale。需要原执行 Agent 在有效租约下使用原 claim revision 调用 runner observe，依据实际候选上传证据并提交，随后消费当前 define 单元的 next_action。请求内容变化使用新幂等键，原保留 operation 不修改。未代执行者写入生产状态，未更改租约或上下文。
+- 在现有 TestRemoteRunnerClaimIsOwnedFencedAndIdempotent 补充回归，验证 heartbeat/progress 后 live revision 被 observe 拒绝、原 claim revision 正常接受。定向 go test PASS。此次只增加回归与定位记录，未修改生产校验或部署。
+
+## 2026-11-17 execute 附件绑定定位
+
+- 只读核实 AT-f94f9c6cb8ab6c3a3559 的 claim revision 为用户提供的 07fa72db…，output_candidate 已登记为 965b061e…，当前 execute/open。租约最后截止 2026-11-16T10:48:00Z（北京时间16日18:48），此次检查已过期，需由原执行者显式恢复后重新领取。
+- change execute/pass 必须至少有一个 finalized 附件在 result.artifacts 中，并绑定候选中的原仓库路径且字节哈希一致。线上仅有 REPORT.md 和清单 app.txt，两者不能替代真实源码交付字节。WardrobePage.jsx 的候选哈希为 f7ee573ebbd96b32b67ab510828b4a51e28bebb29f6d8f07067f1249dd57b990。源码原字节可复制为私有 .bin，显式 MIME application/octet-stream 上传，绑定仍使用原 .jsx 路径。
+- 更新现有 execute 状态机回归，以 result.bin/octet-stream 上传并绑定候选 app.txt，完整 finalize→submit→回执→verify 流程 PASS。Skill 补充上传名/绑定路径及原字节要求。生产数据仅只读检查，本轮未提交或部署这些本地修改。
+
+## 2026-11-17 修复远程 Agent 正常执行入口
+
+- 用户要求从完整流程修复。新增私有 claim 回执直接作为 lease-file，客户端自动填充 task/attempt/token/fence/claim_revision，显式冲突在写入前拒绝，heartbeat 更新原私有文件的租约时间。旧嵌套回执可从原私有 claim 操作恢复领取版本，原扁平上传租约仍支持。
+- runner submit --repository 接收 result.artifacts/knowledge.artifacts 中的选定真实路径，固定候选和字节后自动 observe、分块上传、finalize、绑定并提交。runtime 报告/截图使用 --artifacts-dir。源码扩展名自动处理，--dry-run 只做本地字节检查。父交付计划与最终提交记录通过摘要关联，保留原提交键与回执查询，runner retry 使用固定字节并支持接受后租约结束的回执恢复。
+- Server claim/show 暴露 claim_revision 和已登记输出，recovery 区分输入 context 与当前输出，保留具体 context/knowledge 原因。服务端与客户端传递受长度/换行限制的版本、附件、路径及哈希错误详情。owner、租约、fence、候选、规范和真实证据门禁继续校验。
+- 两轮独立复核发现并修正 profile/attempt 控制凭据在元数据、源码/报告、候选路径的遗漏检测，以及同键其他原始 submit 被误当作交付子记录的情况。补充对应回归。安全扫描的三条结果均为既有私钥头检测字符串和测试凭据拼接，人工核实无实际密钥；质量脚本未识别 Go 文件，使用 Go 测试/vet 与独立代码复核验证。
+- 实际隔离 CLI/Server 验收 PASS，含两叶子 define→analysis→execute→verify、失败修复重验、TSX 自动交付/直接上传、预检、丢提交响应、固定报告重放、runner retry、权限撤销及恢复查询。验收位于 /tmp/ael-flow-acceptance-20261117e。最终 0.1.29 的 go test ./... 全包 PASS，新增诊断/凭据/幂等回归 PASS，go vet ./...、actionlint 与 git diff --check PASS。更新随包 Skill、help、README 与架构/远程说明，发布流程已加入相同隔离 CLI 全链路验收。准备发布 0.1.29，Oracle 镜像由用户手动拉取。

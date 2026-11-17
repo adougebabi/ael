@@ -29,6 +29,8 @@ func TestRecoveryReconcilesAuthorityWithoutWrites(t *testing.T) {
 	task := core.Task{Definition: core.Definition{ID: "leaf", Parent: "parent", Revision: 1, Scope: []string{"app.txt"}}, Plan: core.Plan{Revision: 1}, Status: "open", Step: "execute"}
 	active, responsibility, available := true, "active", true
 	contextID, contextCandidate := "", ""
+	contextValidity, outputCandidate := "current", ""
+	contextReasons := []string{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
 			t.Errorf("recovery wrote %s", r.URL.Path)
@@ -46,13 +48,13 @@ func TestRecoveryReconcilesAuthorityWithoutWrites(t *testing.T) {
 		case "/api/v1/projects/shared/runners/agent":
 			assignments := []any{}
 			if active {
-				assignments = append(assignments, map[string]any{"task_id": "leaf", "attempt_id": "attempt", "responsibility_state": responsibility, "context_id": contextID})
+				assignments = append(assignments, map[string]any{"task_id": "leaf", "attempt_id": "attempt", "responsibility_state": responsibility, "context_id": contextID, "claim_revision": "frozen-claim", "output_candidate": outputCandidate})
 			}
 			response = map[string]any{"workspace_id": "workspace", "repository": "repository", "assignments": assignments}
 		case "/api/v1/projects/shared/tasks/leaf":
 			response = map[string]any{"task": task, "revision": "revision"}
 		case "/api/v1/projects/shared/contexts/context":
-			response = map[string]any{"validity": "current", "candidate_id": contextCandidate}
+			response = map[string]any{"validity": contextValidity, "candidate_id": contextCandidate, "validity_reasons": contextReasons}
 		case "/api/v1/projects/shared/tasks/parent/tree":
 			response = core.EpicTree{Children: []core.EpicTreeMember{{Task: core.Next{Task: &core.Task{Definition: core.Definition{ID: "done"}, Status: "completed"}}}}}
 		default:
@@ -87,6 +89,15 @@ func TestRecoveryReconcilesAuthorityWithoutWrites(t *testing.T) {
 	contextID, contextCandidate = "context", "different-candidate"
 	if value := call("recovery check"); value["status"] != "workspace_changed" {
 		t.Fatalf("foreign candidate accepted %+v", value)
+	}
+	contextValidity, outputCandidate = "stale", index.LocalCandidate
+	contextReasons = []string{"a newer candidate observation differs"}
+	if value := call("recovery check"); value["status"] != "active" || value["summary"].(recoveryIndex).ClaimRevision != "frozen-claim" {
+		t.Fatalf("registered output forced input context refresh %+v", value)
+	}
+	contextReasons = []string{"task definition changed"}
+	if value := call("recovery check"); value["status"] != "context_changed" || len(value["summary"].(recoveryIndex).ContextReasons) != 1 {
+		t.Fatalf("changed context reason lost %+v", value)
 	}
 	contextID = ""
 	task.Definition.Revision++

@@ -1,6 +1,7 @@
 package remote
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"os"
@@ -8,6 +9,40 @@ import (
 	"strings"
 	"testing"
 )
+
+func TestRunnerSubmissionDetailsRemainActionableAndBounded(t *testing.T) {
+	project, config := t.TempDir(), filepath.Join(t.TempDir(), "config")
+	if err := SaveProfile(config, project, "central", "http://127.0.0.1:7332", "fixture-token"); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		code, detail string
+		visible      bool
+	}{
+		{"REVISION_CONFLICT", "use attempt claim_revision frozen-hash", true},
+		{"ARTIFACT_REQUIRED", "execute pass needs actual candidate file bytes", true},
+		{"CANDIDATE_CHANGED", "binding src/Page.tsx expected sha256=abc received=def", true},
+		{"RUNNER_INVALID", "invalid binding path", true},
+		{"REVISION_CONFLICT", strings.Repeat("x", 501), false},
+		{"REVISION_CONFLICT", "line1\nline2", false},
+		{"REMOTE_REJECTED", "untrusted details", false},
+	} {
+		t.Run(test.code+test.detail[:8], func(t *testing.T) {
+			client := &http.Client{Transport: transportFunc(func(request *http.Request) (*http.Response, error) {
+				status, body := 409, map[string]any{"code": test.code, "detail": test.detail}
+				if request.URL.Path == "/api/v1/meta" {
+					status, body = 200, map[string]any{"mode": "server", "protocol": 1, "capabilities": []string{"remote_runners"}}
+				}
+				raw, _ := json.Marshal(body)
+				return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(string(raw))), Header: make(http.Header)}, nil
+			})}
+			_, err := Call(config, project, Binding{Schema: 1, Profile: "central", ProjectID: "shared"}, http.MethodPost, "/runners/agent/submit", map[string]string{}, client)
+			if err == nil || strings.Contains(err.Error(), test.detail) != test.visible {
+				t.Fatalf("unexpected detail visibility: %v", err)
+			}
+		})
+	}
+}
 
 func TestLegacyBindingAndSessionProtocolStayExplicit(t *testing.T) {
 	root := t.TempDir()

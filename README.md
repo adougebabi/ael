@@ -122,7 +122,7 @@ Local 完整分发来源为本地目录或 `AEL_BUNDLE_DIR`，显式可信线上
 
 现有 Agent 主动调用 CLI 领取、获取依据、上报进度、上传证据及提交结果，并消费 next_action；编码、测试、截图、Git 和宿主工作区由 Agent 自己管理。客户端不要求 Docker。Server 只接收并校验，不启动 Agent 或工程命令、不复制/回写源码、不掌管模型/发布凭据。Oracle Docker 部署仍为后续授权阶段。
 
-接入、私有请求 schema、失败修复及恢复见 [远程 Agent 协议](assets/skills/ael-work/references/remote-agent.md)。旧远程 runner run/resume-result/recover-claim 已明确停用。正式独立验收入口为 `scripts/remote_agent_acceptance.py`；`scripts/remote_runner_acceptance.py` 转发至该入口，旧托管脚本保存在 scripts/history，仅供历史研究。
+领取回执可直接作为 `--lease-file`。`runner submit --repository REPO` 接收选定源码路径并自动登记候选、上传与绑定，报告/截图通过 `runtime:` 路径和 `--artifacts-dir` 提供。接入、私有请求 schema、失败修复及恢复见 [远程 Agent 协议](assets/skills/ael-work/references/remote-agent.md)。旧远程 runner run/resume-result/recover-claim 已明确停用。正式独立验收入口为 `scripts/remote_agent_acceptance.py`；`scripts/remote_runner_acceptance.py` 转发至该入口，旧托管脚本保存在 scripts/history，仅供历史研究。
 
 远程双客户端支持独立任务并行、同单元原子领取、私有待提交记录与有界通信恢复。通过 `runner retry --pending FILE` 查原回执并重试原责任，通过 `runner recover --runner ID --file FILE` 明确工作区交接。验收可运行 `python3 scripts/remote_collaboration_acceptance.py --bundle dist --out /tmp/ael-collaboration-NEW`。该外部驱动会启动独立测试 Server、两个身份的 CLI 和浏览器，并保存实际分支截图。
 

@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 const remoteArtifactLimit = core.RemoteArtifactFileLimit
@@ -102,6 +101,20 @@ func remoteArtifactCommand(cmd string, a args, config, project string, binding r
 		result, err := call(http.MethodPost, "/artifacts/"+url.PathEscape(id)+"/references", body)
 		return remoteOutput(result), err
 	case "artifact upload":
+		var lease *runnerUploadLease
+		if a.get("lease-file", "") != "" {
+			in, _, err := readAgentLease(a.get("lease-file", ""))
+			if err != nil {
+				return nil, err
+			}
+			for key, value := range map[string]string{"task": in.TaskID, "attempt": in.AttemptID, "expected-revision": in.ExpectedRevision} {
+				if supplied := a.get(key, ""); supplied != "" && supplied != value {
+					return nil, core.Error("AGENT_LEASE_INVALID", "upload "+key+" differs from claim receipt")
+				}
+				a.Flags[key] = value
+			}
+			lease = &runnerUploadLease{RunnerID: in.RunnerID, Token: in.Token, Fence: in.Fence}
+		}
 		task, path := a.get("task", ""), a.get("file", "")
 		op, key, revision := a.get("operation-id", ""), a.get("idempotency-key", ""), a.get("expected-revision", "")
 		if task == "" || path == "" || op == "" || key == "" || revision == "" {
@@ -119,18 +132,16 @@ func remoteArtifactCommand(cmd string, a args, config, project string, binding r
 		if closeErr != nil {
 			return nil, closeErr
 		}
-		var lease *runnerUploadLease
-		if a.get("lease-file", "") != "" {
-			var in agentUploadLease
-			if err := readAgentRequest(a.get("lease-file", ""), &in); err != nil {
-				return nil, err
+		filename := filepath.Base(path)
+		if lease != nil && a.get("mime", "") == "" {
+			switch strings.ToLower(filepath.Ext(filename)) {
+			case ".png", ".jpg", ".jpeg", ".txt", ".md", ".log", ".json", ".csv", ".mp4":
+			default:
+				filename += ".bin"
+				a.Flags["mime"] = "application/octet-stream"
 			}
-			if in.RunnerID == "" || in.Token == "" || in.Fence < 1 || in.TaskID != task || in.AttemptID != a.get("attempt", "") || in.ExpectedRevision != revision || !in.LeaseUntil.After(time.Now()) {
-				return nil, core.Error("LEASE_LOST", "upload lease is missing, expired or belongs to another responsibility")
-			}
-			lease = &runnerUploadLease{RunnerID: in.RunnerID, Token: in.Token, Fence: in.Fence}
 		}
-		return retainAgentUpload(a, config, project, binding, filepath.Base(path), data, lease)
+		return retainAgentUpload(a, config, project, binding, filename, data, lease)
 	}
 	return nil, core.Error("REMOTE_COMMAND_UNSUPPORTED", cmd)
 }
