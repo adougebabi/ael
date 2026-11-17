@@ -11,6 +11,7 @@ import subprocess
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--bundle', required=True, help='complete unpacked AEL distribution')
 parser.add_argument('--out', required=True, help='new or empty isolated fixture directory')
+parser.add_argument('--dashboard-binary', help='override the Dashboard executable after seeding the disposable project')
 args = parser.parse_args()
 repo = Path(__file__).resolve().parent.parent
 bundle = Path(args.bundle).resolve()
@@ -84,7 +85,7 @@ def implement(id):
         cli('submit', '--file', put(id + '-' + stage, submission))
 
 
-version = run(binary, 'version', '--json')
+dashboard_binary = Path(args.dashboard_binary).resolve() if args.dashboard_binary else root / 'ael'
 run(binary, 'init', '--project', root, '--bundle-dir', bundle, '--json')
 (root / 'app').mkdir()
 (root / 'app' / 'common.txt').write_text('isolated shared candidate\n')
@@ -122,8 +123,9 @@ assert before['summary']['implemented'] == 4  # the failed candidate is invalida
 assert before['summary']['accepted'] == 1 and before['summary']['partial_checks'] == 1
 assert before['summary']['failed'] == 1
 
+version = run(dashboard_binary, 'version', '--json')
 with (out / 'server-stderr.log').open('w') as stderr:
-    proc = subprocess.Popen([str(root / 'ael'), 'dashboard', '--project', str(root),
+    proc = subprocess.Popen([str(dashboard_binary), 'dashboard', '--project', str(root),
                              '--addr', '127.0.0.1:0', '--json'], cwd=root, env=env,
                             stdout=subprocess.PIPE, stderr=stderr, text=True)
     try:

@@ -28,7 +28,7 @@ func TestTaskSummaryUsesExactEvidenceAndIgnoresHeartbeats(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if before.Running != 1 || before.WaitingChecks != 1 || before.Checks.Passed != 1 || before.Checks.NotRun != 1 || before.Checks.Running != 1 {
+	if before.Running != 1 || before.WaitingChecks != 1 || before.Checks.Passed != 1 || before.Checks.NotRun != 1 || before.Checks.Claimed != 1 || before.Checks.Running != 0 {
 		t.Fatalf("summary lost parallel facts: %+v", before)
 	}
 	a := n.Attempt
@@ -49,8 +49,8 @@ func TestTaskSummaryUsesExactEvidenceAndIgnoresHeartbeats(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if stale.Checks.Passed != 0 {
-		t.Fatal("stale plan evidence appeared current")
+	if stale.Checks.Passed != 0 || stale.Checks.Running != 0 || stale.Checks.Claimed != 0 || stale.Checks.NotRun != 3 {
+		t.Fatalf("stale plan evidence or check execution appeared current: %+v", stale.Checks)
 	}
 }
 

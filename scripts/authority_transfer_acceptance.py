@@ -81,6 +81,7 @@ run(old, roots["mac-old"], "task", "create", "--file", definition_file)
 shutil.copytree(roots["mac-old"], roots["cloud-old"])
 run(old, roots["cloud-old"], "task", "show", "--task", "same-name")
 run(old, roots["cloud-old"], "task", "edit", "--task", "same-name", "--file", request_file("conflict", dict(definition, acceptance=["different clone revision"])), "--reason", "synthetic conflicting revision")
+run(old, roots["cloud-old"], "task", "create", "--file", request_file("open-history", dict(definition, id="zz-open-history", title="Synthetic history waiting for reconciliation")))
 image = png_bytes()
 image_sha = hashlib.sha256(image).hexdigest()
 for name, root in roots.items():
@@ -244,7 +245,7 @@ try:
         current(root, "transfer", "cutover", *common, "--ack-drained")
         current(root, "transfer", "cutover", *common, "--ack-drained")
         detail = api("GET", "/api/v1/projects/shared/imports/" + staged["id"])
-        archived = detail["archive"]["tasks"][0]
+        archived = next(item for item in detail["archive"]["tasks"] if item["original_id"] == "same-name")
         assert archived["snapshot"]["created"].startswith("0001-")
         mapped = archived["mapped_id"]
         task = current(root, "task", "show", "--task", mapped)["task"]
@@ -256,9 +257,12 @@ try:
         assert hashlib.sha256(downloaded.read_bytes()).hexdigest() == image_sha
         exports[name] = common
         imports[name] = {"id": staged["id"], "task": mapped}
+        if name == "cloud-old":
+            open_archive = next(item for item in detail["archive"]["tasks"] if item["original_id"] == "zz-open-history")
+            imports[name]["open_task"] = open_archive["mapped_id"]
     assert imports["mac-old"]["task"] != imports["cloud-old"]["task"]
     for root in roots.values():
-        assert current(root, "task", "list")["total"] == 2
+        assert current(root, "task", "list")["total"] == 3
         assert run(old, root, "task", "list")["mode"] == "remote"
     events.append("formal CLI scan/plan/export/import/verify/commit/cutover, exact replay and shared live reads")
     if args.browser:

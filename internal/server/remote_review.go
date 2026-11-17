@@ -336,7 +336,9 @@ func reviewObservationMatches(task core.Task, candidate, created string) bool {
 		return false
 	}
 	for _, attempt := range task.Attempts {
-		if attempt.Unit == "execute" && attempt.Status == "pass" && attempt.Candidate == task.Candidate && attempt.Ended != nil && !observed.After(*attempt.Ended) {
+		analysisForConfirmation := task.Confirmation != nil && task.Confirmation.Kind == "plan" &&
+			attempt.Unit == "analysis" && attempt.DefinitionRevision == task.Confirmation.Revision && attempt.PlanRevision == task.Confirmation.PlanRevision
+		if (attempt.Unit == "execute" || analysisForConfirmation) && attempt.Status == "pass" && attempt.Candidate == task.Candidate && attempt.Ended != nil && !observed.After(*attempt.Ended) {
 			return true
 		}
 	}

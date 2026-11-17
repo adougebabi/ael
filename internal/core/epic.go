@@ -12,8 +12,10 @@ import (
 type EpicTree struct {
 	Root              Next             `json:"root"`
 	Children          []EpicTreeMember `json:"children"`
+	ChildOffset       int              `json:"child_offset"`
 	Required          int              `json:"required"`
 	RequiredCompleted int              `json:"required_completed"`
+	RequiredSatisfied int              `json:"required_satisfied"`
 	Summary           EpicSummary      `json:"summary"`
 	ScopeChanges      []EpicScopeEvent `json:"scope_changes"`
 	Progress          []EpicProgress   `json:"progress"`
@@ -384,6 +386,19 @@ func (s *Service) Tree(id string) (EpicTree, error) {
 	return s.epicTree(id, true)
 }
 
+// TreePage projects the same full-scope rollup and a bounded window of child
+// details. Parent integration never uses a paged list of required children.
+func (s *Service) TreePage(id string, limit, offset int) (EpicTree, error) {
+	tree, err := s.Tree(id)
+	if err != nil {
+		return tree, err
+	}
+	lastPage := max(0, (len(tree.Children)-1)/limit*limit)
+	tree.ChildOffset = min(offset, lastPage)
+	tree.Children = tree.Children[tree.ChildOffset:min(tree.ChildOffset+limit, len(tree.Children))]
+	return tree, nil
+}
+
 func (s *Service) epicTree(id string, timeline bool) (EpicTree, error) {
 	result := EpicTree{Children: []EpicTreeMember{}, Summary: EpicSummary{Issues: []EpicIssue{}}, ScopeChanges: []EpicScopeEvent{}, Progress: []EpicProgress{}, ReportedProgress: []EpicProgress{}}
 	root, err := s.Next(id)
@@ -422,6 +437,9 @@ func (s *Service) epicTree(id string, timeline bool) (EpicTree, error) {
 			result.Required++
 			if next.Task.Status == "completed" && !next.Task.Historical {
 				result.RequiredCompleted++
+			}
+			if acceptedEpicLeaf(*root.Task, *next.Task) {
+				result.RequiredSatisfied++
 			}
 		}
 	}

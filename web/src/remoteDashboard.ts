@@ -35,14 +35,21 @@ export function connectDashboard(project: Project | null, csrf = "", expired?: (
       } else if (url.pathname === "/api/action" && ["review_result", "review_pending", "review_confirm", "review_resume"].includes(input.action)) {
         endpoint = `/api/v1/projects/${encodeURIComponent(project.id)}/reviews`;
       } else {
-        if (url.pathname !== "/api/action" || !["pause", "cancel"].includes(input.action)) throw new ApiError("REMOTE_ACTION_UNAVAILABLE", "此操作需要对应执行者权限与责任。");
+        if (url.pathname !== "/api/action" || !["pause", "cancel", "confirm", "resume"].includes(input.action)) throw new ApiError("REMOTE_ACTION_UNAVAILABLE", "此操作需要对应执行者权限与责任。");
         endpoint = `/api/v1/projects/${encodeURIComponent(project.id)}/tasks/${encodeURIComponent(input.id)}/${input.action}`;
-        const key = crypto.randomUUID();
-        payload = { reason: input.reason, expected_revision: input.remote_revision, operation_id: key, idempotency_key: key };
+        const key = input.request_key || crypto.randomUUID();
+        payload = {
+          reason: input.reason, expected_revision: input.remote_revision, operation_id: key, idempotency_key: key,
+          ...(input.action === "confirm" ? {
+            kind: input.kind, decision: input.decision, candidate: input.candidate,
+            definition_revision: input.revision, plan_revision: input.plan_revision,
+          } : {}),
+          ...(input.action === "resume" ? { return_to: input.unit, ack_stopped: input.ack_stopped } : {}),
+        };
       }
     }
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20000);
+    const timeout = body === undefined ? setTimeout(() => controller.abort(), 20000) : undefined;
     try {
       const response = await fetch(endpoint, {
         method: body === undefined ? "GET" : "POST", signal: controller.signal,

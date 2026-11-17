@@ -69,11 +69,13 @@ test("三叶单测通过但集成失败，定点补齐并在父候选复验", as
         knowledge: { status: "unchanged", reason: "隔离夹具", artifacts: [] } } } });
   }
   await c.post("/api/action", { action: "verify", id: "bridge", unit: "unit" });
+  await page.getByRole("button", { name: "概览", exact: true }).click();
   await expect(page.getByRole("button", { name: "准备整体验收", exact: true }).first()).toBeVisible({ timeout: 15000 });
   await page.getByRole("button", { name: "准备整体验收", exact: true }).first().click();
   let dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: "确认准备整体验收" }).click();
   await expect(dialog).toBeHidden();
+  await page.getByRole("button", { name: "验收与问题", exact: true }).click();
   async function runCheck(id: string) {
     const check = page.locator("#task-check-" + id);
     await check.getByRole("button", { name: "运行真实检查" }).click();
@@ -118,8 +120,9 @@ test("八叶从计划到 Git 候选、整体验收及反馈", async ({ page, req
   await overview.getByRole("button", { name: "查看依据" }).click();
   await expect(page.locator(".artifact-panel pre")).toContainText("各模块独立");
   await page.locator(".artifact-panel").getByRole("button", { name: "关闭证据" }).click();
-  await page.locator("#delivery-result summary").click();
-  await page.locator("#delivery-result").getByRole("link", { name: "后续反馈 eight-feedback" }).click();
+  const related = page.getByRole("region", { name: "任务关系" });
+  await expect(related).toContainText("后续反馈");
+  await related.getByRole("link", { name: "隔离后续反馈" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "隔离后续反馈" })).toBeVisible();
   await page.goBack();
   expect((await c.get("/api/task?id=eight-epic")).task.completed).toBe(completed);

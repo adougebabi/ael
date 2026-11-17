@@ -256,9 +256,24 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			} else {
 				http.Error(w, "METHOD", 405)
 			}
+		case "/api/task-relations":
+			if r.Method != http.MethodGet {
+				http.Error(w, "METHOD", 405)
+				return
+			}
+			limit, offset := bounds(r)
+			v, e := h.Service.TaskRelations(r.URL.Query().Get("id"), limit, offset)
+			reply(w, v, e)
 		case "/api/task-tree":
 			if r.Method != "GET" {
 				http.Error(w, "METHOD", 405)
+				return
+			}
+			q := r.URL.Query()
+			if q.Has("limit") || q.Has("offset") {
+				limit, offset := bounds(r)
+				v, e := h.Service.TreePage(q.Get("id"), limit, offset)
+				reply(w, v, e)
 				return
 			}
 			v, e := h.Service.Tree(r.URL.Query().Get("id"))

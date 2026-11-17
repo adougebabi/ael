@@ -2,13 +2,14 @@
 import { computed, watch } from "vue";
 import { api, params } from "../api";
 import { label, stamp } from "../display";
+import { taskHref } from "../router";
 import { useResource } from "../resource";
 import LoadState from "./LoadState.vue";
 
 type ArchiveFile = { task_id: string; ref: string; sha256: string; size: number; status: string; current_status?: string; artifact_id?: string; historical_hash_match?: string; historical_hashes?: string[] };
 type ArchiveTask = { original_id: string; mapped_id: string; snapshot: Record<string, any> };
 type ImportedArchive = { state: string; archive: { project: string; source: string; version: string; tasks: ArchiveTask[]; files: ArchiveFile[] }; files: ArchiveFile[] };
-const props = defineProps<{ taskId: string; importId: string; refreshToken?: object }>();
+const props = defineProps<{ taskId: string; importId: string; task?: Record<string, any> }>();
 const emit = defineEmits<{ artifact: [id: string] }>();
 const resource = useResource<ImportedArchive | null>(null);
 const { data, loading, error, last } = resource;
@@ -29,7 +30,7 @@ async function load(quiet = false) {
   } finally { requestPending = false; }
 }
 watch(() => [props.taskId, props.importId], () => { data.value = null; load(); }, { immediate: true });
-watch(() => props.refreshToken, () => load(true));
+watch(() => props.task, () => load(true));
 function historicalTime(value?: string) {
   return stamp(value?.startsWith("0001-") ? null : value);
 }
@@ -49,6 +50,15 @@ function historicalTime(value?: string) {
         <div><dt>原发生时间</dt><dd>{{ historicalTime(snapshot.created) }} → {{ historicalTime(snapshot.completed) }}</dd></div>
       </dl>
       <p class="secondary">历史结果保留来源版本。当前工程继续经过现行候选与验收门禁。</p>
+      <details v-if="snapshot.definition?.parent || snapshot.epic_membership?.parent || task?.definition?.parent || task?.epic_membership?.parent">
+        <summary>核对原始与当前父子关系</summary>
+        <dl class="import-source">
+          <div><dt>来源定义父任务</dt><dd>{{ snapshot.definition?.parent || '来源未声明' }}</dd></div>
+          <div><dt>来源受管大任务</dt><dd>{{ snapshot.epic_membership?.parent || '来源未声明' }}</dd></div>
+          <div><dt>当前定义父任务</dt><dd><a v-if="task?.definition?.parent" :href="taskHref(task.definition.parent)">{{ task.definition.parent }}</a><span v-else>未建立</span></dd></div>
+          <div><dt>当前受管大任务</dt><dd><a v-if="task?.epic_membership?.parent" :href="taskHref(task.epic_membership.parent)">{{ task.epic_membership.parent }}</a><span v-else>未建立</span></dd></div>
+        </dl>
+      </details>
       <details v-if="snapshot.attempts?.length"><summary>旧执行记录 · {{ snapshot.attempts.length }}</summary>
         <article v-for="attempt in snapshot.attempts" :key="attempt.id" class="historical-entry">
           <h3>{{ attempt.unit }} · {{ label(attempt.status) }}</h3>

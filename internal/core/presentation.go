@@ -18,9 +18,14 @@ type CheckSummary struct {
 	Blocked          int `json:"blocked"`
 	HistoricalFailed int `json:"historical_failed"`
 	Running          int `json:"running"`
+	Claimed          int `json:"claimed"`
+	Waived           int `json:"waived"`
+	NotApplicable    int `json:"not_applicable"`
 }
 type CheckExecution struct {
 	Executors []string `json:"executors"`
+	Started   bool     `json:"started"`
+	Reported  bool     `json:"reported"`
 }
 type CheckAccess struct {
 	EffectiveMethod string `json:"effective_method"`
@@ -89,6 +94,7 @@ type TaskSummary struct {
 	Historical           bool                      `json:"historical"`
 	Recovery             string                    `json:"recovery"`
 	Blocker              string                    `json:"blocker_reason"`
+	NeedsHistoryReview   bool                      `json:"needs_history_review"`
 	RequiresTaskDecision bool                      `json:"requires_task_decision"`
 	Checks               CheckSummary              `json:"checks"`
 	ManualReviews        []PendingHumanReview      `json:"manual_reviews"`
@@ -120,14 +126,15 @@ func (s *Service) Summarize(n Next) (TaskSummary, error) {
 		r.Children = len(tree.Children)
 		r.Epic = &tree.Summary
 	}
-	r.RequiresTaskDecision = t.Status == "open" && t.Confirmation != nil
+	r.NeedsHistoryReview = t.Status == "open" && t.Confirmation != nil && t.Confirmation.Kind == "restore"
+	r.RequiresTaskDecision = t.Status == "open" && t.Confirmation != nil && !r.NeedsHistoryReview
 	r.HumanReviewCount = len(t.HumanReviewNotes)
 	currentNotes := 0
 	currentConfirmed := false
 	for _, note := range t.HumanReviewNotes {
 		if note.Status == "pending" {
 			r.PendingReviewNotes++
-			if note.DefinitionRevision == t.Definition.Revision && note.PlanRevision == t.Plan.Revision {
+			if note.DefinitionRevision == t.Definition.Revision && note.PlanRevision == t.Plan.Revision && (note.Candidate == "" || note.Candidate == t.Candidate) {
 				currentNotes++
 			}
 		}
@@ -152,15 +159,21 @@ func (s *Service) Summarize(n Next) (TaskSummary, error) {
 		r.ReviewNoteState = "historical"
 	}
 	r.CurrentRuns = map[string]CheckExecution{}
-	running := map[string]bool{}
+	checkIDs := map[string]bool{}
+	for _, c := range t.Definition.Checks {
+		checkIDs["check:"+c.ID] = true
+	}
+	now := time.Now()
 	for _, a := range t.Attempts {
-		if a.Status == "running" && a.Lease.After(time.Now()) {
+		if a.Status == "running" && a.Lease.After(now) {
 			r.Running++
-			if strings.HasPrefix(a.Unit, "check:") {
+			if checkIDs[a.Unit] && t.Status == "open" && t.Step == "verify" && !t.Paused && t.Candidate != "" &&
+				a.Input == t.Candidate && a.DefinitionRevision == t.Definition.Revision && a.PlanRevision == t.Plan.Revision {
 				id := strings.TrimPrefix(a.Unit, "check:")
-				running[id] = true
 				entry := r.CurrentRuns[id]
 				entry.Executors = append(entry.Executors, a.Executor)
+				entry.Started = entry.Started || (!s.RemoteAuthority && a.PID > 0)
+				entry.Reported = entry.Reported || (s.RemoteAuthority && a.Stage == a.Unit)
 				r.CurrentRuns[id] = entry
 			}
 			found := false
@@ -181,35 +194,41 @@ func (s *Service) Summarize(n Next) (TaskSummary, error) {
 		if c.Required {
 			r.Checks.Required++
 		}
-		if running[c.ID] {
-			r.Checks.Running++
-		}
 		e := CurrentEvidence(t, c)
-		if e == nil {
-			if !running[c.ID] {
-				r.Checks.NotRun++
-			}
-		} else {
-			switch e.Result {
-			case "pass":
-				r.Checks.Passed++
-				if c.Required {
-					r.Checks.RequiredPassed++
-				}
-			case "fail":
-				r.Checks.Failed++
-			case "blocked":
-				r.Checks.Blocked++
-			default:
-				if !running[c.ID] {
-					r.Checks.NotRun++
-				}
-			}
+		if c.Required && e != nil && e.Result == "pass" {
+			r.Checks.RequiredPassed++
 		}
-		if t.Status == "open" && t.Step == "verify" && !running[c.ID] && (e == nil || e.Result != "pass") {
+		if run, claimed := r.CurrentRuns[c.ID]; claimed {
+			if run.Started || run.Reported {
+				r.Checks.Running++
+			} else {
+				r.Checks.Claimed++
+			}
+			continue
+		}
+		result := ""
+		if e != nil {
+			result = e.Result
+		}
+		switch result {
+		case "pass":
+			r.Checks.Passed++
+		case "fail":
+			r.Checks.Failed++
+		case "blocked":
+			r.Checks.Blocked++
+		case "waived":
+			r.Checks.Waived++
+		case "not_applicable":
+			r.Checks.NotApplicable++
+		default:
+			r.Checks.NotRun++
+		}
+		if t.Status == "open" && t.Step == "verify" && result != "pass" && result != "waived" && result != "not_applicable" {
 			r.WaitingChecks++
 		}
 	}
+
 	for _, ev := range append(append([]Evidence{}, t.EvidenceHistory...), t.Evidence...) {
 		if ev.Result != "fail" {
 			continue
@@ -263,18 +282,13 @@ func (s *Service) Summarize(n Next) (TaskSummary, error) {
 		if kind == "confirmation" && len(t.Approvals) > 0 {
 			a := t.Approvals[len(t.Approvals)-1]
 			r.LastResult = map[string]string{"approve": "已批准：", "adjust": "要求调整：", "reject": "已否决："}[a.Decision] + a.Reason
+			if a.Kind == "restore" && a.Decision == "approve" {
+				r.LastResult = "已核对历史资料：" + a.Reason
+			}
 			r.Activity = &a.At
 		}
 		if kind == "resumed" {
 			r.LastResult = "已记录恢复处理，请依据当前条件继续"
-		}
-	}
-	if r.LastResult == "" {
-		for i := len(t.Attempts) - 1; i >= 0; i-- {
-			if t.Attempts[i].Ended != nil && t.Attempts[i].Reason != "" {
-				r.LastResult = t.Attempts[i].Reason
-				break
-			}
 		}
 	}
 	if t.Status != "open" {

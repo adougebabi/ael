@@ -89,6 +89,9 @@ func (s *Service) Attention() (AttentionPage, error) {
 					return page, err
 				}
 				item := AttentionItem{Kind: query.kind, Task: summary}
+				if summary.NeedsHistoryReview && query.kind == "decision" {
+					item.Kind = "history"
+				}
 				if !found {
 					page.Items = append(page.Items, item)
 					found = true

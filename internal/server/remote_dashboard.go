@@ -236,9 +236,15 @@ func (h *standaloneHandler) remoteDashboard(w http.ResponseWriter, r *http.Reque
 		if err == nil {
 			result, err = artifacts.reviewEvidence(id)
 		}
+	case "task-relations":
+		result, err = service.TaskRelations(id, limit, offset)
 	case "task-tree":
-		tree, e := service.Tree(id)
-		err = e
+		var tree core.EpicTree
+		if q.Has("limit") || q.Has("offset") {
+			tree, err = service.TreePage(id, limit, offset)
+		} else {
+			tree, err = service.Tree(id)
+		}
 		if err == nil {
 			if tree.Root.Task != nil {
 				safe := core.RemoteTaskView(*tree.Root.Task)

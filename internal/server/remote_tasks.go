@@ -11,16 +11,21 @@ import (
 )
 
 type remoteTaskMutation struct {
-	OperationID      string          `json:"operation_id"`
-	IdempotencyKey   string          `json:"idempotency_key"`
-	ExpectedRevision string          `json:"expected_revision"`
-	Definition       core.Definition `json:"definition"`
-	Reason           string          `json:"reason"`
-	Parent           string          `json:"parent"`
-	Required         *bool           `json:"required"`
-	Milestone        string          `json:"milestone"`
-	ReturnTo         string          `json:"return_to"`
-	AckStopped       bool            `json:"ack_stopped"`
+	OperationID        string          `json:"operation_id"`
+	IdempotencyKey     string          `json:"idempotency_key"`
+	ExpectedRevision   string          `json:"expected_revision"`
+	Definition         core.Definition `json:"definition"`
+	Reason             string          `json:"reason"`
+	Parent             string          `json:"parent"`
+	Required           *bool           `json:"required"`
+	Milestone          string          `json:"milestone"`
+	ReturnTo           string          `json:"return_to"`
+	AckStopped         bool            `json:"ack_stopped"`
+	Kind               string          `json:"kind,omitempty"`
+	Decision           string          `json:"decision,omitempty"`
+	Candidate          string          `json:"candidate,omitempty"`
+	DefinitionRevision int             `json:"definition_revision,omitempty"`
+	PlanRevision       int             `json:"plan_revision,omitempty"`
 }
 
 type remoteNextView struct {
@@ -87,7 +92,7 @@ func standaloneTaskError(w http.ResponseWriter, err error) {
 		standaloneFail(w, http.StatusNotFound, "TASK_NOT_FOUND")
 		return
 	}
-	for _, code := range []string{"REVISION_CONFLICT", "IDEMPOTENCY_CONFLICT", "TASK_EXISTS", "REMOTE_OPERATION_REPLAY", "TERMINAL_TASK", "PLAN_DIGEST_MISMATCH", "PLAN_PARENT_CHANGED", "PLAN_TASK_CHANGED", "PLAN_STALE_TASK", "PLAN_APPLY_IN_PROGRESS", "PLAN_APPLY_INCOMPLETE", "REMOTE_CANDIDATE_REQUIRED"} {
+	for _, code := range []string{"REVISION_CONFLICT", "IDEMPOTENCY_CONFLICT", "TASK_EXISTS", "REMOTE_OPERATION_REPLAY", "TERMINAL_TASK", "PLAN_DIGEST_MISMATCH", "PLAN_PARENT_CHANGED", "PLAN_TASK_CHANGED", "PLAN_STALE_TASK", "PLAN_APPLY_IN_PROGRESS", "PLAN_APPLY_INCOMPLETE", "REMOTE_CANDIDATE_REQUIRED", "CONFIRMATION_VERSION_MISMATCH", "CANDIDATE_CHANGED"} {
 		if strings.HasPrefix(err.Error(), code+":") {
 			standaloneFail(w, http.StatusConflict, code)
 			return
@@ -106,7 +111,13 @@ func (h *standaloneHandler) remoteTasks(w http.ResponseWriter, r *http.Request, 
 		standaloneFail(w, http.StatusNotFound, "PROJECT_NOT_FOUND")
 		return
 	}
-	if r.Method != http.MethodGet && role != "admin" && role != "executor" {
+	confirming := r.Method == http.MethodPost && len(parts) == 2 && parts[1] == "confirm"
+	if confirming {
+		if len(principal.CSRFHash) == 0 || (role != "admin" && role != "reviewer") {
+			standaloneFail(w, http.StatusForbidden, "FORBIDDEN")
+			return
+		}
+	} else if r.Method != http.MethodGet && role != "admin" && role != "executor" {
 		standaloneFail(w, http.StatusForbidden, "FORBIDDEN")
 		return
 	}
@@ -225,7 +236,7 @@ func (h *standaloneHandler) remoteTasks(w http.ResponseWriter, r *http.Request, 
 		h.remoteIntegrate(w, r, principal, project, parts[0], service)
 		return
 	}
-	allowed := map[string]bool{"edit": true, "pause": true, "cancel": true, "resume": true, "link": true}
+	allowed := map[string]bool{"edit": true, "pause": true, "cancel": true, "resume": true, "link": true, "confirm": true}
 	if len(parts) == 2 && parts[1] == "review-failure" && r.Method == http.MethodPost {
 		h.remoteFailureReview(w, r, principal, project, parts[0], service)
 		return
@@ -237,6 +248,11 @@ func (h *standaloneHandler) remoteTasks(w http.ResponseWriter, r *http.Request, 
 	var input remoteTaskMutation
 	if decode(r, &input) != nil || !standaloneID.MatchString(input.OperationID) || !standaloneID.MatchString(input.IdempotencyKey) || input.ExpectedRevision == "" {
 		standaloneFail(w, http.StatusBadRequest, "REMOTE_OPERATION_REQUIRED")
+		return
+	}
+	if confirming && (input.Kind == "" || (input.Kind == "restore" && input.Decision != "approve") ||
+		input.DefinitionRevision < 1 || input.PlanRevision < 1 || strings.TrimSpace(input.Reason) == "" || len(input.Reason) > 8000) {
+		standaloneFail(w, http.StatusBadRequest, "CONFIRMATION_DETAIL_REQUIRED")
 		return
 	}
 	action := "create"
@@ -295,6 +311,8 @@ func (h *standaloneHandler) remoteTasks(w http.ResponseWriter, r *http.Request, 
 		_, err = guarded.Cancel(taskID, input.Reason)
 	case strings.HasPrefix(action, "resume:"):
 		_, err = guarded.Resume(taskID, input.ReturnTo, input.AckStopped)
+	case confirming:
+		_, err = guarded.Confirm(taskID, input.Kind, input.Decision, principal.Username, input.Reason, input.Candidate, input.DefinitionRevision, input.PlanRevision)
 	case strings.HasPrefix(action, "link:"):
 		required := true
 		if input.Required != nil {

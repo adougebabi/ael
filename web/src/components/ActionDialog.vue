@@ -7,6 +7,7 @@ defineProps<{
   busy: boolean;
   error?: string;
   danger?: boolean;
+  submitDisabled?: boolean;
 }>();
 const emit = defineEmits<{ close: []; submit: [] }>();
 const dialog = ref<HTMLDialogElement>();
@@ -27,7 +28,7 @@ onUnmounted(() => previous?.focus({ preventScroll: true }));
     @cancel.prevent="!busy && emit('close')"
     @keydown="!busy && key($event)"
   >
-    <form @submit.prevent="emit('submit')">
+    <form @submit.prevent="!busy && !submitDisabled && emit('submit')">
       <h2>{{ title }}</h2>
       <p v-if="description">{{ description }}</p>
       <slot />
@@ -44,7 +45,7 @@ onUnmounted(() => previous?.focus({ preventScroll: true }));
         ><button
           type="submit"
           :class="danger ? 'danger' : 'primary'"
-          :disabled="busy"
+          :disabled="busy || submitDisabled"
         >
           {{ busy ? "正在提交…" : "确认" + title }}
         </button>

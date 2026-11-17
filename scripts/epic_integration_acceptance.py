@@ -10,6 +10,7 @@ import subprocess
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--bundle', required=True)
+parser.add_argument('--dashboard-binary', help='override the Dashboard executable after seeding the disposable projects')
 parser.add_argument('--out', required=True)
 args = parser.parse_args()
 repo = Path(__file__).resolve().parent.parent
@@ -174,11 +175,15 @@ assert after['completed'] == completed_at and 'eight-feedback' in after['feedbac
 
 processes, handles = [], []
 try:
+    if args.dashboard_binary:
+        dashboard_version = run(three, Path(args.dashboard_binary).resolve(), 'version', '--json')
+        version = dashboard_version
     manifest = {'isolated': True, 'out': str(out), 'version': version['version'], 'build': version['build'], 'projects': {}}
     for name, project in [('three', three), ('eight', eight)]:
         stderr = (out / (name + '-server-stderr.log')).open('w'); handles.append(stderr)
         env = dict(os.environ, AEL_DATA_DIR=str(project['runtime']))
-        proc = subprocess.Popen([str(project['root'] / 'ael'), 'dashboard', '--project', str(project['root']),
+        dashboard = Path(args.dashboard_binary).resolve() if args.dashboard_binary else project['root'] / 'ael'
+        proc = subprocess.Popen([str(dashboard), 'dashboard', '--project', str(project['root']),
                                  '--addr', '127.0.0.1:0', '--json'], cwd=project['root'], env=env,
                                 stdout=subprocess.PIPE, stderr=stderr, text=True)
         processes.append(proc)

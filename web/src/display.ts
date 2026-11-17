@@ -51,6 +51,7 @@ const labels: Record<string, string> = {
   not_applicable: "不适用",
   waived: "已豁免",
   running: "执行中",
+  claimed: "已领取 · 待上报",
   interrupted: "已中断",
   abandoned: "已释放",
   finding: "发现",
@@ -116,9 +117,25 @@ export const goalLabel = (value: string) =>
       released: "发布到指定环境",
     }) as Record<string, string>
   )[value] || "查看原定交付目标";
-export function blockerText(value: string) {
+export function blockerText(value: string, compact = true) {
+  const exit = /^exit status (\d+)$/.exec(value);
+  if (exit) return `检查命令失败，退出码 ${exit[1]}`;
+  if (value === "command completed and acceptance coverage recorded") return "命令已完成，检查结果与覆盖条件已记录。";
+  if (labels[value]) return labels[value];
   if (value.includes("approve strict plan before execution"))
     return "方案需要审阅当前定义与计划，批准后才可继续实施。";
+  if (value === "runtime restored; reconcile checkpoints, candidate and any delivery run before resuming")
+    return "运行库已从备份恢复。请核对任务检查点、候选和已有交付回执后恢复。";
+  if (value === "checkpoint imported from project; review files and historical checks before resuming")
+    return "已从项目检查点恢复定义。请核对工作文件和旧检查记录，再重新验收。";
+  if (value === "historical import requires current context and fresh execution")
+    return "请核对原始资料与当前规范，按现行条件重新提交成果及验收。";
+  if (value === "required leaves completed; parent integration remains to be accepted")
+    return "必需子项满足条件，父级仍需独立整体验收。";
+  if (value === "add required leaf tasks before integration")
+    return "父级集成前，需要关联至少一项必需子任务。";
+  if (value === "parent candidate changed; prepare integration again" || value === "required scope changed; prepare integration again")
+    return "父级候选或必需范围发生变化，需重新准备集成。";
   if (value.includes("unknown delivery outcome"))
     return "既有交付结果尚未核实，请先对照运行回执，再决定是否重试。";
   if (value.includes("project shadow mode"))
@@ -139,8 +156,8 @@ export function blockerText(value: string) {
     return "规范来源已变化，需审阅并更新索引。";
   if (value.includes("KNOWLEDGE_MISSING"))
     return "任务引用的规范缺失，需核实来源与引用。";
-  const text = value.replace(/\s+/g, " ").trim();
-  return text.length > 180 ? text.slice(0, 177) + "…" : text;
+  const text = compact ? value.replace(/\s+/g, " ").trim() : value.trim();
+  return compact && text.length > 180 ? text.slice(0, 177) + "…" : text;
 }
 export const stamp = (s: string | null | undefined) =>
   s && Number.isFinite(Date.parse(s))
@@ -157,24 +174,38 @@ export function relativeStamp(value: string | null | undefined) {
   return stamp(value);
 }
 export function schedule(s: any) {
+  if (s.needs_history_review) return "历史工作待核对";
+  if (s.requires_task_decision) return "等待版本决定";
+  if (s.historical && s.next_action === "completed") return "历史完成 · 当前未复验";
+  if (s.next_action === "wait_confirmation") return "等待规范核实";
   if (s.manual_reviews?.length && !s.running) return "等待人工验收";
-  if (
-    s.next_action === "wait_confirmation" &&
-    !s.requires_task_decision &&
-    !s.running
-  )
-    return "等待规范核实";
-  if (s.running > 0 && s.waiting_checks > 0)
-    return `${s.running} 项执行中 · ${s.waiting_checks} 项检查待接手`;
-  if (s.running > 0)
-    return `${s.running} 项执行中${s.next_action !== "wait_executor" ? " · " + label(s.next_action) : ""}`;
-  if (s.next_action === "wait_executor") return "等待执行事实刷新";
-  return label(s.next_action);
+  if (s.next_action !== "wait_executor") return label(s.next_action);
+  if (s.checks?.running) return `${s.checks.running} 项检查执行中`;
+  if (s.checks?.claimed) return `${s.checks.claimed} 项检查已领取`;
+  if (s.running) return "当前责任已领取";
+  return "等待责任状态刷新";
 }
+
+export function checkStatusSummary(checks: any) {
+  if (!checks) return "";
+  const states = [
+    ["passed", "通过"], ["failed", "失败"], ["not_run", "未执行"],
+    ["blocked", "受阻"], ["running", "执行中"], ["claimed", "已领取待上报"], ["waived", "已豁免"],
+    ["not_applicable", "不适用"],
+  ];
+  const counts = states.filter(([key]) => checks[key] > 0);
+  if (!counts.length) return "尚未配置验收检查";
+  if (counts.length === 1 && counts[0][0] === "not_run")
+    return checks.historical_failed
+      ? `当前版本 ${checks.not_run} 项未执行 · 历史失败 ${checks.historical_failed} 项`
+      : `验收尚未开始，${checks.not_run} 项未执行`;
+  return counts.map(([key, title]) => `${checks[key]} 项${title}`).join(" · ");
+}
+
 export function reviewNoteStatus(s: any) {
   return ({
-    await_candidate: "已记录人工验收 · 待候选确认",
-    await_confirmation: "已记录人工验收 · 待确认当前候选",
+    await_candidate: "已记录人工意见 · 待候选确认",
+    await_confirmation: "已记录人工意见 · 待确认当前候选",
     confirmed: "人工意见已确认当前候选",
     historical: "已有历史人工验收记录",
     outdated: "人工验收意见需重新记录",
@@ -182,6 +213,8 @@ export function reviewNoteStatus(s: any) {
   } as Record<string, string>)[s?.review_note_state] || "";
 }
 export function nextAction(s: any) {
+  if (s.needs_history_review) return "核对原始工作与当前要求，恢复后重新提交成果和验收";
+  if (s.requires_task_decision) return "审阅确认对象及其准确版本后作出决定";
   if (s.manual_reviews?.length) return "对照当前候选记录人工验收";
   if (s.next_action === "wait_confirmation" && !s.requires_task_decision)
     return "核实并解决适用规范冲突，再更新来源索引";
@@ -199,13 +232,7 @@ export function nextAction(s: any) {
     completed: "查看交付与验收结果",
     cancelled: "保留取消记录；新工作另建任务",
   };
-  return (
-    (["continue", "repair", "wait_executor"].includes(s.next_action)
-      ? s.next
-      : "") ||
-    map[s.next_action] ||
-    "查看详情核实下一步"
-  );
+  return map[s.next_action] || "查看详情核实下一步";
 }
 export function readableError(error: string) {
   const messages: Record<string, string> = {
@@ -231,6 +258,8 @@ export function readableError(error: string) {
     CANDIDATE_CHANGED: "工作区候选已变化，请重新生成并审阅当前候选。",
     IDEMPOTENCY_CONFLICT: "本次请求已经记录但内容不同，请刷新任务核对结果。",
     REVISION_MISMATCH: "对象版本已变化，请刷新后重新审阅。",
+    REVISION_CONFLICT: "任务已变化。请保留输入，重新读取并核对确认对象。",
+    CONFIRMATION_DETAIL_REQUIRED: "请填写核对意见，并确认所审阅的准确版本。",
     CONFIRMATION_MISMATCH: "确认版本已变化，请刷新后重新审阅。",
     CONFIRMATION_VERSION_MISMATCH: "确认版本已变化，请刷新后重新审阅。",
     KNOWLEDGE_LINK_UNAVAILABLE: "目标文档未接入或当前无法访问。",

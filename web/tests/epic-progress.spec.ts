@@ -65,8 +65,13 @@ test("打包页面显示 1、8、30 个子任务与不同验证状态", async ({
     }
     if (count === 30) {
       await expect(overview.locator(".epic-leaves li")).toHaveCount(8);
-      await overview.getByRole("button", { name: "显示全部 30 个子任务" }).click();
-      await expect(overview.locator(".epic-leaves li")).toHaveCount(30);
+      const pagination = overview.getByRole("navigation", { name: "子任务分页" });
+      await pagination.getByRole("button", { name: "下一页" }).click();
+      await expect(overview.locator(".epic-leaves li").first()).toContainText("leaf-08");
+      await pagination.getByRole("button", { name: "下一页" }).click();
+      await pagination.getByRole("button", { name: "下一页" }).click();
+      await expect(overview.locator(".epic-leaves li")).toHaveCount(6);
+      await expect(overview).toContainText("0 / 30 项必需子任务满足父级条件");
     }
     await shot(page, `epic-${count}`);
   }
@@ -85,7 +90,7 @@ test("父卡到失败检查、证据及返回时保留筛选与位置", async ({
   await expect(page).toHaveURL(/section=checks.*check=proof/);
   const check = page.locator("#task-check-proof");
   await expect(check.locator(".evidence")).toContainText("失败");
-  await check.getByRole("button", { name: /查看证据/ }).first().click();
+  await check.getByRole("button", { name: /读取现存引用/ }).first().click();
   await expect(page.locator(".artifact-panel pre")).toContainText("isolated failure evidence");
   await page.screenshot({ path: path.join(output, "epic-failed-evidence.png"), fullPage: true });
   await page.goBack();
@@ -97,19 +102,28 @@ test("父卡到失败检查、证据及返回时保留筛选与位置", async ({
   await expect(page).toHaveURL(/board=all/);
 });
 
-test("展开 30 项后访问叶子再返回，保持列表和位置", async ({ page }) => {
+test("30 项分页保留位置，末页必需取消仍计入父级范围", async ({ page, request }) => {
+  const c = await client(request);
   await open(page, "/tasks/epic-30?section=overview");
   const overview = page.getByLabel("大任务进展");
-  await overview.getByRole("button", { name: "显示全部 30 个子任务" }).click();
+  await c.post("/api/action", { action: "cancel", id: "e30-leaf-29", reason: "隔离末页取消" });
+  await expect(overview).toContainText("取消");
+  await expect(overview).toContainText("0 / 30 项必需子任务满足父级条件");
+  const pagination = overview.getByRole("navigation", { name: "子任务分页" });
+  await pagination.getByRole("button", { name: "下一页" }).click();
+  await pagination.getByRole("button", { name: "下一页" }).click();
   const leaf = overview.getByRole("link", { name: "30 子任务 leaf-20", exact: true });
   await leaf.scrollIntoViewIfNeeded();
   const y = await page.evaluate(() => window.scrollY);
   await leaf.click();
   await expect(page.getByRole("heading", { level: 1, name: "30 子任务 leaf-20" })).toBeVisible();
   await page.goBack();
-  await expect(overview.locator(".epic-leaves li")).toHaveCount(30);
+  await expect(overview.locator(".epic-leaves li")).toHaveCount(8);
+  await expect(page).toHaveURL(/leaf_offset=16/);
   await expect(leaf).toBeVisible();
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(Math.max(0, y - 120));
+  await pagination.getByRole("button", { name: "下一页" }).click();
+  await expect(overview.locator(".epic-leaves li").last()).toContainText("已取消 · 必需范围仍保留");
+  await expect(overview).toContainText("0 / 30 项必需子任务满足父级条件");
 });
 
 test("长进展默认折叠且可查看完整事实", async ({ page }) => {

@@ -1517,6 +1517,12 @@ func (s *Service) artifactAt(workspace, ref string) ([]byte, error) {
 }
 func (s *Service) Confirm(id, kind, decision, actor, reason, candidate string, revision, planRevision int) (Next, error) {
 	return s.mutate(id, "confirmation", func(tx *store.Tx, t *Task) error {
+		if s.RemoteAuthority && s.remoteOperation == nil {
+			return Error("REMOTE_OPERATION_REQUIRED", "confirmation requires an authorized operation")
+		}
+		if t.Status != "open" {
+			return Error("TERMINAL_TASK", id)
+		}
 		c := t.Confirmation
 		if c == nil || c.Kind != kind || c.Revision != revision || c.PlanRevision != planRevision || c.Candidate != candidate {
 			return Error("CONFIRMATION_VERSION_MISMATCH", id)
@@ -1530,7 +1536,21 @@ func (s *Service) Confirm(id, kind, decision, actor, reason, candidate string, r
 		// Rejecting or adjusting a stale epic delivery reconciliation records
 		// what happened to the old run; it does not approve the new candidate.
 		reconcileOldDelivery := t.Definition.Type == "epic" && c.Kind == "delivery" && decision != "approve" && t.Delivery != nil && t.Integration != nil && t.Integration.StaleReason != "" && c.Candidate == t.Delivery.Candidate
-		if c.Candidate != "" && !reconcileOldDelivery {
+		reconcileStalePlan := s.RemoteAuthority && c.Kind == "plan" && decision == "adjust"
+		if c.Candidate != "" && !reconcileOldDelivery && !reconcileStalePlan && s.RemoteAuthority {
+			if s.MatchRemoteCandidate == nil {
+				return Error("CANDIDATE_CHANGED", "recheck the current central candidate")
+			}
+			confirmationTask := *t
+			confirmationTask.Candidate = c.Candidate
+			matches, err := s.MatchRemoteCandidate(tx, &confirmationTask)
+			if err != nil {
+				return err
+			}
+			if !matches {
+				return Error("CANDIDATE_CHANGED", "candidate or later client observation has changed")
+			}
+		} else if c.Candidate != "" && !reconcileOldDelivery && !reconcileStalePlan {
 			workspace := t.CandidateWorkspace
 			if workspace == "" {
 				workspace = s.Root
@@ -1546,7 +1566,16 @@ func (s *Service) Confirm(id, kind, decision, actor, reason, candidate string, r
 		t.Approvals = append(t.Approvals, Approval{kind, actor, decision, reason, revision, planRevision, candidate, time.Now().UTC()})
 		t.Confirmation = nil
 		if decision == "approve" {
-			t.Plan.Approved = true
+			// Recovery acknowledges imported facts. A strict plan still needs
+			// current analysis and a separate plan approval before execution.
+			if c.Kind == "restore" {
+				t.Plan.Approved = false
+				if t.Step != "delivery" && t.Plan.Preset == "strict" && slices.Index(t.Plan.Steps, t.Step) > slices.Index(t.Plan.Steps, "analysis") {
+					t.Step = "analysis"
+				}
+			} else {
+				t.Plan.Approved = true
+			}
 		} else {
 			t.Plan.Approved = false
 			t.Plan.Revision++

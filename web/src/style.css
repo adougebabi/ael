@@ -1804,3 +1804,51 @@ main { max-width: 1600px; margin: 0 auto; padding: 32px 38px 42px; }
   .remote-facts > div { grid-template-columns: 1fr; gap: 3px; }
   .workbench-empty { align-items: flex-start; flex-direction: column; gap: 12px; }
 }
+
+/* The task detail uses the same reading column for its three sections. */
+.detail-page .stage-track {
+  width: fit-content;
+  max-width: 100%;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  margin: 16px 0 4px;
+  gap: 8px 16px;
+}
+.detail-page .stage-track li { flex: none; }
+.detail-page .stage-track li:not(:last-child)::after { min-width: 12px; }
+.detail-page .result-banner > div { min-width: 0; flex: 1; }
+.detail-page .result-banner h2 { font-size: 16px; }
+.detail-page .result-banner p { font-size: 13px; overflow-wrap: anywhere; }
+.detail-page .task-decision { margin-block: 10px 14px; }
+.task-progress .timeline-item { border-top: 1px solid var(--line); padding-block: 10px; }
+.task-progress .timeline-item > div { min-width: 0; overflow-wrap: anywhere; }
+.task-detail-main .task-basis-list { margin-block: 10px; }
+.basis-reading { border-top: 1px solid var(--line); padding-top: 15px; scroll-margin-top: 80px; }
+#task-basis, #task-findings { scroll-margin-top: 80px; }
+@media (max-width: 520px) {
+  .detail-page .result-banner, .detail-page .content-section { padding: 14px; }
+  .detail-page .stage-track li::after { display: none; }
+}
+
+.task-progress .timeline-item::before { display: none; }
+.detail-page .check-state-icon.not_run { background: var(--tint); color: var(--muted); }
+.detail-page .check-criteria { margin-block: 12px; }
+.detail-page .check-detail { overflow-wrap: anywhere; }
+.detail-page .artifact-panel {
+  position: fixed;
+  z-index: 20;
+  inset: 0 0 0 auto;
+  margin: 0;
+  width: min(720px, 100vw);
+  padding: 22px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  border-left: 1px solid var(--line);
+  box-shadow: -8px 0 32px #20243b21;
+  background: var(--paper);
+}
+.detail-page .artifact-panel .section-heading { position: sticky; top: -22px; background: var(--paper); padding-block: 8px; }
+.detail-page .fact-full { white-space: pre-wrap; overflow-wrap: anywhere; }
+.detail-page .check-list > .secondary,
+.detail-page .check-list > .check-criteria { margin-inline: 20px; }
+.detail-page .check-list > .secondary { margin-top: 10px; }

@@ -25,7 +25,7 @@ system=platform.system().lower()
 arch={'aarch64':'arm64','arm64':'arm64','x86_64':'amd64','amd64':'amd64'}[platform.machine().lower()]
 binary=Path(args.bundle).resolve()/f'ael-{system}-{arch}'
 env={k:v for k,v in os.environ.items() if not k.startswith('GIT_')}
-env.update(GIT_CONFIG_NOSYSTEM='1',GIT_CONFIG_GLOBAL=os.devnull,GIT_TERMINAL_PROMPT='0',AEL_DATA_DIR=str(out/'unused-runtime'))
+env.update(GIT_CONFIG_NOSYSTEM='1',GIT_CONFIG_GLOBAL=os.devnull,GIT_TERMINAL_PROMPT='0',AEL_DATA_DIR=str(out/'unused-runtime'),AEL_INSTALL_PREFIX=str(out/'unused-install'),AEL_CLIENT_CONFIG_DIR=str(out/'machine-clients'))
 serial=itertools.count(1)
 process=None
 log=(out/'server.log').open('w')
@@ -150,6 +150,7 @@ await page.screenshot({path:IMAGE});const trace={steps:[{action:'click #save',be
     assert detail['occurrence_count']==2 and detail['occurrences'][0]['source']['actor']=='client-a' and detail['gate_effect']=='none'
     assert cli('a','finding','list','--task','scan')['total']==4
     assert cli('a','finding','list','--task','scan','--completeness','incomplete')['total']==1
+    api('POST','/api/v1/projects/shared/tasks',{'definition':{'id':'empty-findings','title':'Isolated task without findings','type':'qa','goal':'report','acceptance':['Retain actual observations']},'expected_revision':'absent','operation_id':'empty-findings','idempotency_key':'empty-findings'})
     # A reader has the same project visibility, but cannot submit a finding.
     browser_manifest=private('manifest',{'url':base,'out':str(out),'finding':finding_id,'candidate':candidate,'task':'scan'})
     result=subprocess.run([str(repo/'web/node_modules/.bin/playwright'),'test','--config=playwright.findings.config.ts'],cwd=repo/'web',env=dict(env,AEL_FINDINGS_FIXTURE=str(browser_manifest),AEL_UI_OUT=str(out/'browser')),timeout=180)

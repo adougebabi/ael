@@ -342,7 +342,7 @@ func (h *standaloneHandler) remoteFindings(w http.ResponseWriter, r *http.Reques
 	}
 	q := r.URL.Query()
 	limit, offset := bounds(r)
-	rows, err := service.Store.DB.Query("SELECT id,body FROM findings WHERE (?='' OR task_id=?) AND (?='' OR candidate_id=?) ORDER BY last_seen DESC,id", q.Get("task"), q.Get("task"), q.Get("candidate"), q.Get("candidate"))
+	rows, err := service.Store.DB.Query("SELECT id,body FROM findings WHERE (?='' OR task_id=?) AND (?='' OR candidate_id=?) AND (?='' OR check_id=?) ORDER BY last_seen DESC,id", q.Get("task"), q.Get("task"), q.Get("candidate"), q.Get("candidate"), q.Get("check"), q.Get("check"))
 	if err != nil {
 		portableError(w, err)
 		return
@@ -399,5 +399,10 @@ func (h *standaloneHandler) remoteFindings(w http.ResponseWriter, r *http.Reques
 		total++
 	}
 
-	standaloneReply(w, http.StatusOK, map[string]any{"items": items, "total": total, "limit": limit, "offset": offset})
+	var hasFindings bool
+	if err := service.Store.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM findings WHERE (?='' OR task_id=?))", q.Get("task"), q.Get("task")).Scan(&hasFindings); err != nil {
+		portableError(w, err)
+		return
+	}
+	standaloneReply(w, http.StatusOK, map[string]any{"items": items, "total": total, "limit": limit, "offset": offset, "has_findings": hasFindings})
 }

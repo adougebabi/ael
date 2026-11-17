@@ -15,6 +15,10 @@ test("旧来源历史、真实图片、缺失状态和任务切换保持一致",
   const history = page.getByRole("region", { name: "导入历史", exact: true });
   for (const name of ["mac-old", "cloud-old"]) {
     const id = fixture.imports[name].task;
+    await page.evaluate(value => { location.hash = value; }, `/tasks/${id}?project=shared`);
+    const conclusion = page.locator(".result-banner");
+    await expect(conclusion).toContainText("历史工作已完成，当前未复验");
+    await expect(conclusion.getByRole("button", { name: "进行人工验收" })).toHaveCount(0);
     await page.evaluate(value => { location.hash = value; }, `/tasks/${id}?project=shared&section=execution`);
     await expect(history).toContainText(name);
     await expect(history).toContainText("日期未确认");
@@ -34,6 +38,23 @@ test("旧来源历史、真实图片、缺失状态和任务切换保持一致",
     await page.screenshot({ path: path.join(fixture.out, "history-" + name + ".png"), fullPage: true });
     await page.getByRole("button", { name: "关闭证据", exact: true }).click();
   }
+  const open = fixture.imports["cloud-old"].open_task;
+  await page.goto(fixture.url + `/#/tasks/${open}?project=shared`);
+  const conclusion = page.locator(".result-banner");
+  await expect(conclusion).toContainText("历史工作待核对");
+  await expect(conclusion.getByRole("button", { name: "进行人工验收" })).toHaveCount(0);
+  await conclusion.getByRole("button", { name: "核对历史资料" }).click();
+  await expect(history).toContainText("zz-open-history");
+  await page.getByRole("button", { name: "概览", exact: true }).click();
+  await conclusion.getByRole("button", { name: "确认核对并准备恢复" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("操作理由").fill("核对了隔离历史资料，按当前条件重新开始");
+  await dialog.getByRole("button", { name: "确认核对历史工作" }).click();
+  await expect(dialog).toBeHidden();
+  await conclusion.getByRole("button", { name: "恢复任务", exact: true }).click();
+  await dialog.getByRole("button", { name: "确认恢复任务" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(conclusion).not.toContainText("历史工作待核对");
   const first = fixture.imports["mac-old"];
   let release: () => void = () => {};
   const held = new Promise<void>(resolve => { release = resolve; });
