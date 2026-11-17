@@ -12,12 +12,16 @@ const emit = defineEmits<{ close: []; saved: []; selectCheck: [check: string] }>
 const dialog = ref<HTMLDialogElement>();
 const previous = document.activeElement as HTMLElement | null;
 const snapshot = ref<any>(null);
-const loading = ref(true), busy = ref(false), error = ref("");
+const loading = ref(true), busy = ref(false), error = ref(""), inputError = ref("");
 const candidateState = ref<"none" | "checking" | "current" | "changed" | "error">("none");
 const blockedHumanCheck = ref("");
 const uploading = ref(false);
-const comparison = ref({ baseline: "", actual: "" });
+const comparison = ref({ baseline: "", actual: "" }), comparisonOpen = ref(false);
 const remoteEvidence = ref<any[]>([]);
+const evidenceByID = computed(() => new Map(remoteEvidence.value.map((item) => [item.id, item])));
+function evidenceName(ref: string) {
+  return evidenceByID.value.get(ref)?.filename || ref.split("/").pop() || ref;
+}
 const outcome = ref(""), reason = ref(""), recovery = ref(""), extraRefs = ref("");
 const actor = ref(sessionStorage.getItem("ael-actor") || "");
 const selected = ref<string[]>([]), confirmed = ref(false);
@@ -52,15 +56,22 @@ const availableRefs = computed<string[]>(() => {
   const task = snapshot.value?.task;
   if (!task) return [];
   const refs = new Set<string>();
-  for (const attempt of task.attempts || []) {
-    if (attempt.status === "pass" && attempt.candidate_version === task.candidate)
-      for (const ref of attempt.outputs || []) refs.add(ref);
+  if (task.candidate) {
+    if (remoteProject.value) {
+      for (const item of remoteEvidence.value) {
+        if (item.status === "finalized" && item.candidate === task.candidate) refs.add(item.id);
+      }
+    } else {
+      for (const attempt of task.attempts || []) {
+        if (attempt.status === "pass" && attempt.candidate_version === task.candidate)
+          for (const ref of attempt.outputs || []) refs.add(ref);
+      }
+      for (const evidence of task.evidence || []) {
+        if (evidence.candidate === task.candidate && evidence.acceptance_revision === task.definition.definition_revision && evidence.plan_revision === task.plan.revision)
+          for (const ref of evidence.artifacts || []) refs.add(ref);
+      }
+    }
   }
-  for (const evidence of task.evidence || []) {
-    if (evidence.candidate === task.candidate && evidence.acceptance_revision === task.definition.definition_revision && evidence.plan_revision === task.plan.revision)
-      for (const ref of evidence.artifacts || []) refs.add(ref);
-  }
-  for (const item of remoteEvidence.value) { if (item.status === "finalized" && item.candidate === task.candidate) refs.add(item.id); }
   for (const ref of pendingReview.value?.artifacts || []) refs.add(ref);
   for (const ref of selected.value) refs.add(ref);
   return [...refs];
@@ -83,6 +94,7 @@ function restoreDraft() {
   let hasDraft = false;
   if (saved && snapshot.value) {
     comparison.value = { baseline: typeof saved.comparison?.baseline === "string" ? saved.comparison.baseline : "", actual: typeof saved.comparison?.actual === "string" ? saved.comparison.actual : "" };
+    comparisonOpen.value = !!(comparison.value.baseline || comparison.value.actual);
     outcome.value = typeof saved.outcome === "string" ? saved.outcome : "";
     reason.value = typeof saved.reason === "string" ? saved.reason : "";
     recovery.value = typeof saved.recovery === "string" ? saved.recovery : "";
@@ -105,12 +117,16 @@ function restoreDraft() {
   draftReady.value = true;
 }
 watch([outcome, reason, recovery, extraRefs, actor, selected, selectedNoteId, pendingReview, comparison], saveDraft, { deep: true, flush: "sync" });
+watch([outcome, reason, actor, confirmed], () => { inputError.value = ""; });
 async function load() {
   loading.value = true;
+  inputError.value = "";
   error.value = "";
   try {
     snapshot.value = await api("/api/task?" + params({ id: props.taskId }));
-    if (remoteProject.value) remoteEvidence.value = await api("/api/review-evidence?" + params({ id: props.taskId }));
+    remoteEvidence.value = remoteProject.value && snapshot.value.task.candidate
+      ? await api("/api/review-evidence?" + params({ id: props.taskId }))
+      : [];
     if (selectedNoteId.value && !reviewNotes.value.some(note => note.id === selectedNoteId.value && noteIsCurrent(note))) selectedNoteId.value = "";
     priorWork.value = remoteProject.value ? null : readPriorWork(props.taskId, snapshot.value.task.attempts || []);
     try { const info = await api("/api/info"); projectScope.value = info.project || ""; if (remoteProject.value) actor.value = info.actor || ""; } catch (e) { if (remoteProject.value) { candidateState.value = "error"; throw e; } projectScope.value = ""; }
@@ -190,10 +206,20 @@ async function addImage(event: Event) {
 async function submit() {
   if (busy.value || uploading.value || !snapshot.value || (!pendingReview.value && (candidateUnavailable.value || pausedReview.value || selectingCheck.value)) || (!canRecord.value && !pendingReview.value)) return;
   error.value = "";
-  const refs = [...new Set([...selected.value, ...(remoteProject.value && comparison.value.actual ? [comparison.value.actual] : []), ...extraRefs.value.split(",").map((x) => x.trim()).filter(Boolean)])];
-  if (!pendingReview.value && (!outcome.value || !actor.value.trim() || !reason.value.trim() || !confirmed.value)) {
-    error.value = "REVIEW_INPUT_REQUIRED: 请明确选择结论，填写观察和记录人，并确认审阅的候选。";
-    return;
+  inputError.value = "";
+  const { baseline, actual } = remoteProject.value && snapshot.value.task.candidate ? comparison.value : { baseline: "", actual: "" };
+  const refs = [...new Set([...selected.value, ...(remoteProject.value && actual ? [actual] : []), ...extraRefs.value.split(",").map((x) => x.trim()).filter(Boolean)])];
+  if (!pendingReview.value) {
+    const missing = [
+      !outcome.value && "请选择验收结论",
+      !reason.value.trim() && "请填写实际观察与理由",
+      !actor.value.trim() && "请填写记录人",
+      !confirmed.value && (snapshot.value.task.candidate ? "请勾选当前版本确认" : "请勾选人工观察确认"),
+    ].filter(Boolean);
+    if (missing.length) {
+      inputError.value = missing.join("。") + "。";
+      return;
+    }
   }
   if (!pendingReview.value && !provisional.value && outcome.value !== "pass" && !recovery.value.trim()) {
     error.value = "RECOVERY_REQUIRED: 请填写修复方向或继续验证的条件。";
@@ -207,7 +233,7 @@ async function submit() {
       action: provisional.value ? "review_pending" : "review_result", id: props.taskId, unit: props.checkId,
       executor: actor.value.trim(), reason: reason.value.trim(), recovery: recovery.value.trim(),
       result: outcome.value, artifacts: refs, request_key: requestKey.value,
-      ...(remoteProject.value ? { comparison: comparison.value } : {}),
+      ...(remoteProject.value && baseline && actual ? { comparison: { baseline, actual } } : {}),
       candidate: snapshot.value.task.candidate,
       revision: snapshot.value.definition_revision, plan_revision: snapshot.value.plan_revision,
       ...(!provisional.value && selectedNoteId.value ? { review_note_id: selectedNoteId.value } : {}),
@@ -220,7 +246,10 @@ function useNote(note: any) {
   extraRefs.value = (note.artifacts || []).join(",");
   evidenceOpen.value = !!extraRefs.value;
   if (!actor.value.trim()) actor.value = note.actor;
-  if (note.comparison) comparison.value = { baseline: note.comparison.baseline?.artifact_id || "", actual: note.comparison.actual?.artifact_id || "" };
+  if (note.comparison) {
+    comparison.value = { baseline: note.comparison.baseline?.artifact_id || "", actual: note.comparison.actual?.artifact_id || "" };
+    comparisonOpen.value = true;
+  }
   selectedNoteId.value = note.id; confirmed.value = false;
 }
 async function confirmNote(note: any) {
@@ -272,7 +301,7 @@ async function send(payload: any) {
   <dialog ref="dialog" class="action-dialog manual-dialog" :class="{ 'manual-receipt-dialog': receipt }" aria-labelledby="manual-dialog-title" @cancel.prevent="close">
     <form @submit.prevent="submit">
       <header class="manual-header">
-        <div><h2 id="manual-dialog-title">{{ receipt ? "验收结果已记录" : "记录人工验收" }}</h2><p v-if="snapshot">{{ snapshot.task.definition.id }} · {{ snapshot.task.definition.title }}</p></div>
+        <div><h2 id="manual-dialog-title">{{ receipt ? "验收结果已记录" : snapshot && provisional ? "记录人工意见" : "记录人工验收" }}</h2><p v-if="snapshot">{{ snapshot.task.definition.id }} · {{ snapshot.task.definition.title }}</p></div>
         <button type="button" class="dialog-close" :disabled="busy" aria-label="关闭" @click="close">×</button>
       </header>
       <div class="manual-body">
@@ -293,15 +322,19 @@ async function send(payload: any) {
         <button v-if="canRecord && !composing && !pendingReview && !pausedReview && !selectingCheck && !candidateUnavailable" type="button" @click="composing = true">记录新的验收意见</button>
         <fieldset v-if="(canRecord && composing && !pausedReview && !selectingCheck && !candidateUnavailable) || pendingReview" class="review-fields" :disabled="!!pendingReview">
           <section class="review-criteria"><h3>{{ checkId ? checkId + ' · ' + label(check?.kind) : '任务验收条件' }}</h3><ul v-if="(checkId ? check?.covers : snapshot.task.definition.acceptance)?.length"><li v-for="item in (checkId ? check.covers : snapshot.task.definition.acceptance)" :key="item">{{ item }}</li></ul><p v-else>未记录具体标准，请先核实任务定义。</p></section>
-          <EvidenceComparison v-if="remoteProject" v-model="comparison" :task-id="taskId" :candidate="snapshot.task.candidate" @changed="confirmed = false" />
           <fieldset class="review-outcomes"><legend>验收结论 <span aria-hidden="true">*</span></legend><div>
             <label v-for="[value, text] in [['pass', '通过'], ['fail', '不通过'], ['blocked', '暂无法验证']]" :key="value" :class="{ selected: outcome === value }"><input v-model="outcome" type="radio" name="review-outcome" :value="value" /><AppIcon :name="value === 'pass' ? 'check' : value === 'fail' ? 'warning' : 'clock'" />{{ text }}</label>
           </div></fieldset>
           <label><span>实际观察与理由 <b aria-hidden="true">*</b></span><textarea v-model="reason" rows="3" placeholder="描述实际检查的内容与观察结果"></textarea></label>
           <label v-if="outcome && outcome !== 'pass'"><span>{{ outcome === 'fail' ? '修复方向' : '继续验证的条件' }} <b v-if="!provisional" aria-hidden="true">*</b><small v-else>（可选）</small></span><textarea v-model="recovery" rows="2" placeholder="说明下一步需要修复或恢复什么"></textarea></label>
           <details v-if="provisional && !availableRefs.length" class="optional-review-evidence" :open="evidenceOpen" @toggle="evidenceOpen = ($event.target as HTMLDetailsElement).open"><summary>关联证据（可选）</summary><label>补充已有证据引用<input v-model="extraRefs" :placeholder="remoteProject ? '中央附件 ID，多个以逗号分隔' : '项目相对路径或 runtime: 引用，多个以逗号分隔'" /></label><small>{{ remoteProject ? '填写中央附件 ID 后，服务端核验原件与候选关联。' : '如填写引用，系统会核验文件真实存在。' }}</small></details>
-          <fieldset v-else class="evidence-field"><legend>关联真实证据 <span v-if="provisional">（可选）</span></legend><div class="evidence-picker"><p v-if="!availableRefs.length">{{ remoteProject ? '当前候选尚无可用附件，请由外部客户端上传证据后重新读取。' : '当前候选没有已记录的产物引用，可填写已有项目相对路径或 runtime: 引用。' }}</p><label v-for="ref in availableRefs" :key="ref"><input v-model="selected" type="checkbox" :aria-label="ref" :value="ref" /><AppIcon name="file"/><span><strong>{{ ref.split('/').pop() }}</strong><small>{{ ref }}</small></span></label><label v-if="!remoteProject && !provisional && check?.kind === 'ui'">添加验收截图（PNG/JPEG，最大 10 MB）<input type="file" accept="image/png,image/jpeg" :disabled="uploading || busy" @change="addImage" /></label><p v-if="uploading" role="status">正在保存截图…</p><label class="extra-evidence">补充已有证据引用<input v-model="extraRefs" :placeholder="remoteProject ? '中央附件 ID，多个以逗号分隔' : '项目相对路径或 runtime: 引用，多个以逗号分隔'" /></label></div></fieldset>
+          <fieldset v-else class="evidence-field"><legend>关联真实证据 <span v-if="provisional">（可选）</span></legend><div class="evidence-picker"><p v-if="!availableRefs.length">{{ remoteProject ? '当前候选尚无可用附件，请由外部客户端上传证据后重新读取。' : '当前候选没有已记录的产物引用，可填写已有项目相对路径或 runtime: 引用。' }}</p><label v-for="ref in availableRefs" :key="ref"><input v-model="selected" type="checkbox" :aria-label="ref" :value="ref" /><AppIcon name="file"/><span><strong>{{ evidenceName(ref) }}</strong><small v-if="evidenceName(ref) !== ref && evidenceByID.get(ref)?.source">{{ evidenceByID.get(ref).source }}</small></span></label><label v-if="!remoteProject && !provisional && check?.kind === 'ui'">添加验收截图（PNG/JPEG，最大 10 MB）<input type="file" accept="image/png,image/jpeg" :disabled="uploading || busy" @change="addImage" /></label><p v-if="uploading" role="status">正在保存截图…</p><label class="extra-evidence">补充已有证据引用<input v-model="extraRefs" :placeholder="remoteProject ? '中央附件 ID，多个以逗号分隔' : '项目相对路径或 runtime: 引用，多个以逗号分隔'" /></label></div></fieldset>
           <p v-if="!provisional" class="secondary">通过和不通过需要真实证据；视觉检查还需要真实 PNG/JPEG 截图。暂无法验证可不附证据。</p>
+          <details v-if="remoteProject && snapshot.task.candidate" class="optional-review-evidence" :open="comparisonOpen" @toggle="comparisonOpen = ($event.target as HTMLDetailsElement).open">
+            <summary>对照基准与实际截图（可选）</summary>
+            <p class="secondary">可直接在上面选一张实际截图作为证据。这里用于对照两张图片。</p>
+            <EvidenceComparison v-if="comparisonOpen" v-model="comparison" :task-id="taskId" :candidate="snapshot.task.candidate" @changed="confirmed = false" />
+          </details>
           <div class="review-meta-grid"><label><span>记录人 <b aria-hidden="true">*</b></span><input v-model="actor" autocomplete="name" :readonly="!!remoteProject" /></label><div><span>提交后的行为</span><p>{{ provisional ? (snapshot.task.candidate && !checkId ? '记录任务级意见并绑定当前候选，其他检查保持原样。' : '记录人工意见，候选生成后需要重新确认，不会自动通过检查。') : outcome === 'pass' ? '记录此项通过后重新核对其余门禁与交付目标。' : outcome === 'fail' ? '记录未通过，并由任务流程确定修复与下一步。' : outcome === 'blocked' ? '记录无法验证的原因和继续验证条件，不会视为通过。' : '请选择验收结论，查看对应的后续行为。' }}</p></div></div>
           <p v-if="selectedNoteId" class="secondary">已引用此前记录的意见；提交前请重新核对当前候选和证据。</p>
           <label class="inline"><input v-model="confirmed" type="checkbox" />{{ provisional && !snapshot.task.candidate ? '我确认以上是当前人工观察，候选生成后需要重新确认。' : '我确认以上结论针对所示候选和修订。' }}</label>
@@ -319,9 +352,10 @@ async function send(payload: any) {
         <p v-if="postReviewChanged" role="alert" class="alert">当前候选或修订在本次记录后发生变化，请重新审阅当前版本。</p>
         <p v-if="receiptError" class="secondary">结果已记录，但刷新任务状态失败。</p>
       </section>
+      <p v-if="inputError" role="alert" class="alert">{{ inputError }}</p>
       <div v-if="error" role="alert" class="alert"><p>{{ readableError(error) }}</p><details><summary>具体原因</summary><pre>{{ error }}</pre></details><button v-if="snapshot && !receipt && /REVIEW_VERSION|CANDIDATE_CHANGED|REVIEW_NOT_ALLOWED/.test(error)" type="button" @click="reloadVersion">重新读取版本并保留输入</button></div>
       </div>
-      <div class="actions dialog-actions"><small v-if="!receipt">候选或修订变化后，需要重新核对。</small><button v-if="!receipt" type="button" :disabled="busy || uploading" @click="close">{{ composing || pendingReview ? '取消' : '返回' }}</button><button v-if="!receipt && !loading && ((canRecord && composing && !pausedReview && !selectingCheck && !candidateUnavailable) || pendingReview)" type="submit" class="primary" :disabled="busy || uploading">{{ busy ? '正在提交…' : pendingReview ? '原样重试提交' : '提交验收结果' }}</button><button v-if="receipt" type="button" @click="goTo('/tasks')">回工作台</button><button v-if="receipt" type="button" class="primary" @click="goTo('/tasks/' + encodeURIComponent(taskId) + '?section=checks')">查看任务结果</button><button v-if="error && !snapshot" type="button" @click="load">重新读取</button></div>
+      <div class="actions dialog-actions"><small v-if="!receipt">候选或修订变化后，需要重新核对。</small><button v-if="!receipt" type="button" :disabled="busy || uploading" @click="close">{{ composing || pendingReview ? '取消' : '返回' }}</button><button v-if="!receipt && !loading && ((canRecord && composing && !pausedReview && !selectingCheck && !candidateUnavailable) || pendingReview)" type="submit" class="primary" :disabled="busy || uploading">{{ busy ? '正在提交…' : pendingReview ? '原样重试提交' : provisional ? '保存人工意见' : '提交验收结果' }}</button><button v-if="receipt" type="button" @click="goTo('/tasks')">回工作台</button><button v-if="receipt" type="button" class="primary" @click="goTo('/tasks/' + encodeURIComponent(taskId) + '?section=checks')">查看任务结果</button><button v-if="error && !snapshot" type="button" @click="load">重新读取</button></div>
     </form>
   </dialog>
 </template>

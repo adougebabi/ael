@@ -28,7 +28,7 @@ system = platform.system().lower()
 arch = {'aarch64': 'arm64', 'arm64': 'arm64', 'x86_64': 'amd64', 'amd64': 'amd64'}[platform.machine().lower()]
 binary = Path(args.bundle).resolve() / f'ael-{system}-{arch}'
 env = {k: v for k, v in os.environ.items() if not k.startswith('GIT_')}
-env.update(GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL=os.devnull, GIT_TERMINAL_PROMPT='0', AEL_DATA_DIR=str(out / 'unused-runtime'))
+env.update(GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL=os.devnull, GIT_TERMINAL_PROMPT='0', AEL_DATA_DIR=str(out / 'unused-runtime'), AEL_INSTALL_PREFIX=str(out / 'unused-install'), AEL_CLIENT_CONFIG_DIR=str(out / 'machine-clients'))
 serial = itertools.count(1)
 process = None
 control = None
@@ -185,6 +185,7 @@ for(const [file,padding] of [[BASELINE,24],[ACTUAL,12]]) {await page.setContent(
     for task in ('api-pass', 'api-fail', 'api-blocked', 'opinion', 'browser', 'stale', 'missing', 'postchange', 'slow'):
         prepare(task)
 
+    api('POST', '/api/v1/projects/shared/tasks', {'definition': {'id': 'before-candidate', 'title': 'Review before candidate', 'type': 'bug', 'goal': 'verified', 'acceptance': ['Retain the human observation']}, 'expected_revision': 'absent', 'operation_id': 'before-candidate', 'idempotency_key': 'before-candidate'})
     def review(task, result, key):
         value = tasks[task]
         return api('POST', '/api/v1/projects/shared/reviews', {'action': 'review_result', 'id': task, 'unit': 'visual', 'executor': 'forged-executor', 'reason': 'Synthetic reviewer protocol fixture with real images', 'recovery': 'Review layout after correction', 'result': result, 'artifacts': [value['actual']], 'comparison': {'baseline': value['baseline'], 'actual': value['actual']}, 'candidate': value['candidate'], 'revision': value['revision'], 'plan_revision': value['plan_revision'], 'request_key': key})

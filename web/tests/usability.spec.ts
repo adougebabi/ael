@@ -1158,7 +1158,7 @@ test("A12f 人工通过明确绑定所审阅候选，过期提交不能批准新
       "new isolated candidate for explicit human review " + id + "\n",
     ),
   );
-  await dialog.getByRole("button", { name: "提交验收结果" }).click();
+  await dialog.getByRole("button", { name: /^(提交验收结果|保存人工意见)$/ }).click();
   await expect(dialog.getByRole("alert")).toContainText("验收候选或修订已变化");
   expect((await client.get("/api/task?id=" + id)).task.evidence||[]).toHaveLength(
     0,
@@ -1180,7 +1180,7 @@ test("A12f 人工通过明确绑定所审阅候选，过期提交不能批准新
     .getByLabel("实际观察与理由")
     .fill("明确审阅新隔离产物并通过");
   await page.getByRole("dialog").getByLabel("我确认以上结论针对所示候选和修订。").check();
-  await page.getByRole("dialog").getByRole("button", { name: "提交验收结果" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: /^(提交验收结果|保存人工意见)$/ }).click();
   await expect(page.getByRole("dialog")).toContainText("任务已完成");
   await shot(page, "A12-human-review-receipt");
   await page.getByRole("dialog").getByRole("button", { name: "关闭", exact: true }).click();
@@ -1203,12 +1203,12 @@ test("A12g 工作台旧方法入口、失败与受阻保留真实结果", async 
   }
   const failed = await makeTask("failure");
   await goto(page, "single", "/tasks?q=" + failed);
-  const attention = page.locator(".attention-card").filter({ hasText: "需要你的验收" });
+  const attention = page.locator(".attention-card").filter({ hasText: failed });
   await expect(attention).toBeVisible();
   await attention.getByRole("button", { name: "开始验收" }).click();
   let dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("radio", { name: "通过", exact: true })).not.toBeChecked();
-  await dialog.getByRole("button", { name: "提交验收结果" }).click();
+  await dialog.getByRole("button", { name: /^(提交验收结果|保存人工意见)$/ }).click();
   await expect(dialog.getByRole("alert")).toContainText("请选择验收结论");
   await dialog.getByRole("radio", { name: "不通过", exact: true }).check();
   await dialog.getByLabel("记录人").fill("isolated reviewer");
@@ -1224,7 +1224,7 @@ test("A12g 工作台旧方法入口、失败与受阻保留真实结果", async 
     }
     else await route.continue();
   });
-  await dialog.getByRole("button", { name: "提交验收结果" }).click();
+  await dialog.getByRole("button", { name: /^(提交验收结果|保存人工意见)$/ }).click();
   await expect(dialog.getByRole("alert")).toContainText("无法取得最新数据");
   await expect(dialog.getByLabel("实际观察与理由")).toHaveValue("真实隔离产物与检查标准不一致");
   await page.unroute("**/api/action");
@@ -1247,7 +1247,7 @@ test("A12g 工作台旧方法入口、失败与受阻保留真实结果", async 
   await dialog.getByLabel("实际观察与理由").fill("隔离环境尚未准备");
   await dialog.getByLabel("继续验证的条件").fill("准备隔离环境后重试");
   await dialog.getByLabel("我确认以上结论针对所示候选和修订。").check();
-  await dialog.getByRole("button", { name: "提交验收结果" }).click();
+  await dialog.getByRole("button", { name: /^(提交验收结果|保存人工意见)$/ }).click();
   await expect(dialog).toContainText("任务仍有后续工作");
   await shot(page, "A12-human-blocked-receipt");
   current = await client.get("/api/task?id=" + blocked);
@@ -1527,7 +1527,7 @@ test("A26 工作台任务行可直接进入符合条件的人工验收", async (
   const row = page.locator(".task-row").filter({ hasText: id });
   await expect(row.getByRole("button", { name: "进行人工验收", exact: true })).toBeVisible();
   await row.getByRole("button", { name: "进行人工验收", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "记录人工验收" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: /^(记录人工验收|记录人工意见)$/ })).toBeVisible();
   await expect(page.getByRole("dialog")).toContainText("人工核验产物");
   await page.getByRole("dialog").getByRole("button", { name: "取消" }).click();
 });
@@ -1615,7 +1615,7 @@ test("A29 人工验收草稿重开保留输入，未知提交可安全重放", a
     if (route.request().postDataJSON()?.action === "review_result") { const response = await route.fetch(); expect(response.ok()).toBeTruthy(); await route.abort(); }
     else await route.continue();
   });
-  await dialog.getByRole("button", { name: "提交验收结果" }).click();
+  await dialog.getByRole("button", { name: /^(提交验收结果|保存人工意见)$/ }).click();
   await expect(dialog.getByRole("button", { name: "原样重试提交" })).toBeVisible();
   await page.unroute("**/api/action");
   await dialog.getByRole("button", { name: "取消", exact: true }).click();
@@ -1694,7 +1694,7 @@ test("A32 工作台可恢复已提交但响应丢失的人工验收", async ({ p
     if (route.request().postDataJSON()?.action === "review_result") { const response = await route.fetch(); expect(response.ok()).toBeTruthy(); await route.abort(); }
     else await route.continue();
   });
-  await dialog.getByRole("button", { name: "提交验收结果" }).click();
+  await dialog.getByRole("button", { name: /^(提交验收结果|保存人工意见)$/ }).click();
   await expect(dialog.getByRole("button", { name: "原样重试提交" })).toBeVisible();
   await page.unroute("**/api/action");
   await dialog.getByRole("button", { name: "取消", exact: true }).click();
@@ -1740,7 +1740,7 @@ test("A34 实施中可直接记录人工意见，候选生成后由用户用于�
   const before = await client.get("/api/task?id=" + id);
   const attempt = before.task.attempts.find((a: any) => a.status === "running");
   await page.locator(".result-banner").getByRole("button", { name: "记录人工意见" }).click();
-  let dialog = page.getByRole("dialog", { name: "记录人工验收" });
+  let dialog = page.getByRole("dialog", { name: /^(记录人工验收|记录人工意见)$/ });
   await expect(dialog).toContainText("尚未生成验收候选");
   await expect(dialog.getByRole("radio", { name: "通过", exact: true })).not.toBeChecked();
   await expect(dialog.getByLabel("本次产物（逗号分隔）")).toHaveCount(0);
@@ -1753,7 +1753,7 @@ test("A34 实施中可直接记录人工意见，候选生成后由用户用于�
     if (route.request().postDataJSON()?.action === "review_pending") { const response = await route.fetch(); expect(response.ok()).toBeTruthy(); await route.abort(); }
     else await route.continue();
   });
-  await dialog.getByRole("button", { name: "提交验收结果" }).click();
+  await dialog.getByRole("button", { name: /^(提交验收结果|保存人工意见)$/ }).click();
   await expect(dialog.getByRole("button", { name: "原样重试提交" })).toBeVisible();
   await page.unroute("**/api/action");
   await dialog.getByRole("button", { name: "原样重试提交" }).click();
@@ -1777,13 +1777,13 @@ test("A34 实施中可直接记录人工意见，候选生成后由用户用于�
   expect(current.current_step).toBe("verify");
   expect(current.task.candidate).toBeTruthy();
   await page.locator(".result-banner").getByRole("button", { name: "查看人工意见与记录" }).click();
-  dialog = page.getByRole("dialog", { name: "记录人工验收" });
+  dialog = page.getByRole("dialog", { name: /^(记录人工验收|记录人工意见)$/ });
   await expect(dialog).toContainText("我检查了当前页面，候选生成后再确认。");
   await dialog.getByRole("button", { name: "引用这条意见" }).click();
   await expect(dialog.getByLabel("实际观察与理由")).toHaveValue("我检查了当前页面，候选生成后再确认。");
   await dialog.getByLabel("app/ui-output.txt").check();
   await dialog.getByLabel("我确认以上结论针对所示候选和修订。").check();
-  await dialog.getByRole("button", { name: "提交验收结果" }).click();
+  await dialog.getByRole("button", { name: /^(提交验收结果|保存人工意见)$/ }).click();
   dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("任务仍有后续工作");
   current = await client.get("/api/task?id=" + id);
@@ -1801,19 +1801,19 @@ test("A35 未配置人工检查的任务也可记录并确认任务级意见，�
   await step(client, id);
   await goto(page, "single", "/tasks/" + id);
   await page.locator(".result-banner").getByRole("button", { name: "记录人工意见" }).click();
-  let dialog = page.getByRole("dialog", { name: "记录人工验收" });
+  let dialog = page.getByRole("dialog", { name: /^(记录人工验收|记录人工意见)$/ });
   await dialog.getByRole("radio", { name: "通过", exact: true }).check();
   await dialog.getByLabel("实际观察与理由").fill("记录当前人工体验意见");
   await dialog.getByLabel("记录人").fill("isolated reviewer");
   await dialog.getByLabel("我确认以上是当前人工观察，候选生成后需要重新确认。").check();
-  await dialog.getByRole("button", { name: "提交验收结果" }).click();
+  await dialog.getByRole("button", { name: /^(提交验收结果|保存人工意见)$/ }).click();
   dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("待候选确认");
   await dialog.getByRole("button", { name: "关闭", exact: true }).click();
   await step(client, id, ["app/ui-output.txt"]);
   await page.reload();
   await page.locator(".result-banner").getByRole("button", { name: "查看人工意见与记录" }).click();
-  dialog = page.getByRole("dialog", { name: "记录人工验收" });
+  dialog = page.getByRole("dialog", { name: /^(记录人工验收|记录人工意见)$/ });
   await dialog.getByRole("button", { name: "确认这条意见适用于当前候选" }).click();
   dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("人工验收意见已确认");
@@ -1832,7 +1832,7 @@ test("A36 待候选人工意见的响应丢失后可关闭重开并安全重试"
   await client.post("/api/tasks", { id, title: "隔离待候选意见重试", type: "bug", goal: "verified", acceptance: ["人工观察真实结果"] });
   await goto(page, "single", "/tasks/" + id);
   await page.locator(".result-banner").getByRole("button", { name: "记录人工意见" }).click();
-  let dialog = page.getByRole("dialog", { name: "记录人工验收" });
+  let dialog = page.getByRole("dialog", { name: /^(记录人工验收|记录人工意见)$/ });
   await dialog.getByRole("radio", { name: "不通过", exact: true }).check();
   await dialog.getByLabel("实际观察与理由").fill("当前页面仍有需要调整的地方");
   await dialog.getByLabel("记录人").fill("isolated reviewer");
@@ -1841,13 +1841,13 @@ test("A36 待候选人工意见的响应丢失后可关闭重开并安全重试"
     if (route.request().postDataJSON()?.action === "review_pending") { const response = await route.fetch(); expect(response.ok()).toBeTruthy(); await route.abort(); }
     else await route.continue();
   });
-  await dialog.getByRole("button", { name: "提交验收结果" }).click();
+  await dialog.getByRole("button", { name: /^(提交验收结果|保存人工意见)$/ }).click();
   await expect(dialog.getByRole("button", { name: "原样重试提交" })).toBeVisible();
   await page.unroute("**/api/action");
   await dialog.getByRole("button", { name: "取消", exact: true }).click();
   await page.reload();
   await page.locator(".result-banner").getByRole("button", { name: "查看人工意见与记录" }).click();
-  dialog = page.getByRole("dialog", { name: "记录人工验收" });
+  dialog = page.getByRole("dialog", { name: /^(记录人工验收|记录人工意见)$/ });
   await expect(dialog.getByLabel("实际观察与理由")).toHaveValue("当前页面仍有需要调整的地方");
   await dialog.getByRole("button", { name: "原样重试提交" }).click();
   await expect(page.getByRole("dialog")).toContainText("待候选确认");
@@ -1870,7 +1870,7 @@ test("A37 旧接手释放后保留未提交文字，可由用户带入人工观�
   await page.reload();
   await expect(page.getByRole("heading", { name: "提交本次工作结果" })).toHaveCount(0);
   await page.locator(".result-banner").getByRole("button", { name: "记录人工意见" }).click();
-  const dialog = page.getByRole("dialog", { name: "记录人工验收" });
+  const dialog = page.getByRole("dialog", { name: /^(记录人工验收|记录人工意见)$/ });
   await expect(dialog).toContainText("发现本标签页上次未提交的实施表单");
   await dialog.getByRole("button", { name: "带入上次填写的工作说明" }).click();
   await expect(dialog.getByLabel("实际观察与理由")).toHaveValue("先前在实施表单填写的人工观察");
@@ -1878,7 +1878,7 @@ test("A37 旧接手释放后保留未提交文字，可由用户带入人工观�
   await dialog.getByRole("radio", { name: "通过", exact: true }).check();
   await dialog.getByLabel("记录人").fill("isolated reviewer");
   await dialog.getByLabel("我确认以上是当前人工观察，候选生成后需要重新确认。").check();
-  await dialog.getByRole("button", { name: "提交验收结果" }).click();
+  await dialog.getByRole("button", { name: /^(提交验收结果|保存人工意见)$/ }).click();
   await expect(page.getByRole("dialog")).toContainText("人工验收意见已记录");
   const current = await client.get("/api/task?id=" + id);
   expect(current.task.human_review_notes[0].reason).toBe("先前在实施表单填写的人工观察");
@@ -1903,7 +1903,7 @@ test("A38 未知的实施提交在旧接手释放后可核对并保留原文字"
   await page.getByRole("button", { name: "原样重试提交" }).click();
   await expect(page.getByRole("heading", { name: "提交本次工作结果" })).toHaveCount(0);
   await page.locator(".result-banner").getByRole("button", { name: "记录人工意见" }).click();
-  const dialog = page.getByRole("dialog", { name: "记录人工验收" });
+  const dialog = page.getByRole("dialog", { name: /^(记录人工验收|记录人工意见)$/ });
   await dialog.getByRole("button", { name: "带入上次填写的工作说明" }).click();
   await expect(dialog.getByLabel("实际观察与理由")).toHaveValue("尚未发送成功的人工观察");
   expect((await client.get("/api/task?id=" + id)).task.evidence || []).toHaveLength(0);
@@ -1916,12 +1916,12 @@ test("A39 人工意见提交后工作台和详情清楚显示待候选确认", a
   let row = page.locator(".task-row").filter({ hasText: id });
   await row.locator(".task-title-link").click();
   await page.locator(".result-banner").getByRole("button", { name: "记录人工意见" }).click();
-  let dialog = page.getByRole("dialog", { name: "记录人工验收" });
+  let dialog = page.getByRole("dialog", { name: /^(记录人工验收|记录人工意见)$/ });
   await dialog.getByRole("radio", { name: "通过", exact: true }).check();
   await dialog.getByLabel("实际观察与理由").fill("已核对本次隔离界面的实际表现");
   await dialog.getByLabel("记录人").fill("isolated reviewer");
   await dialog.getByLabel("我确认以上是当前人工观察，候选生成后需要重新确认。").check();
-  await dialog.getByRole("button", { name: "提交验收结果" }).click();
+  await dialog.getByRole("button", { name: /^(提交验收结果|保存人工意见)$/ }).click();
   await expect(page.getByRole("dialog")).toContainText("待候选确认");
   await page.getByRole("dialog").getByRole("button", { name: "回工作台" }).click();
   row = page.locator(".task-row").filter({ hasText: id });
@@ -1934,12 +1934,12 @@ test("A39 人工意见提交后工作台和详情清楚显示待候选确认", a
   await other.close();
   await row.locator(".task-title-link").click();
   await page.locator(".result-banner").getByRole("button", { name: "查看人工意见与记录" }).click();
-  dialog = page.getByRole("dialog", { name: "记录人工验收" });
+  dialog = page.getByRole("dialog", { name: /^(记录人工验收|记录人工意见)$/ });
   await expect(dialog).toContainText("已核对本次隔离界面的实际表现");
-  await expect(dialog.getByRole("button", { name: "提交验收结果" })).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: /^(提交验收结果|保存人工意见)$/ })).toHaveCount(0);
   await shot(page, "A39-saved-review-record");
   await dialog.getByRole("button", { name: "记录新的验收意见" }).click();
-  await expect(dialog.getByRole("button", { name: "提交验收结果" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: /^(提交验收结果|保存人工意见)$/ })).toBeVisible();
   await dialog.getByRole("button", { name: "取消", exact: true }).click();
   await goto(page, "single", "/tasks/" + id);
   await expect(page.locator(".result-banner")).toContainText("已记录人工意见 · 待候选确认");
@@ -1961,9 +1961,9 @@ test("A40 两条已保存的人工意见都可查看，不自动合并或重复�
   await goto(page, "single", "/tasks/" + id);
   await expect(page.locator(".result-banner")).toContainText("待候选确认");
   await page.locator(".result-banner").getByRole("button", { name: "查看人工意见与记录" }).click();
-  const dialog = page.getByRole("dialog", { name: "记录人工验收" });
+  const dialog = page.getByRole("dialog", { name: /^(记录人工验收|记录人工意见)$/ });
   await expect(dialog.locator(".review-note-list .review-note")).toHaveCount(2);
-  await expect(dialog.getByRole("button", { name: "提交验收结果" })).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: /^(提交验收结果|保存人工意见)$/ })).toHaveCount(0);
   const current = await client.get("/api/task?id=" + id);
   expect(current.task.human_review_notes).toHaveLength(2);
   expect(current.task.evidence || []).toHaveLength(0);
@@ -1982,9 +1982,9 @@ test("A41 已完成任务仍可查看已确认的人工验收记录", async ({ p
   await goto(page, "single", "/tasks/" + id);
   await expect(page.locator(".result-banner")).toContainText("人工意见已确认当前候选");
   await page.locator(".result-banner").getByRole("button", { name: "查看人工意见与记录" }).click();
-  const dialog = page.getByRole("dialog", { name: "记录人工验收" });
+  const dialog = page.getByRole("dialog", { name: /^(记录人工验收|记录人工意见)$/ });
   await expect(dialog).toContainText("此前已查看");
-  await expect(dialog.getByRole("button", { name: "提交验收结果" })).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: /^(提交验收结果|保存人工意见)$/ })).toHaveCount(0);
   expect((await client.get("/api/task?id=" + id)).task.status).toBe("completed");
 });
 
@@ -2004,14 +2004,14 @@ test("A42 多个人工检查时两个入口都能查看其他检查的意见", a
   expect(current.check_access["second-review"].can_review).toBeTruthy();
   await goto(page, "single", "/tasks?q=" + id);
   await page.locator(".task-row").filter({ hasText: id }).getByRole("button", { name: "进行人工验收" }).click();
-  let dialog = page.getByRole("dialog", { name: "记录人工验收" });
+  let dialog = page.getByRole("dialog", { name: /^(记录人工验收|记录人工意见)$/ });
   await expect(dialog).toContainText("检查 second-review");
   await expect(dialog).toContainText("第二项检查的真实意见");
   await expect(dialog.getByRole("button", { name: "引用这条意见" })).toHaveCount(0);
   await dialog.getByRole("button", { name: "返回", exact: true }).click();
   await goto(page, "single", "/tasks/" + id);
   await page.locator(".result-banner").getByRole("button", { name: "查看人工意见与记录" }).click();
-  dialog = page.getByRole("dialog", { name: "记录人工验收" });
+  dialog = page.getByRole("dialog", { name: /^(记录人工验收|记录人工意见)$/ });
   await expect(dialog).toContainText("第二项检查的真实意见");
   await expect(dialog.getByRole("button", { name: "引用这条意见" })).toHaveCount(0);
   await dialog.getByRole("button", { name: "返回", exact: true }).click();
@@ -2019,7 +2019,7 @@ test("A42 多个人工检查时两个入口都能查看其他检查的意见", a
   const second = page.locator("#task-check-second-review");
   await second.getByRole("button", { name: "查看检查依据与证据" }).click();
   await second.getByRole("button", { name: "进行人工验收" }).click();
-  dialog = page.getByRole("dialog", { name: "记录人工验收" });
+  dialog = page.getByRole("dialog", { name: /^(记录人工验收|记录人工意见)$/ });
   await dialog.getByRole("button", { name: "引用这条意见" }).click();
   await expect(dialog.getByLabel("实际观察与理由")).toHaveValue("第二项检查的真实意见");
   current = await client.get("/api/task?id=" + id);
@@ -2042,7 +2042,7 @@ test("A43 人工意见不遮挡阻塞，终态记录不能再次确认", async (
   await client.post("/api/action", { action: "cancel", id, reason: "隔离测试结束" });
   await goto(page, "single", "/tasks/" + id);
   await page.locator(".result-banner").getByRole("button", { name: "查看人工意见与记录" }).click();
-  const dialog = page.getByRole("dialog", { name: "记录人工验收" });
+  const dialog = page.getByRole("dialog", { name: /^(记录人工验收|记录人工意见)$/ });
   await expect(dialog).toContainText("预先记录的意见");
   await expect(dialog.getByRole("button", { name: "确认这条意见适用于当前候选" })).toHaveCount(0);
   expect((await client.get("/api/task?id=" + id)).task.status).toBe("cancelled");
@@ -2066,7 +2066,7 @@ test("A44 已有候选的受阻 UI 检查可恢复并逐项人工验收", async 
   await expect(row).toContainText("3 项通过 · 1 项未执行 · 1 项受阻");
   await row.locator(".task-title-link").click();
   await page.getByRole("button", { name: "处理受阻的人工检查" }).click();
-  let dialog = page.getByRole("dialog", { name: "记录人工验收" });
+  let dialog = page.getByRole("dialog", { name: /^(记录人工验收|记录人工意见)$/ });
   await expect(dialog).toContainText("恢复本身不会通过检查");
   await page.route("**/api/action", async (route) => {
     if (route.request().postDataJSON()?.action === "review_resume") { const response = await route.fetch(); expect(response.ok()).toBeTruthy(); await route.abort(); }
@@ -2081,12 +2081,12 @@ test("A44 已有候选的受阻 UI 检查可恢复并逐项人工验收", async 
   const screenshot = path.join(fixture.out, "actual-review-" + id + ".png");
   await page.screenshot({ path: screenshot });
   await dialog.getByLabel("添加验收截图（PNG/JPEG，最大 10 MB）").setInputFiles(screenshot);
-  await expect(dialog.getByText(/runtime:artifacts\/manual-review\//)).toBeVisible();
+  await expect(dialog.getByRole("checkbox", { name: /^runtime:artifacts\/manual-review\// })).toBeChecked();
   await dialog.getByRole("radio", { name: "通过", exact: true }).check();
   await dialog.getByLabel("实际观察与理由").fill("已核对视觉检查结果");
   await dialog.getByLabel("记录人").fill("isolated reviewer");
   await dialog.getByLabel("我确认以上结论针对所示候选和修订。").check();
-  await dialog.getByRole("button", { name: "提交验收结果" }).click();
+  await dialog.getByRole("button", { name: /^(提交验收结果|保存人工意见)$/ }).click();
   dialog = page.getByRole("dialog", { name: "验收结果已记录" });
   await expect(dialog).toContainText("4 / 5 项通过");
   current = await client.get("/api/task?id=" + id);
@@ -2097,13 +2097,13 @@ test("A44 已有候选的受阻 UI 检查可恢复并逐项人工验收", async 
   const ux = page.locator("#task-check-ux");
   await ux.getByRole("button", { name: "查看检查依据与证据" }).click();
   await ux.getByRole("button", { name: "进行人工验收" }).click();
-  dialog = page.getByRole("dialog", { name: "记录人工验收" });
+  dialog = page.getByRole("dialog", { name: /^(记录人工验收|记录人工意见)$/ });
   await dialog.getByRole("radio", { name: "通过", exact: true }).check();
   await dialog.getByLabel("实际观察与理由").fill("已检查交互");
   await dialog.getByLabel("记录人").fill("isolated reviewer");
   await dialog.getByLabel("app/ui-output.txt").check();
   await dialog.getByLabel("我确认以上结论针对所示候选和修订。").check();
-  await dialog.getByRole("button", { name: "提交验收结果" }).click();
+  await dialog.getByRole("button", { name: /^(提交验收结果|保存人工意见)$/ }).click();
   dialog = page.getByRole("dialog", { name: "验收结果已记录" });
   await expect(dialog).toContainText("任务已完成");
   current = await client.get("/api/task?id=" + id);
@@ -2124,9 +2124,9 @@ test("A45 工作区变化时人工验收入口提示候选失效且不改变任�
     await goto(page, "single", "/tasks/" + id);
     await page.locator(".result-banner").getByRole("button", { name: "进行人工验收" }).click();
     await page.locator("#task-check-owner").getByRole("button", { name: "进行人工验收" }).click();
-    const dialog = page.getByRole("dialog", { name: "记录人工验收" });
+    const dialog = page.getByRole("dialog", { name: /^(记录人工验收|记录人工意见)$/ });
     await expect(dialog).toContainText("工作区在生成候选后发生了变化");
-    await expect(dialog.getByRole("button", { name: "提交验收结果" })).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: /^(提交验收结果|保存人工意见)$/ })).toHaveCount(0);
     const after = await client.get("/api/task?id=" + id);
     expect(after.task.candidate).toBe(before.task.candidate);
     expect(after.task.evidence || []).toHaveLength(0);
@@ -2150,7 +2150,7 @@ test("A46 两个人工检查同理由受阻时定位最新阻塞", async ({ page
   await client.post("/api/action", { ...blocked, unit: "ux", request_key: id + "-ux" });
   await goto(page, "single", "/tasks/" + id);
   await page.getByRole("button", { name: "处理受阻的人工检查" }).click();
-  const dialog = page.getByRole("dialog", { name: "记录人工验收" });
+  const dialog = page.getByRole("dialog", { name: /^(记录人工验收|记录人工意见)$/ });
   await expect(dialog).toContainText("本次操作：检查 ux");
   await dialog.getByRole("button", { name: "恢复并继续人工验收" }).click();
   await expect(dialog.getByRole("radio", { name: "通过", exact: true })).toBeVisible();
