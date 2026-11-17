@@ -284,3 +284,5 @@ OPT-00 DONE，OPT-01 DONE，OPT-02 DONE，OPT-03 DONE，OPT-04 DONE，OPT-05 DON
 - main首轮CI 44031661765在Go全包、打包和远程Agent验收通过后，因Playwright1.58不支持runner的Ubuntu26.04而停止。已通过Context7核对固定1.58.0文档支持Ubuntu24.04，将build job固定到ubuntu-24.04以执行真实浏览器验收，继续跟进发布。
 
 - Ubuntu24主分支CI 44032549604的全链路/浏览器/镜像推送PASS，v0.1.30标签指向e2f9af4。正式发行44033329134因测试把加载状态与成功提示同时作为status匹配而触发strict-mode失败；容量操作已完成，修正main中的成功提示定位为按文本匹配，并重试原标签发行。
+
+- GitHub连接器重跑失败返回403 Resource not accessible by integration。为将确定性提示选择器修正纳入正式源码，改为发布v0.1.31；v0.1.30发行尚未创建Release。沿现有main/tag流程发布31，两个构建均自行完成全套测试与签名。
