@@ -46,7 +46,7 @@ jobs:
           gh api --method POST "repos/$GH_REPO/actions/workflows/release.yml/dispatches" --input "$RUNNER_TEMP/release-dispatch.json"
   build:
     if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       publication: ${{ steps.metadata.outputs.publication }}
       source_commit: ${{ steps.metadata.outputs.source_commit }}
