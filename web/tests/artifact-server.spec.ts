@@ -24,14 +24,14 @@ test("管理员在项目设置查看占用、修改额度和放弃未完成上�
   await expect(storage.getByText("100.00 MiB", { exact: false }).first()).toBeVisible();
   await storage.getByLabel("不限制附件容量").check();
   await storage.getByRole("button", { name: "保存容量设置", exact: true }).click();
-  await expect(storage.getByRole("status")).toContainText("已关闭此项目的附件容量限制");
+  await expect(storage.getByRole("status").filter({ hasText: "已关闭此项目的附件容量限制" })).toBeVisible();
   await storage.getByLabel("不限制附件容量").uncheck();
   await storage.getByLabel("容量上限（MiB）").fill("0.000001");
   await storage.getByRole("button", { name: "保存容量设置", exact: true }).click();
   await expect(storage.getByRole("alert")).toContainText("新上限小于");
   await storage.getByLabel("容量上限（MiB）").fill("100");
   await storage.getByRole("button", { name: "保存容量设置", exact: true }).click();
-  await expect(storage.getByRole("status")).toContainText("附件容量上限已设为 100.00 MiB");
+  await expect(storage.getByRole("status").filter({ hasText: "附件容量上限已设为 100.00 MiB" })).toBeVisible();
   await storage.getByRole("button", { name: "未完成上传", exact: true }).click();
   const pending = storage.getByRole("row").filter({ hasText:"pending-browser.txt" });
   await expect(pending).toBeVisible();
@@ -132,7 +132,7 @@ test("授权用户预览真实证据，清理后不显示假预览", async ({ pa
   await adminStorage.getByRole("button", { name:"预览可清理项", exact:true }).click();
   await expect(adminPage.getByRole("dialog")).toContainText("本次可清理 3 项");
   await adminPage.getByRole("dialog").getByRole("button", { name:"确认清理原件", exact:true }).click();
-  await expect(adminStorage.getByRole("status")).toContainText("已清理 3 项原件");
+  await expect(adminStorage.getByRole("status").filter({ hasText: "已清理 3 项原件" })).toBeVisible();
   await adminPage.screenshot({ path:path.join(output,"storage-cleanup.png"), fullPage:true, animations:"disabled" });
   await adminContext.close();
   await expect(page.getByLabel("证据预览")).toHaveCount(0);
