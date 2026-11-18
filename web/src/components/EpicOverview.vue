@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, watch } from "vue";
 import { api, params } from "../api";
-import { blockerText, checkStatusSummary, label, nextAction, schedule, stamp } from "../display";
+import { workPresentation, blockerText, checkStatusSummary, label, nextAction, schedule, stamp } from "../display";
 import { route, setQuery, taskHref } from "../router";
 import { useResource } from "../resource";
 import LoadState from "./LoadState.vue";
 import Pagination from "./Pagination.vue";
 
 const props = defineProps<{ id: string }>();
-defineEmits<{ openArtifact: [ref: string] }>();
+defineEmits<{ openArtifact: [ref: string, task?: string] }>();
 const r = useResource<any>(null);
 const { data: tree, loading, error, last } = r;
 const pageSize = 8;
@@ -89,7 +89,7 @@ function mappedLeaf(key: string) {
             <p v-if="member.task.task.definition.dependencies?.length">前置：<template v-for="dep in member.task.task.definition.dependencies" :key="dep"><a :href="taskHref(dep)">{{ dep }}</a> </template></p>
             <p v-if="member.task.health?.stage && member.summary.running">执行者上报：{{ label(member.task.health.stage) }}<template v-if="member.task.health.expected_until"> · 期限 {{ stamp(member.task.health.expected_until) }}</template></p>
             <p v-if="member.task.health?.no_progress">{{ member.task.health.healthy_long ? '暂无新证据；声明中的长阶段仍在期限内' : '超过设定时间未记录新的证据进展' }}</p>
-            <p v-if="member.summary.activity_at">最近结果 {{ blockerText(member.summary.last_result) }} · {{ stamp(member.summary.activity_at) }}</p>
+            <p v-if="workPresentation(member.summary).latest">最近成果 {{ workPresentation(member.summary).latest }} · {{ stamp(workPresentation(member.summary).at) }}</p><p v-else>当前有效成果尚未回报</p><p v-if="workPresentation(member.summary).current">{{ workPresentation(member.summary).current }}</p>
             <p v-if="member.task.task.status === 'open'">下一步 {{ nextAction(member.summary) }}</p>
             <p v-if="issueFor(member.summary.id)"><a :href="taskHref(member.summary.id, issueFor(member.summary.id).check ? 'checks' : 'overview', issueFor(member.summary.id).check || '')">查看{{ issueLabel(issueFor(member.summary.id)) }} →</a> {{ blockerText(issueFor(member.summary.id).reason) }}</p>
           </li>
@@ -126,7 +126,7 @@ function mappedLeaf(key: string) {
       <section class="content-section">
         <h2>关键进展</h2>
         <p v-if="!tree.progress.length" class="empty">尚无已记录的工作结果。</p>
-        <ol v-else class="epic-events"><li v-for="(event, index) in (showAllProgress ? tree.progress : tree.progress.slice(0, 5))" :key="event.task + ':' + event.at + ':' + index"><a :href="taskHref(event.task, 'execution')">{{ event.title }}</a> · {{ stamp(event.at) }}<template v-if="event.actor"> · {{ event.actor }}</template><span v-if="event.historical"> · 历史记录</span><p class="fact-preview">{{ preview(blockerText(event.summary || "", false)) }}</p><details v-if="event.summary?.length > 180"><summary>查看完整事实</summary><p class="fact-full">{{ event.summary }}</p></details><p v-if="event.artifacts?.length">产物：{{ preview(event.artifacts.join('、')) }}</p><details v-if="event.artifacts?.join('、').length > 180"><summary>查看完整产物</summary><p class="fact-full">{{ event.artifacts.join('、') }}</p></details><p v-if="event.next">下一步：{{ preview(event.next) }}</p><details v-if="event.next?.length > 180"><summary>查看完整下一步</summary><p class="fact-full">{{ event.next }}</p></details></li></ol>
+        <ol v-else class="epic-events"><li v-for="(event, index) in (showAllProgress ? tree.progress : tree.progress.slice(0, 5))" :key="event.task + ':' + event.at + ':' + index"><a :href="taskHref(event.task, 'execution')">{{ event.title }}</a> · {{ stamp(event.at) }}<template v-if="event.actor"> · {{ event.actor }}</template><span v-if="event.historical"> · 历史记录</span><p class="fact-preview">{{ preview(blockerText(event.summary || "", false)) }}</p><details v-if="event.summary?.length > 180"><summary>查看完整事实</summary><p class="fact-full">{{ event.summary }}</p></details><p v-if="event.artifacts?.length"><button v-for="ref in event.artifacts" :key="ref" @click="$emit('openArtifact',ref,event.task)">查看成果 / 证据 {{ ref.split('/').pop() }}</button></p><details v-if="event.artifacts?.join('、').length > 180"><summary>查看完整产物</summary><p class="fact-full">{{ event.artifacts.join('、') }}</p></details><p v-if="event.next">下一步：{{ preview(event.next) }}</p><details v-if="event.next?.length > 180"><summary>查看完整下一步</summary><p class="fact-full">{{ event.next }}</p></details></li></ol>
         <button v-if="tree.progress.length > 5" class="inline-link" @click="setQuery({ progress: showAllProgress ? undefined : 'all' })">{{ showAllProgress ? '收起进展' : '查看最近 ' + tree.progress.length + ' 条进展' }}</button>
         <p v-if="tree.progress_truncated" class="secondary">这里只显示最近 100 条已记录进展。</p>
       </section>

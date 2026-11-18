@@ -1,0 +1,15 @@
+=== RUN   TestContentReuseKeepsLogicalIdentityQuotaAndLastReference
+    artifact_content_test.go:94: two independent logical identities: 32 B once; first purge 0 B, final purge 32 B
+--- PASS: TestContentReuseKeepsLogicalIdentityQuotaAndLastReference (0.41s)
+=== RUN   TestOverlappingUploadsConvergeToOnePhysicalContent
+--- PASS: TestOverlappingUploadsConvergeToOnePhysicalContent (0.35s)
+=== RUN   TestContentReuseRecoversOwnLinkedFileBeforeDatabaseCommit
+=== RUN   TestContentReuseRecoversOwnLinkedFileBeforeDatabaseCommit/paired-false
+=== RUN   TestContentReuseRecoversOwnLinkedFileBeforeDatabaseCommit/paired-true
+--- PASS: TestContentReuseRecoversOwnLinkedFileBeforeDatabaseCommit (0.73s)
+    --- PASS: TestContentReuseRecoversOwnLinkedFileBeforeDatabaseCommit/paired-false (0.38s)
+    --- PASS: TestContentReuseRecoversOwnLinkedFileBeforeDatabaseCommit/paired-true (0.34s)
+=== RUN   TestReviewEvidenceIncludesPendingUploadWithContentMetadata
+--- PASS: TestReviewEvidenceIncludesPendingUploadWithContentMetadata (0.33s)
+PASS
+ok  	ael/internal/server	2.174s

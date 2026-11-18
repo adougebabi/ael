@@ -125,7 +125,7 @@ runner 写命令和显式 artifact upload 在网络写入前，将完整请求�
 
 ## 人工裁定交接
 
-human 检查交由项目 reviewer/admin 登录中央 Dashboard 完成。外部 Agent 通过原 artifact upload 上传实际截图、基准及报告，并记录来源和受检候选。页面支持明确基准比较，人工结论仍绑定候选/定义/计划。普通令牌不能伪装成人工记录人。人工 fail 留修复方向，blocked 留恢复条件，pass 后继续读取 next_action 和其余门禁。意见与正式检查分别保存，旧候选意见需针对新候选重新记录。
+human 检查交由项目 reviewer/admin 登录中央 Dashboard 完成。普通检查可在任务页直接点击验收通过，说明与附件可选；发现问题只需描述问题，暂无法验证只需原因。明确约定的截图、对照图、专项报告及 Check.Artifacts 仍需真实附件。外部 Agent 按需要通过原 artifact upload 上传证据并记录来源和受检候选。页面支持明确基准比较，人工结论绑定候选/定义/计划并记录 direct_observation 或 observation_with_attachments，不等于发布。普通令牌不能伪装成人工记录人。fail 后由 Agent 核对修复，blocked 等待实际条件解除；pass 后继续读取 next_action 和其余门禁。意见与正式检查分别保存，旧候选意见需针对新候选重新记录。
 
 ## 发现、修复任务与复验
 
@@ -167,3 +167,11 @@ human 检查交由项目 reviewer/admin 登录中央 Dashboard 完成。外部 A
 父候选中的源码输出须与已验收叶子的内容哈希及执行位匹配。同一输出被后续工作改写时，先更新并验收受影响叶子，取得可核对的当前输出，再准备父集成。
 
 达到重复失败阈值时，保存真实调查材料并上传为同任务 finalized 附件。调用 `ael task review-failure --task ID --file PRIVATE_REVIEW_JSON --expected-revision REV --operation-id OP --idempotency-key KEY --json`。文件包含 `tried,excluded,hypothesis,next,recovery,evidence`，evidence 为中央附件 ID，actor 由认证身份确定。每次至多 32 个引用和 64 MiB 总量。成功后按返回版本显式 resume，失败次数保留。复核后再次失败进入 blocked，再次复核需要此前未审阅过的证据内容。宿主自行停止旧工作并保留现场。
+
+## 导入历史的核对与接管
+
+在既有用户执行授权内，先读取 task show、原导入历史和现行工程依据，capture 当前候选并 publish/show context。若仅有导入恢复阻塞，调用 `task reconcile-import --task ID --context CONTEXT --reason "核对的事实与差异" --start "具体继续起点" --expected-revision REV --operation-id OP --idempotency-key KEY`。身份来自执行令牌；它只记录 Agent 核对，不产生人工 approval 或当前验收。成功后立即消费返回 next.next_action，刷新候选/context 的任务版本并 runner claim，实际实施、上报结果，再继续 next；不要只输出建议结束。
+
+IMPORT_NOT_ACTIVE：等待导入负责人激活；IMPORT_PAUSE_PROTECTED：按具体 blocker/未决决定/其他责任处理，不反复恢复；IMPORT_CONTEXT_REQUIRED：补当前候选和依据；IMPORT_SOURCE_UNKNOWN：缺少可信暂停或决定来源，给出任务页和缺失的恢复范围，请 reviewer 按准确版本确认。原来已有可信恢复批准时可沿用，不能由 Agent 自述用户同意来替代。重复请求保留原 operation/key 查询原回执，任务版本变化须重新核对。
+
+工作单元完成、检查失败、阻塞变化、恢复、交接及交付时，及时用 runner progress 回报已完成/尝试的事实、实际结果、具体 next；此上报是当前工作说明，不冒充交付物。实际成果仍通过原 runner submit 与真实文件/验收结论形成。心跳不算进展，长时间无成果不代表宿主 Agent 已退出。

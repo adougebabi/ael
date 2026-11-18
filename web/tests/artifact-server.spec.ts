@@ -21,6 +21,11 @@ test("管理员在项目设置查看占用、修改额度和放弃未完成上�
   await page.getByRole("link", { name: "存储与附件", exact: true }).click();
   const storage = page.getByRole("region", { name: "存储与附件", exact: true });
   await expect(storage.getByText("report.txt", { exact: true })).toBeVisible();
+  await storage.getByText("占用组成与内容复用",{exact:true}).click();
+  await expect(storage).toContainText("共享内容避免保存");
+  await expect(storage).toContainText("现存相同哈希的物理重复 0 B");
+  await page.screenshot({path:path.join(output,"storage-attribution.png"),fullPage:true});
+
   await expect(storage.getByText("100.00 MiB", { exact: false }).first()).toBeVisible();
   await storage.getByLabel("不限制附件容量").check();
   await storage.getByRole("button", { name: "保存容量设置", exact: true }).click();
@@ -130,9 +135,9 @@ test("授权用户预览真实证据，清理后不显示假预览", async ({ pa
   const adminStorage = adminPage.getByRole("region", { name:"存储与附件", exact:true });
   await adminStorage.getByLabel("创建日期早于").fill(new Date(Date.now()+2*86400000).toISOString().slice(0,10));
   await adminStorage.getByRole("button", { name:"预览可清理项", exact:true }).click();
-  await expect(adminPage.getByRole("dialog")).toContainText("本次可清理 3 项");
+  await expect(adminPage.getByRole("dialog")).toContainText("本次可清理 4 项");
   await adminPage.getByRole("dialog").getByRole("button", { name:"确认清理原件", exact:true }).click();
-  await expect(adminStorage.getByRole("status").filter({ hasText: "已清理 3 项原件" })).toBeVisible();
+  await expect(adminStorage.getByRole("status").filter({ hasText: "已清理 4 项原件" })).toBeVisible();
   await adminPage.screenshot({ path:path.join(output,"storage-cleanup.png"), fullPage:true, animations:"disabled" });
   await adminContext.close();
   await expect(page.getByLabel("证据预览")).toHaveCount(0);

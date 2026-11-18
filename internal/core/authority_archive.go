@@ -57,11 +57,17 @@ type AuthorityArchive struct {
 	Files   []ArchivedFile `json:"files"`
 }
 
+type ArchiveRecovery struct {
+	Paused          bool `json:"paused"`
+	PendingDecision bool `json:"pending_decision"`
+}
+
 type ArchivedTask struct {
-	OriginalID string     `json:"original_id"`
-	MappedID   string     `json:"mapped_id"`
-	Snapshot   Task       `json:"snapshot"`
-	Record     TaskRecord `json:"record"`
+	Recovery   *ArchiveRecovery `json:"recovery,omitempty"`
+	OriginalID string           `json:"original_id"`
+	MappedID   string           `json:"mapped_id"`
+	Snapshot   Task             `json:"snapshot"`
+	Record     TaskRecord       `json:"record"`
 }
 
 type ArchivedFile struct {
@@ -87,7 +93,7 @@ func ArchiveTask(task Task, mapped string) ArchivedTask {
 		snapshot.Attempts[i].Lease = time.Time{}
 		snapshot.Attempts[i].Fence = 0
 	}
-	return ArchivedTask{OriginalID: task.Definition.ID, MappedID: mapped, Snapshot: snapshot, Record: recordOf(snapshot)}
+	return ArchivedTask{Recovery: &ArchiveRecovery{Paused: task.Paused, PendingDecision: task.Confirmation != nil}, OriginalID: task.Definition.ID, MappedID: mapped, Snapshot: snapshot, Record: recordOf(snapshot)}
 }
 
 // ImportArchivedTaskTx uses the normal creation policy and relationship checks,

@@ -67,18 +67,18 @@ func (a *artifactStore) usageFromSizes(tx *store.Tx, objects, uploads map[string
 		result.Artifacts += size
 	}
 	result.Used = result.Temporary + result.Artifacts
-	rows, err := tx.Conn.QueryContext(context.Background(), "SELECT id,size FROM artifact_uploads WHERE status IN ('open','purging')")
+	rows, err := tx.Conn.QueryContext(context.Background(), "SELECT u.id,u.size,u.artifact_id FROM artifact_uploads u LEFT JOIN artifact_content m ON m.artifact_id=u.artifact_id WHERE u.status IN ('open','purging') AND m.artifact_id IS NULL")
 	if err != nil {
 		return result, err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id string
+		var id, artifactID string
 		var size int64
-		if err = rows.Scan(&id, &size); err != nil {
+		if err = rows.Scan(&id, &size, &artifactID); err != nil {
 			return result, err
 		}
-		if remaining := size - uploads[id]; remaining > 0 {
+		if remaining := size - max(uploads[id], objects[artifactID]); remaining > 0 {
 			result.Reserved += remaining
 		}
 	}
@@ -489,7 +489,7 @@ func (a *artifactStore) prunePaths(tx *store.Tx, item artifactPruneItem) ([]stri
 		if err != nil {
 			return nil, err
 		}
-		path, err := a.objectPath(item.ID)
+		path, err := a.contentPath(tx.Row, item.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -499,6 +499,13 @@ func (a *artifactStore) prunePaths(tx *store.Tx, item artifactPruneItem) ([]stri
 			}
 		} else if !os.IsNotExist(err) {
 			return nil, err
+		}
+		held, err := a.otherContentHolders(tx, item.ID)
+		if err != nil {
+			return nil, err
+		}
+		if held {
+			return nil, nil
 		}
 		return []string{path}, nil
 	}
@@ -510,7 +517,7 @@ func (a *artifactStore) prunePaths(tx *store.Tx, item artifactPruneItem) ([]stri
 	if err != nil {
 		return nil, err
 	}
-	dest, err := a.objectPath(item.ArtifactID)
+	dest, err := a.contentPath(tx.Row, item.ArtifactID)
 	if err != nil {
 		return nil, err
 	}
@@ -549,6 +556,13 @@ func (a *artifactStore) prunePaths(tx *store.Tx, item artifactPruneItem) ([]stri
 				return nil, err
 			}
 		}
+	}
+	held, err := a.otherContentHolders(tx, item.ArtifactID)
+	if err != nil {
+		return nil, err
+	}
+	if held {
+		return []string{temp}, nil
 	}
 	return []string{temp, dest}, nil
 }
@@ -638,6 +652,9 @@ func (a *artifactStore) prune(principal standalonePrincipal, input artifactPrune
 		}
 		items, err := a.pruneCandidates(tx, cutoff)
 		if err != nil {
+			return err
+		}
+		if err = a.reclaimableSizes(tx, items); err != nil {
 			return err
 		}
 		basis, _ := json.Marshal(struct {
@@ -737,6 +754,13 @@ func (a *artifactStore) prune(principal standalonePrincipal, input artifactPrune
 				paths, pathErr := a.prunePaths(tx, item)
 				if pathErr != nil {
 					return pathErr
+				}
+				if item.Kind == "artifact" && len(paths) == 0 {
+					physical, pathErr := a.contentPath(tx.Row, item.ID)
+					if pathErr != nil {
+						return pathErr
+					}
+					paths = []string{physical}
 				}
 				found := false
 				for _, path := range paths {

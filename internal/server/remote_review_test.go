@@ -243,3 +243,59 @@ func TestRemoteHumanReviewRespectsRuntimeParentPlanFence(t *testing.T) {
 		t.Fatal("reserved parent accepted human write")
 	}
 }
+
+func TestDirectExistingHumanReviewNeedsOnlyObservation(t *testing.T) {
+	for _, result := range []string{"pass", "fail", "blocked"} {
+		t.Run(result, func(t *testing.T) {
+			f, task, _ := reviewFixture(t)
+			input := reviewBody(task, "", result)
+			input["artifacts"], input["recovery"] = []string{}, ""
+			if result == "pass" {
+				input["reason"] = ""
+			}
+			path := "/api/v1/projects/shared/reviews"
+			first := standaloneRequest(t, f.h, "POST", path, input, f.admin, f.csrf, "", "http://server.test", "1")
+			standaloneJSON(t, first, http.StatusOK)
+			replay := standaloneRequest(t, f.h, "POST", path, input, f.admin, f.csrf, "", "http://server.test", "1")
+			if first.Body.String() != replay.Body.String() {
+				t.Fatal("lost response retry changed")
+			}
+			service, _ := f.s.projectService("shared")
+			current, _ := service.Get("task")
+			evidence := current.Evidence[0]
+			if evidence.EvidenceMode != "direct_observation" || evidence.Executor != "owner" || evidence.Candidate != task.Candidate || len(evidence.Artifacts) != 0 || evidence.Reason == "" || current.Status != "open" {
+				t.Fatal("incorrect direct observation", current)
+			}
+		})
+	}
+}
+
+func TestExplicitHumanScreenshotStillRequiresImage(t *testing.T) {
+	f, task, image := reviewFixture(t)
+	task.Definition.OriginalRequest = "必须提供真实截图"
+	service, _ := f.s.projectService("shared")
+	if err := service.ImportTask(task); err != nil {
+		t.Fatal(err)
+	}
+	input := reviewBody(task, image, "pass")
+	input["artifacts"] = []string{}
+	denied := standaloneRequest(t, f.h, "POST", "/api/v1/projects/shared/reviews", input, f.admin, f.csrf, "", "http://server.test", "1")
+	if denied.Code < 400 || !strings.Contains(denied.Body.String(), "HUMAN_EVIDENCE_REQUIRED") {
+		t.Fatal(denied.Code, denied.Body.String())
+	}
+	input["artifacts"] = []string{image}
+	standaloneJSON(t, standaloneRequest(t, f.h, "POST", "/api/v1/projects/shared/reviews", input, f.admin, f.csrf, "", "http://server.test", "1"), http.StatusOK)
+}
+
+func TestDashboardJSONArtifactKeepsReadableReportAndProvenance(t *testing.T) {
+	f := newArtifactFixture(t)
+	content := []byte(`{"summary":"real report conclusion","observations":["real observation"],"candidate":"reported-candidate"}`)
+	start := artifactStart(t, f, "report.json", "text/plain", content, "json-report")
+	upload := start["upload_id"].(string)
+	standaloneJSON(t, standaloneRequest(t, f.h, "POST", "/api/v1/projects/shared/artifacts/uploads/"+upload+"/chunks", map[string]any{"offset": 0, "data": content}, nil, "", f.uploader, "", "1"), http.StatusOK)
+	standaloneJSON(t, standaloneRequest(t, f.h, "POST", "/api/v1/projects/shared/artifacts/uploads/"+upload+"/finalize", map[string]any{"operation_id": "json-report", "idempotency_key": "json-report"}, nil, "", f.uploader, "", "1"), http.StatusOK)
+	value := standaloneJSON(t, standaloneRequest(t, f.h, "GET", "/api/v1/projects/shared/dashboard/artifact?task=task&ref="+start["artifact_id"].(string), nil, nil, "", f.reader, "", ""), http.StatusOK)
+	if value["body"] != string(content) || value["filename"] != "report.json" || value["source"] != "fixture" {
+		t.Fatal(value)
+	}
+}

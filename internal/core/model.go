@@ -95,6 +95,9 @@ type Plan struct {
 	Approved bool     `json:"approved" yaml:"approved"`
 }
 type Attempt struct {
+	ReportedSummary    string     `json:"reported_summary,omitempty"`
+	ReportedNext       string     `json:"reported_next,omitempty"`
+	ProgressAt         *time.Time `json:"progress_at,omitempty"`
 	LastContact        *time.Time `json:"last_contact,omitempty"`
 	WorkspaceConflict  string     `json:"workspace_conflict,omitempty" yaml:"workspace_conflict,omitempty"`
 	Stage              string     `json:"stage,omitempty"`
@@ -134,6 +137,7 @@ type ReviewComparison struct {
 	Actual   ReviewImage `json:"actual"`
 }
 type Evidence struct {
+	EvidenceMode        string            `json:"evidence_mode,omitempty"`
 	Comparison          *ReviewComparison `json:"comparison,omitempty"`
 	DiagnosticArtifacts []string          `json:"diagnostic_artifacts,omitempty" yaml:"diagnostic_artifacts,omitempty"`
 	ReviewNoteID        string            `json:"review_note_id,omitempty" yaml:"review_note_id,omitempty"`

@@ -121,6 +121,16 @@ try:
         replayed = client("a", *command)
         assert uploaded["id"] == replayed["id"] and uploaded["sha256"] == hashlib.sha256(data).hexdigest()
         ids[name] = uploaded["id"]
+        if name == "report.txt":
+            before = api("GET", "/api/v1/projects/shared/artifacts/stats", bearer=tokens["a"])
+            duplicate_file = projects["a"] / "shared-copy.txt"
+            duplicate_file.write_bytes(data)
+            duplicate = client("a", "artifact", "upload", "--task", "task", "--file", duplicate_file, "--expected-revision", revision, "--operation-id", "duplicate-report", "--idempotency-key", "duplicate-report")
+            after = api("GET", "/api/v1/projects/shared/artifacts/stats", bearer=tokens["a"])
+            assert duplicate["id"] != uploaded["id"] and before == after
+            ids["shared-copy.txt"] = duplicate["id"]
+            duplicate_file.unlink()
+            (out / "sharing-evidence.json").write_text(json.dumps({"logical_copies": 2, "content_bytes": len(data), "physical_bytes_after": after["artifact_bytes"], "stats_before": before, "stats_after": after, "additional_physical_bytes": 0}, indent=2))
         file.unlink()
         target = projects["b"] / name
         downloaded = client("b", "artifact", "download", "--artifact", uploaded["id"], "--out", target)
@@ -183,7 +193,7 @@ try:
     for name, project in projects.items():
         assert not (project / ".ael" / "work-items").exists()
         assert not (out / f"runtime-{name}").exists()
-    print(json.dumps({"status": "passed", "isolated": True, "clients": 2, "artifacts": 3, "browser": "storage administration and evidence lifecycle"}))
+    print(json.dumps({"status": "passed", "isolated": True, "clients": 2, "artifacts": 4, "browser": "storage administration and evidence lifecycle"}))
 finally:
     if proc and proc.poll() is None:
         proc.terminate()

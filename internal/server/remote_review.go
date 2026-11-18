@@ -76,6 +76,7 @@ func (p *portableStore) reviewRemote(principal standalonePrincipal, input remote
 	}
 	expected := core.ReviewExpectation{Candidate: input.Candidate, DefinitionRevision: input.Revision, PlanRevision: input.PlanRevision}
 	env := p.reviewEnvironment(expected)
+	env.ArtifactNames = map[string]string{}
 	var totalBytes int64
 	cache := map[string][]byte{}
 	env.ReadArtifact = func(tx *store.Tx, id string) ([]byte, error) {
@@ -86,6 +87,7 @@ func (p *portableStore) reviewRemote(principal standalonePrincipal, input remote
 		if err != nil {
 			return nil, core.Error("REVIEW_EVIDENCE_CHANGED", "attachment must be finalized and bound to the reviewed task and candidate")
 		}
+		env.ArtifactNames[id] = item.Filename
 		totalBytes += item.Size
 		if totalBytes > 64<<20 {
 			return nil, core.Error("REVIEW_INPUT_REQUIRED", "review evidence exceeds 64 MiB")
@@ -268,7 +270,7 @@ func (a *artifactStore) reviewEvidence(task string) ([]map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	rows, err := a.service.Store.DB.Query("SELECT artifact_id,project_id,task_id,attempt_id,candidate,filename,mime,size,sha256,source,uploader,created,status FROM artifact_uploads WHERE task_id=? AND artifact_id NOT IN (SELECT id FROM artifact_objects) ORDER BY created,artifact_id", task)
+	rows, err := a.service.Store.DB.Query("SELECT artifact_id,project_id,task_id,attempt_id,candidate,filename,mime,size,sha256,source,uploader,created,status,COALESCE((SELECT object_id FROM artifact_content WHERE artifact_id=artifact_uploads.artifact_id),artifact_id) FROM artifact_uploads WHERE task_id=? AND artifact_id NOT IN (SELECT id FROM artifact_objects) ORDER BY created,artifact_id", task)
 	if err != nil {
 		return nil, err
 	}

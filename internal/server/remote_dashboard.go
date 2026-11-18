@@ -289,7 +289,7 @@ func (h *standaloneHandler) remoteDashboard(w http.ResponseWriter, r *http.Reque
 			if err == nil {
 				data, e := artifacts.read(item)
 				err = e
-				object := map[string]any{"ref": item.ID, "body": "", "image": "", "sha256": item.SHA256, "download": "/api/v1/projects/" + url.PathEscape(project) + "/artifacts/" + url.PathEscape(item.ID) + "/content"}
+				object := map[string]any{"filename": item.Filename, "candidate": item.Candidate, "source": item.Source, "ref": item.ID, "body": "", "image": "", "sha256": item.SHA256, "download": "/api/v1/projects/" + url.PathEscape(project) + "/artifacts/" + url.PathEscape(item.ID) + "/content"}
 				if strings.HasPrefix(item.MIME, "image/") {
 					object["image"] = "/api/v1/projects/" + url.PathEscape(project) + "/artifacts/" + url.PathEscape(item.ID) + "/content"
 				} else if item.MIME == "text/plain" {

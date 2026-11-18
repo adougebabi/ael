@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { blockerText, checkStatusSummary } from "../display";
+import { workPresentation, blockerText, checkStatusSummary } from "../display";
 import { remoteProject } from "../api";
 import { taskHref } from "../router";
 import AppIcon from "./AppIcon.vue";
@@ -22,7 +22,7 @@ const detail = computed(() => props.kind === "human"
 <template>
   <article class="attention-card" :class="{ featured: kind === 'human' }">
     <div class="attention-meta"><span><AppIcon :name="kind === 'human' ? 'user' : kind === 'decision' ? 'shield' : 'warning'" />{{ heading }}</span><small>{{ task.id }}</small></div>
-    <h3>{{ task.title }}</h3><p>{{ detail }}</p>
+    <h3>{{ task.title }}</h3><p>{{ workPresentation(task).reason || detail }}</p><p v-if="workPresentation(task).latest">最近成果：{{ workPresentation(task).latest }}</p><p class="secondary">{{ workPresentation(task).role }} · {{ workPresentation(task).next }}</p>
     <div class="attention-bottom"><small>{{ kind === 'human' ? '人工检查 · 当前候选' : kind === 'decision' ? '准确版本决定' : kind === 'history' ? '恢复前核对' : '恢复后仍需实际验证' }}</small><button v-if="kind === 'human' && canJudge" class="primary" @click="emit('review', task.id, task.manual_reviews.length === 1 ? task.manual_reviews[0].check : '')">开始验收</button><a v-else class="button" :href="taskHref(task.id, kind === 'human' ? 'checks' : 'overview')">{{ kind === 'human' ? '查看检查' : kind === 'decision' ? '审阅方案' : kind === 'history' ? '核对历史资料' : '查看阻塞' }}</a></div>
   </article>
 </template>

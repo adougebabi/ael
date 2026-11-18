@@ -26,7 +26,7 @@ const outcome = ref(""), reason = ref(""), recovery = ref(""), extraRefs = ref("
 const actor = ref(sessionStorage.getItem("ael-actor") || "");
 const selected = ref<string[]>([]), confirmed = ref(false);
 const receipt = ref<any>(null), receiptError = ref("");
-const postReviewChanged = ref(false);
+const postReviewChanged = ref(false), versionAccepted = ref(true);
 const receiptKind = ref(""), receiptNote = ref<any>(null), selectedNoteId = ref(""), evidenceOpen = ref(false);
 const composing = ref(true), showAllNotes = ref(false);
 const pendingReview = ref<any>(null);
@@ -110,6 +110,7 @@ function restoreDraft() {
       confirmed.value = true;
     } else {
       draftVersionChanged.value = saved.candidate !== snapshot.value.task.candidate || saved.revision !== snapshot.value.definition_revision || saved.plan_revision !== snapshot.value.plan_revision;
+      versionAccepted.value = !draftVersionChanged.value;
       confirmed.value = false;
     }
   }
@@ -207,27 +208,23 @@ async function submit() {
   if (busy.value || uploading.value || !snapshot.value || (!pendingReview.value && (candidateUnavailable.value || pausedReview.value || selectingCheck.value)) || (!canRecord.value && !pendingReview.value)) return;
   error.value = "";
   inputError.value = "";
+  if (!pendingReview.value && !versionAccepted.value) { inputError.value="请先重新核对页面所示版本。";return; }
   const { baseline, actual } = remoteProject.value && snapshot.value.task.candidate ? comparison.value : { baseline: "", actual: "" };
   const refs = [...new Set([...selected.value, ...(remoteProject.value && actual ? [actual] : []), ...extraRefs.value.split(",").map((x) => x.trim()).filter(Boolean)])];
   if (!pendingReview.value) {
     const missing = [
       !outcome.value && "请选择验收结论",
-      !reason.value.trim() && "请填写实际观察与理由",
+      (outcome.value !== "pass" || provisional.value) && !reason.value.trim() && "请填写问题或无法验证的原因",
       !actor.value.trim() && "请填写记录人",
-      !confirmed.value && (snapshot.value.task.candidate ? "请勾选当前版本确认" : "请勾选人工观察确认"),
+
     ].filter(Boolean);
     if (missing.length) {
       inputError.value = missing.join("。") + "。";
       return;
     }
   }
-  if (!pendingReview.value && !provisional.value && outcome.value !== "pass" && !recovery.value.trim()) {
-    error.value = "RECOVERY_REQUIRED: 请填写修复方向或继续验证的条件。";
-    return;
-  }
-  if (!pendingReview.value && !provisional.value && outcome.value !== "blocked" && !refs.length) {
-    error.value = "HUMAN_EVIDENCE_REQUIRED: 通过或不通过都需要关联真实证据。";
-    return;
+  if (!pendingReview.value && !provisional.value && outcome.value !== "blocked" && access.value?.evidence_required && !refs.length) {
+    error.value = "HUMAN_EVIDENCE_REQUIRED: 此检查明确约定了专项证据，请关联后提交。";return;
   }
   const payload = pendingReview.value || {
       action: provisional.value ? "review_pending" : "review_result", id: props.taskId, unit: props.checkId,
@@ -290,6 +287,7 @@ async function send(payload: any) {
     }
   } catch (e) {
     if (e instanceof ApiError && ["REVIEW_VERSION_MISMATCH", "CANDIDATE_CHANGED", "REVIEW_NOT_ALLOWED", "REVIEW_VERSION_REQUIRED", "REVIEW_EVIDENCE_CHANGED", "REVIEW_INPUT_REQUIRED", "HUMAN_EVIDENCE_REQUIRED", "RECOVERY_REQUIRED", "SCREENSHOT_REQUIRED", "FORBIDDEN", "MANUAL_CHECK_REQUIRED", "CHECK_METHOD_MISMATCH", "CHECK_MISSING", "ARTIFACT_MISSING", "UNSAFE_PATH", "SYMLINK_PATH", "INVALID_RESULT", "REVIEW_NOTE_MISSING", "REVIEW_NOTE_VERSION_MISMATCH", "REVIEW_NOTE_ALREADY_CONFIRMED", "REVIEW_NOTE_CHECK_MISMATCH", "REVIEW_CHECK_CONFIRM_REQUIRED", "TERMINAL_TASK"].includes(e.code)) pendingReview.value = null;
+    if(e instanceof ApiError && /VERSION|CANDIDATE/.test(e.code)) versionAccepted.value=false;
     error.value = String(e);
   } finally {
     busy.value = false;
@@ -313,7 +311,7 @@ async function send(payload: any) {
         <div v-if="candidateState === 'error' && !pendingReview" class="alert" role="alert">无法核对当前候选，请重新读取后再验收。<button type="button" @click="reloadVersion">重新读取</button></div>
         <section v-if="selectingCheck && !candidateUnavailable" class="review-criteria"><h3>选择要验收的检查</h3><p>每次记录一项检查，其他检查保留原状。</p><button v-for="c in humanChecks" :key="c.id" type="button" @click="emit('selectCheck', c.id)">{{ c.id }} · {{ label(c.kind) }} · {{ label(snapshot.current_checks?.[c.id]?.result || 'not_run') }}</button></section>
         <div v-if="pausedReview && !candidateUnavailable && !pendingReview" class="alert" role="status"><p>{{ blockedHere ? '此检查因等待处理而受阻。恢复后才能提交针对当前候选的正式验收；恢复本身不会通过检查。' : blockedHumanCheck ? '任务仍因其他人工检查受阻，请先处理该检查。' : '任务当前处于暂停，请先在任务详情核对并处理阻塞原因。' }}</p><button v-if="blockedHere" type="button" :disabled="busy" @click="resumeReview">恢复并继续人工验收</button><button v-else-if="blockedHumanCheck" type="button" @click="emit('selectCheck', blockedHumanCheck)">查看受阻检查 {{ blockedHumanCheck }}</button></div>
-        <p v-if="draftVersionChanged && !pendingReview" class="alert" role="status">候选或修订已变化，已保留草稿；请重新检查当前版本并再次确认。</p>
+        <p v-if="(draftVersionChanged || !versionAccepted) && !pendingReview" class="alert" role="status">候选或修订已变化，已保留草稿；请重新检查当前版本。<button type="button" @click="versionAccepted=true; draftVersionChanged=false">已重新查看所示版本</button></p>
         <p v-if="storageWarning" class="alert" role="status">浏览器无法保存验收草稿，关闭页面后输入可能丢失。</p>
         <section v-if="priorWork" class="review-note"><strong>发现本标签页上次未提交的实施表单</strong><p>这些文字没有被自动提交或视为验收结论。</p><button v-if="priorWork.summary" type="button" @click="importPriorWork">带入上次填写的工作说明</button><details><summary>查看旧填写</summary><p v-if="priorWork.summary">工作说明：{{ priorWork.summary }}</p><p v-if="priorWork.artifacts">产物引用：{{ priorWork.artifacts }}</p><p v-if="priorWork.knowledge_reason">规范处理依据：{{ priorWork.knowledge_reason }}</p><p v-if="priorWork.knowledge_artifacts">规范产物：{{ priorWork.knowledge_artifacts }}</p><p v-if="priorWork.return_to">期望退回：{{ priorWork.return_to }}</p></details><button type="button" @click="dismissPriorWork">移除旧草稿</button></section>
         <p v-if="provisional && !pendingReview && canRecord && !pausedReview && !selectingCheck && !candidateUnavailable" class="review-pending-explanation">{{ !composing && reviewNotes.length ? (currentPendingNotes ? (!snapshot.task.candidate ? '人工意见已保存，等待生成候选后重新确认，无需重复提交。' : '人工意见已保存，请核对当前候选后确认或引用。') : pendingNotes && !currentConfirmedNotes ? '先前意见的定义或计划已变化，请针对当前要求重新记录。' : '已保存的人工意见如下；需要补充时可记录新的意见。') : !snapshot.task.candidate ? '尚未生成验收候选；本次先记录人工意见，候选生成后需要你重新确认。' : checkId ? '此检查当前尚不能正式验收，本次只记录人工意见。' : '本次记录针对当前候选的任务级人工意见，不替代其他检查。' }}</p>
@@ -326,10 +324,9 @@ async function send(payload: any) {
             <label v-for="[value, text] in [['pass', '通过'], ['fail', '不通过'], ['blocked', '暂无法验证']]" :key="value" :class="{ selected: outcome === value }"><input v-model="outcome" type="radio" name="review-outcome" :value="value" /><AppIcon :name="value === 'pass' ? 'check' : value === 'fail' ? 'warning' : 'clock'" />{{ text }}</label>
           </div></fieldset>
           <label><span>实际观察与理由 <b aria-hidden="true">*</b></span><textarea v-model="reason" rows="3" placeholder="描述实际检查的内容与观察结果"></textarea></label>
-          <label v-if="outcome && outcome !== 'pass'"><span>{{ outcome === 'fail' ? '修复方向' : '继续验证的条件' }} <b v-if="!provisional" aria-hidden="true">*</b><small v-else>（可选）</small></span><textarea v-model="recovery" rows="2" placeholder="说明下一步需要修复或恢复什么"></textarea></label>
           <details v-if="provisional && !availableRefs.length" class="optional-review-evidence" :open="evidenceOpen" @toggle="evidenceOpen = ($event.target as HTMLDetailsElement).open"><summary>关联证据（可选）</summary><label>补充已有证据引用<input v-model="extraRefs" :placeholder="remoteProject ? '中央附件 ID，多个以逗号分隔' : '项目相对路径或 runtime: 引用，多个以逗号分隔'" /></label><small>{{ remoteProject ? '填写中央附件 ID 后，服务端核验原件与候选关联。' : '如填写引用，系统会核验文件真实存在。' }}</small></details>
-          <fieldset v-else class="evidence-field"><legend>关联真实证据 <span v-if="provisional">（可选）</span></legend><div class="evidence-picker"><p v-if="!availableRefs.length">{{ remoteProject ? '当前候选尚无可用附件，请由外部客户端上传证据后重新读取。' : '当前候选没有已记录的产物引用，可填写已有项目相对路径或 runtime: 引用。' }}</p><label v-for="ref in availableRefs" :key="ref"><input v-model="selected" type="checkbox" :aria-label="ref" :value="ref" /><AppIcon name="file"/><span><strong>{{ evidenceName(ref) }}</strong><small v-if="evidenceName(ref) !== ref && evidenceByID.get(ref)?.source">{{ evidenceByID.get(ref).source }}</small></span></label><label v-if="!remoteProject && !provisional && check?.kind === 'ui'">添加验收截图（PNG/JPEG，最大 10 MB）<input type="file" accept="image/png,image/jpeg" :disabled="uploading || busy" @change="addImage" /></label><p v-if="uploading" role="status">正在保存截图…</p><label class="extra-evidence">补充已有证据引用<input v-model="extraRefs" :placeholder="remoteProject ? '中央附件 ID，多个以逗号分隔' : '项目相对路径或 runtime: 引用，多个以逗号分隔'" /></label></div></fieldset>
-          <p v-if="!provisional" class="secondary">通过和不通过需要真实证据；视觉检查还需要真实 PNG/JPEG 截图。暂无法验证可不附证据。</p>
+          <details v-else class="optional-review-evidence" :open="access?.evidence_required"><summary>{{ access?.evidence_required ? "专项证据（必需）" : "关联附件（可选）" }}</summary><fieldset class="evidence-field"><legend>关联真实证据 <span v-if="provisional">（可选）</span></legend><div class="evidence-picker"><p v-if="!availableRefs.length">{{ remoteProject ? '当前候选尚无可用附件，请由外部客户端上传证据后重新读取。' : '当前候选没有已记录的产物引用，可填写已有项目相对路径或 runtime: 引用。' }}</p><label v-for="ref in availableRefs" :key="ref"><input v-model="selected" type="checkbox" :aria-label="ref" :value="ref" /><AppIcon name="file"/><span><strong>{{ evidenceName(ref) }}</strong><small v-if="evidenceName(ref) !== ref && evidenceByID.get(ref)?.source">{{ evidenceByID.get(ref).source }}</small></span></label><label v-if="!remoteProject && !provisional && check?.kind === 'ui'">添加验收截图（PNG/JPEG，最大 10 MB）<input type="file" accept="image/png,image/jpeg" :disabled="uploading || busy" @change="addImage" /></label><p v-if="uploading" role="status">正在保存截图…</p><label class="extra-evidence">补充已有证据引用<input v-model="extraRefs" :placeholder="remoteProject ? '中央附件 ID，多个以逗号分隔' : '项目相对路径或 runtime: 引用，多个以逗号分隔'" /></label></div></fieldset></details>
+          <p v-if="!provisional" class="secondary">{{ access?.evidence_required ? "此项约定的专项证据仍需关联；暂无法验证可先记录原因。" : "说明和附件可选；记录真实人工观察，不需要文件证明已看过。" }}</p>
           <details v-if="remoteProject && snapshot.task.candidate" class="optional-review-evidence" :open="comparisonOpen" @toggle="comparisonOpen = ($event.target as HTMLDetailsElement).open">
             <summary>对照基准与实际截图（可选）</summary>
             <p class="secondary">可直接在上面选一张实际截图作为证据。这里用于对照两张图片。</p>
@@ -337,7 +334,6 @@ async function send(payload: any) {
           </details>
           <div class="review-meta-grid"><label><span>记录人 <b aria-hidden="true">*</b></span><input v-model="actor" autocomplete="name" :readonly="!!remoteProject" /></label><div><span>提交后的行为</span><p>{{ provisional ? (snapshot.task.candidate && !checkId ? '记录任务级意见并绑定当前候选，其他检查保持原样。' : '记录人工意见，候选生成后需要重新确认，不会自动通过检查。') : outcome === 'pass' ? '记录此项通过后重新核对其余门禁与交付目标。' : outcome === 'fail' ? '记录未通过，并由任务流程确定修复与下一步。' : outcome === 'blocked' ? '记录无法验证的原因和继续验证条件，不会视为通过。' : '请选择验收结论，查看对应的后续行为。' }}</p></div></div>
           <p v-if="selectedNoteId" class="secondary">已引用此前记录的意见；提交前请重新核对当前候选和证据。</p>
-          <label class="inline"><input v-model="confirmed" type="checkbox" />{{ provisional && !snapshot.task.candidate ? '我确认以上是当前人工观察，候选生成后需要重新确认。' : '我确认以上结论针对所示候选和修订。' }}</label>
         </fieldset>
         <p v-if="pendingReview" role="status" class="alert">上次提交结果尚未确认；请原样重试，以免重复记录验收。</p>
       </template>

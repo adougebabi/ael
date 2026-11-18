@@ -3,14 +3,15 @@ package core
 // TaskRelations lists definition links exactly as stored. Managed membership is
 // separate so a legacy definition link cannot become an integration requirement.
 type TaskRelation struct {
-	ID             string `json:"id"`
-	Title          string `json:"title"`
-	Status         string `json:"status"`
-	Step           string `json:"step"`
-	Historical     bool   `json:"historical"`
-	DefinitionLink bool   `json:"definition_parent"`
-	ManagedMember  bool   `json:"managed_member"`
-	Feedback       bool   `json:"feedback"`
+	Summary        *TaskSummary `json:"summary,omitempty"`
+	ID             string       `json:"id"`
+	Title          string       `json:"title"`
+	Status         string       `json:"status"`
+	Step           string       `json:"step"`
+	Historical     bool         `json:"historical"`
+	DefinitionLink bool         `json:"definition_parent"`
+	ManagedMember  bool         `json:"managed_member"`
+	Feedback       bool         `json:"feedback"`
 }
 
 type TaskRelationPage struct {
@@ -50,5 +51,20 @@ func (s *Service) TaskRelations(id string, limit, offset int) (TaskRelationPage,
 			page.Items = append(page.Items, item)
 		}
 	}
-	return page, rows.Err()
+	if err := rows.Err(); err != nil {
+		return page, err
+	}
+	rows.Close()
+	for i := range page.Items {
+		next, err := s.Next(page.Items[i].ID)
+		if err != nil {
+			return page, err
+		}
+		summary, err := s.Summarize(next)
+		if err != nil {
+			return page, err
+		}
+		page.Items[i].Summary = &summary
+	}
+	return page, nil
 }

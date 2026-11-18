@@ -64,7 +64,6 @@ test("明确基准、键盘比较、丢失响应和幂等人工回执", async ({
   await page.screenshot({ path: path.join(fixture.out, "comparison-overlay.png"), fullPage: true });
   await dialog.getByRole("radio", { name: "通过", exact: true }).check();
   await dialog.getByLabel("实际观察与理由", { exact: false }).fill("RETAINED_REVIEW_OBSERVATION");
-  await dialog.getByRole("checkbox", { name: "我确认以上结论针对所示候选和修订。" }).check();
   let accepted = false;
   await page.route("**/api/v1/projects/shared/reviews", async route => {
     const response = await route.fetch(); expect(response.ok()).toBeTruthy(); accepted = true;
@@ -78,7 +77,7 @@ test("明确基准、键盘比较、丢失响应和幂等人工回执", async ({
   await expect(dialog.getByRole("heading", { name: "任务仍有后续工作" })).toBeVisible();
   await expect(dialog).toContainText("1 / 2 项通过");
   const state = await (await page.request.get(fixture.url + "/api/v1/projects/shared/tasks/browser")).json();
-  expect(state.task.evidence.filter((item: any) => item.check === "visual")).toHaveLength(1);
+  expect(state.task.evidence?.filter((item: any) => item.check === "visual")).toHaveLength(1);
   expect(state.task.evidence[0].comparison.baseline.artifact_id).toBe(fixture.tasks.browser.baseline);
   await dialog.getByRole("button", { name: "查看任务结果", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Review browser", exact: true })).toBeVisible();
@@ -93,14 +92,12 @@ test("新候选拒绝旧表单且保留输入及图片选择", async ({ page, re
   await dialog.getByLabel("实际图片", { exact: true }).selectOption(fixture.tasks.stale.actual);
   await dialog.getByRole("radio", { name: "通过", exact: true }).check();
   await dialog.getByLabel("实际观察与理由", { exact: false }).fill("KEEP_OLD_VERSION_INPUT");
-  await dialog.getByRole("checkbox", { name: "我确认以上结论针对所示候选和修订。" }).check();
   const changed = await request.post(fixture.control, { data: { action: "change-candidate", nonce: fixture.nonce }, timeout: 60000 });
   expect(changed.ok(), await changed.text()).toBeTruthy();
   await dialog.getByRole("button", { name: "提交验收结果", exact: true }).click();
   await expect(dialog.locator("pre")).toContainText("REVIEW_VERSION_MISMATCH");
   await expect(dialog.getByLabel("实际观察与理由", { exact: false })).toHaveValue("KEEP_OLD_VERSION_INPUT");
   await dialog.getByRole("button", { name: "重新读取版本并保留输入" }).click();
-  await expect(dialog.getByRole("checkbox", { name: "我确认以上结论针对所示候选和修订。" })).not.toBeChecked();
   await expect(dialog.getByLabel("实际图片", { exact: true })).toHaveValue(fixture.tasks.stale.actual);
   await expect(dialog).toContainText("历史候选");
   await expect(dialog).toContainText("候选、定义或计划已变化，请重新记录意见。");
@@ -124,7 +121,6 @@ test("缺失、清理及未完成上传分别显示并阻止错误验收", async
   await expect(dialog.getByRole("region", { name: "证据图片比较" })).toContainText("上传未完成");
   await dialog.getByRole("radio", { name: "通过", exact: true }).check();
   await dialog.getByLabel("实际观察与理由", { exact: false }).fill("Evidence unavailable");
-  await dialog.getByRole("checkbox", { name: "我确认以上结论针对所示候选和修订。" }).check();
   await dialog.getByRole("button", { name: "提交验收结果", exact: true }).click();
   await expect(dialog.locator("pre")).toContainText("REVIEW_EVIDENCE_CHANGED");
   await expect(dialog.getByLabel("实际观察与理由", { exact: false })).toHaveValue("Evidence unavailable");
@@ -149,7 +145,7 @@ test("人工 blocked 后可精确恢复且保留原阻塞证据", async ({ page 
   await expect(dialog.getByLabel("实际观察与理由", { exact: false })).toBeVisible();
   const state = await (await page.request.get(fixture.url + "/api/v1/projects/shared/tasks/api-blocked")).json();
   expect(state.task.paused).toBeFalsy();
-  expect(state.task.evidence.filter((item: any) => item.result === "blocked")).toHaveLength(1);
+  expect(state.task.evidence?.filter((item: any) => item.result === "blocked")).toHaveLength(1);
   expect(state.task.status).toBe("open");
 });
 
@@ -160,7 +156,6 @@ test("已提交回执之后版本再次变化时提示重新审阅", async ({ pa
   await dialog.getByLabel("实际图片", { exact: true }).selectOption(fixture.tasks.postchange.actual);
   await dialog.getByRole("radio", { name: "通过", exact: true }).check();
   await dialog.getByLabel("实际观察与理由", { exact: false }).fill("Exact original candidate review");
-  await dialog.getByRole("checkbox", { name: "我确认以上结论针对所示候选和修订。" }).check();
   await page.route("**/api/v1/projects/shared/reviews", async route => {
     const response = await route.fetch(); expect(response.ok()).toBeTruthy();
     const changed = await request.post(fixture.control, { data: { action: "change-definition", nonce: fixture.nonce }, timeout: 60000 });
@@ -215,9 +210,8 @@ test("无候选的任务级意见不用选附件或比较图片", async ({ page 
   await expect(dialog.getByLabel("补充已有证据引用")).toBeHidden();
   await dialog.getByRole("radio", { name: "通过", exact: true }).check();
   await dialog.getByRole("button", { name: "保存人工意见" }).click();
-  await expect(dialog.getByRole("alert")).toHaveText("请填写实际观察与理由。请勾选人工观察确认。");
+  await expect(dialog.getByRole("alert")).toHaveText("请填写问题或无法验证的原因。");
   await dialog.getByLabel("实际观察与理由").fill("隔离样本的人工观察");
-  await dialog.getByRole("checkbox", { name: "我确认以上是当前人工观察，候选生成后需要重新确认。" }).check();
   await dialog.getByRole("button", { name: "保存人工意见" }).click();
   await expect(dialog).toContainText("人工验收意见已记录");
   expect(listedEvidence).toBeFalsy();
@@ -225,3 +219,67 @@ test("无候选的任务级意见不用选附件或比较图片", async ({ page 
   expect(state.task.human_review_notes).toHaveLength(1);
   expect(state.task.evidence || []).toHaveLength(0);
 });
+
+test("存量普通 UI 检查在任务首屏一次通过，仍显示剩余门禁", async ({page}) => {
+ await login(page);
+ await page.goto(fixture.url+"/#/tasks/direct?project=shared");
+ const review=page.getByRole("region",{name:"直接验收 visual"});
+ await expect(review.getByRole("button",{name:"验收通过",exact:true})).toBeVisible();
+ await expect(review.getByRole("checkbox")).toHaveCount(0);
+ await page.screenshot({path:path.join(fixture.out,"direct-review-before.png"),fullPage:true});
+ await review.getByRole("button",{name:"验收通过",exact:true}).click();
+ await expect(page.getByText("已记录",{exact:true})).toHaveCount(0);
+ await expect.poll(async()=> (await (await page.request.get(fixture.url+"/api/v1/projects/shared/tasks/direct")).json()).task.evidence?.filter((e:any)=>e.check==="visual").length || 0).toBe(1);
+ const state=await (await page.request.get(fixture.url+"/api/v1/projects/shared/tasks/direct")).json();
+ expect(state.task.evidence[0]).toMatchObject({source:"human:owner",evidence_mode:"direct_observation",result:"pass",candidate:fixture.tasks.direct.candidate});
+ expect(state.task.evidence[0].artifacts).toHaveLength(0);expect(state.task.status).toBe("open");
+ await page.screenshot({path:path.join(fixture.out,"direct-review-after.png"),fullPage:true});
+});
+for(const [task,outcome,button] of [["direct-fail","fail","发现问题"],["direct-blocked","blocked","暂无法验证"]]) {
+ test(`直接人工 ${outcome} 只收集一段说明`,async({page})=>{
+  await login(page);await page.goto(fixture.url+"/#/tasks/"+task+"?project=shared");
+  const review=page.getByRole("region",{name:"直接验收 visual"});
+  await review.getByRole("button",{name:button,exact:true}).click();
+  await review.getByRole("textbox").fill(outcome==="fail"?"实际布局有遮挡":"当前环境无法访问");
+  await review.getByRole("button",{name:outcome==="fail"?"提交问题":"记录无法验证",exact:true}).click();
+  await expect.poll(async()=> (await (await page.request.get(fixture.url+"/api/v1/projects/shared/tasks/"+task)).json()).task.evidence?.filter((e:any)=>e.result===outcome).length || 0).toBe(1);
+ });
+}
+test("直接通过丢失响应后用原请求重试",async({page})=>{
+ await login(page);await page.goto(fixture.url+"/#/tasks/direct-retry?project=shared");
+ const review=page.getByRole("region",{name:"直接验收 visual"});
+ await page.route("**/api/v1/projects/shared/reviews",async route=>{const r=await route.fetch();expect(r.ok()).toBeTruthy();await route.abort();},{times:1});
+ await review.getByRole("button",{name:"验收通过",exact:true}).click();
+ // The committed check may disappear on polling; the original request remains
+ // in the existing draft store and the task's pending-review entry can reopen it.
+ await expect.poll(async()=> (await (await page.request.get(fixture.url+"/api/v1/projects/shared/tasks/direct-retry")).json()).task.evidence?.length || 0).toBe(1);
+ const retry=page.getByRole("button",{name:"原样重试提交",exact:true});
+ if(await retry.isVisible()) await retry.click();
+ else {await page.getByRole("button",{name:"查看人工意见与记录",exact:true}).click();await page.getByRole("button",{name:"原样重试提交",exact:true}).click();}
+ await expect.poll(async()=> (await (await page.request.get(fixture.url+"/api/v1/projects/shared/tasks/direct-retry")).json()).task.evidence?.length || 0).toBe(1);
+});
+
+for(const viewport of [{width:1280,height:800},{width:390,height:844}]) {
+ test(`UC04 账户菜单与公共组件 ${viewport.width}`,async({page})=>{
+  await page.setViewportSize(viewport);await login(page);
+  if(viewport.width<720) await page.getByRole('button',{name:'打开导航',exact:true}).click();
+  const account=page.getByRole('button',{name:'账户菜单',exact:true});
+  const before=await account.boundingBox();expect(before).not.toBeNull();
+  await page.screenshot({path:path.join(fixture.out,`UC04-account-closed-${viewport.width}.png`),fullPage:false});
+  await account.click();
+  const options=page.getByRole('region',{name:'账户操作'});await expect(options).toBeVisible();
+  const after=await account.boundingBox();expect(after!.y).toBe(before!.y);
+  const rect=await options.boundingBox();expect(rect!.x).toBeGreaterThanOrEqual(0);expect(rect!.y).toBeGreaterThanOrEqual(0);expect(rect!.x+rect!.width).toBeLessThanOrEqual(viewport.width);
+  await expect(options.getByRole('link',{name:'身份与个人设置'})).toBeFocused();
+  await page.screenshot({path:path.join(fixture.out,`UC04-account-open-${viewport.width}.png`),fullPage:false});
+  await page.keyboard.press('Escape');await expect(options).toHaveCount(0);await expect(account).toBeFocused();
+  await account.click();await page.locator('.sidebar-label').click();await expect(options).toHaveCount(0);
+  await account.focus();await page.keyboard.press('Enter');await expect(options).toBeVisible();await page.keyboard.press('Tab');await expect(options.getByRole('button',{name:'退出登录'})).toBeFocused();await page.keyboard.press('Escape');
+  await page.getByRole('button',{name:'切换项目',exact:true}).click();await expect(page.getByRole('region',{name:'选择项目'})).toBeVisible();await page.keyboard.press('Escape');await expect(page.getByRole('button',{name:'切换项目',exact:true})).toBeFocused();
+  if(viewport.width<720) await page.getByRole('button',{name:'关闭导航',exact:true}).click({position:{x:viewport.width-10,y:100}});
+  await page.goto(fixture.url+'/#/tasks/browser?project=shared&section=checks&check=visual');
+  await page.getByRole('button',{name:'查看证据 actual.png',exact:true}).click();
+  await expect(page.getByRole('img',{name:'任务验收证据原件'})).toBeVisible();const zoom=page.getByRole('slider',{name:/图片缩放/});await zoom.focus();await page.keyboard.press('ArrowRight');await page.keyboard.press('ArrowRight');await expect(zoom).toHaveValue('150');
+  await page.screenshot({path:path.join(fixture.out,`UC04-evidence-${viewport.width}.png`),fullPage:false});await page.getByRole('button',{name:'关闭证据',exact:true}).click();
+ });
+}

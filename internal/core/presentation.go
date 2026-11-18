@@ -28,9 +28,11 @@ type CheckExecution struct {
 	Reported  bool     `json:"reported"`
 }
 type CheckAccess struct {
-	EffectiveMethod string `json:"effective_method"`
-	CanReview       bool   `json:"can_review"`
-	Reason          string `json:"reason,omitempty"`
+	EvidenceRequired   bool   `json:"evidence_required"`
+	ScreenshotRequired bool   `json:"screenshot_required"`
+	EffectiveMethod    string `json:"effective_method"`
+	CanReview          bool   `json:"can_review"`
+	Reason             string `json:"reason,omitempty"`
 }
 type PendingHumanReview struct {
 	Check  string   `json:"check"`
@@ -54,6 +56,9 @@ func EffectiveCheckMethod(c Check) string {
 func ReviewAccess(n Next, c Check) CheckAccess {
 	a := CheckAccess{EffectiveMethod: EffectiveCheckMethod(c)}
 	t := n.Task
+	if t != nil {
+		a.EvidenceRequired, a.ScreenshotRequired = HumanEvidenceRequirements(*t, c)
+	}
 	if a.EffectiveMethod != "human" || len(c.Command) != 0 {
 		a.Reason = "check requires its declared method"
 	} else if t == nil || t.Status != "open" || t.Step != "verify" || t.Paused || t.Confirmation != nil || t.Candidate == "" || (n.Action != "continue" && n.Action != "repair" && n.Action != "wait_executor") {

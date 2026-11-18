@@ -12,6 +12,7 @@ import {
 import { useResource } from "../resource";
 import { useObjectReader } from "../objectReader";
 import {
+  workPresentation,
   label,
   stamp,
   relativeStamp,
@@ -24,6 +25,7 @@ import {
 } from "../display";
 import LoadState from "../components/LoadState.vue";
 import ActionDialog from "../components/ActionDialog.vue";
+import DirectHumanReview from "../components/DirectHumanReview.vue";
 import ManualReviewDialog from "../components/ManualReviewDialog.vue";
 import MarkdownBody from "../components/MarkdownBody.vue";
 import AppIcon from "../components/AppIcon.vue";
@@ -181,6 +183,9 @@ let openedCheckKey = "", openedLegacyKey = "";
 let timer: ReturnType<typeof setInterval>;
 async function extras() {
   const id = props.id;
+  if(remoteProject.value && n.value?.task?.candidate) {
+    try {const objects=await api('/api/review-evidence?'+params({id}));if(id===props.id) artifactNames.value=Object.fromEntries(objects.map((o:any)=>[o.id,o.filename]));}catch{/* Evidence itself still reports read errors. */}
+  }
   if (!basis.value && !basisLoading.value) {
     basisLoading.value = true;
     try {
@@ -234,8 +239,8 @@ async function load(quiet = false) {
   if (remoteProject.value && artifact.value?.ref) {
     const ref = artifact.value.ref;
     try {
-      const metadata = await api("/api/artifact-status?" + params({ task: id, ref }));
-      if (artifact.value?.ref === ref && (metadata.task_id !== id || metadata.status !== "finalized" || metadata.sha256 !== artifact.value.sha256)) {
+      const metadata = await api("/api/artifact-status?" + params({ task: artifactTask.value, ref }));
+      if (artifact.value?.ref === ref && (metadata.task_id !== artifactTask.value || metadata.status !== "finalized" || metadata.sha256 !== artifact.value.sha256)) {
         attachments.clear(); artifactError.value = "证据原件已清理或不可用。";
       }
     } catch (e) {
@@ -342,25 +347,9 @@ const primaryKind = computed(() => {
   return "";
 });
 const primaryLabels: Record<string, string> = { blocked_review: "处理受阻的人工检查", history: "核对历史资料", restore: "确认核对并准备恢复", prepare_integration: "准备整体验收", root_review: "记录根因复核", review: "进行人工验收", resume: "恢复任务", basis: "查看待核实规范", claim: "接手当前工作", checks: "查看验收与运行检查", submit: "填写实施结果", execution: "查看当前执行", delivery: "查看交付结果" };
-const bannerTitle = computed(() => {
-  if (n.value?.summary?.needs_history_review) return "历史工作待核对";
-  if (t.value?.status === "completed") return t.value.historical ? "历史工作已完成，当前未复验" : "已达到本次交付目标";
-  if (t.value?.status === "cancelled") return "任务已取消，保留已有结果";
-  if (n.value?.next_action === "wait_children") return "等待必需子任务";
-  if (n.value?.next_action === "wait_integration") return "子任务已完成，等待整体验收";
-  if (n.value?.summary?.requires_task_decision) return "当前版本需要决定";
-  if (t.value?.paused || currentBlocker.value) return currentBlocker.value ? "工作受到阻塞" : "任务已暂缓";
-  if (availableHumanChecks.value.length) return mayJudge.value ? "还有人工验收需要处理" : "等待具备验收权限的人员";
-  if (n.value?.next_action === "repair") return "验收未通过，需要修复";
-  if (n.value?.summary?.checks?.running) return "当前检查正在执行";
-  if (n.value?.board === "active") return "等待当前执行者提交结果";
-  if (t.value?.current_step === "verify" && t.value?.candidate) return "候选已提交，等待检查";
-  if (runnable.value) return "工作已就绪，等待接手";
-  return "当前工作状态";
-});
-const bannerSummary = computed(() => t.value?.status === "open"
-  ? checkStatusSummary(n.value?.summary?.checks)
-  : label(n.value?.summary?.last_result));
+const presentation = computed(() => workPresentation(n.value?.summary));
+const bannerTitle = computed(() => presentation.value.title);
+const bannerSummary = computed(() => presentation.value.latest || (t.value?.historical ? '历史成果尚未在当前版本复验' : '最近有效成果尚未回报'));
 const bannerReasons = computed(() => (n.value?.blocking_reasons || []).filter((reason: string) =>
   reason !== currentBlocker.value?.reason && reason !== t.value?.confirmation?.reason && (t.value?.definition?.type !== "epic" || (!reason.startsWith("required child ") && reason !== "required leaves completed; parent integration remains to be accepted"))));
 const reviewState = computed(() => reviewNoteStatus(n.value?.summary));
@@ -425,7 +414,7 @@ const work = computed(() => {
   const approvals = (task?.approvals || []).map((approval: any, index: number) => ({
     id: "approval:" + index, title: ({ plan: "方案决定", revision: "修订决定", delivery: "交付决定", restore: "历史恢复核对" } as Record<string, string>)[approval.kind] || "版本决定",
     status: approval.decision === "approve" ? "已批准" : approval.decision === "adjust" ? "要求调整" : "已否决",
-    actor: approval.actor, summary: approval.reason, at: approval.at, outputs: [], outcome: true,
+    actor: approval.actor, summary: approval.reason, at: approval.at, outputs: [], outcome: false,
   }));
   const eventNames: Record<string, string> = {
     work_progress: "交付物进展", paused: "任务暂缓", resumed: "任务恢复", review_resumed: "人工检查恢复",
@@ -444,7 +433,8 @@ const work = computed(() => {
         id: "event:" + event.id, title, status: event.status ? label(event.status) : "",
         actor: event.actor || attempt?.executor, summary: event.summary || (event.kind === "confirmation" ? "历史决定不代表当前授权。" : event.kind === "cancelled" ? task?.result : ""),
         at: event.at, outputs: event.artifacts || [], check: event.check, next: event.next,
-        historical: event.historical, outcome: ["submitted", "work_progress"].includes(event.kind) && !event.historical,
+        prior: event.kind === "submitted" && attempt && (attempt.candidate_version !== task.candidate || attempt.definition_revision !== task.definition.definition_revision || attempt.plan_revision !== task.plan.revision),
+        historical: event.historical, outcome: ["submitted", "work_progress"].includes(event.kind) && !event.historical && event.evidence_changed !== false && (event.check || ["execute","integrate"].includes(attempt?.unit) || event.kind === "work_progress"),
       };
     });
   if (task?.completed && (task.status === "completed" || (task.status === "cancelled" && !activities.some((item: any) => item.title === "任务取消")))) {
@@ -697,12 +687,18 @@ async function readReceipt() {
 }
 let artifactTrigger: HTMLElement | null = null;
 const artifactClose = ref<HTMLButtonElement>();
+const artifactTask = ref(props.id), imageZoom = ref(100);
+const artifactNames = ref<Record<string,string>>({});
+function artifactName(ref:string) { return artifactNames.value[ref] || (remoteProject.value ? '附件原件' : ref.split('/').pop() || ref); }
+const report = computed(() => { try { const value=JSON.parse(artifact.value?.body || '');return value && typeof value==='object' ? value : null; } catch {return null;} });
+function readableValue(value:any) {return typeof value==='string'?value:JSON.stringify(value,null,2);}
+
 function closeArtifact() {
   attachments.clear();
   artifactTrigger?.focus({ preventScroll: true });
 }
-async function openArtifact(ref: string) {
-  const id = props.id;
+async function openArtifact(ref: string, sourceTask = props.id) {
+  const id = sourceTask;artifactTask.value=id;imageZoom.value=100;
   artifactTrigger = document.activeElement as HTMLElement;
   const pending = attachments.read(async () => {
     if (remoteProject.value) return api("/api/artifact?" + params({ task: id, ref }));
@@ -887,6 +883,7 @@ function checkReason(c: any) {
           <p v-if="reviewState" class="review-note-status">{{ reviewState }}</p>
           <p v-if="!n.summary.needs_history_review">{{ bannerSummary }}</p>
           <p v-if="n.health?.no_progress && !n.summary.needs_history_review" class="blocked-reason">{{ n.health.healthy_long ? '超过设定时间没有新证据；已声明的长阶段仍在期限内，未自动停止。' : '超过设定时间没有新证据，请核对执行者、阶段和下一动作。' }}</p>
+          <p v-if="presentation.current && !presentation.reason">当前工作：{{ presentation.current }}</p>
           <p v-if="n.health?.stage && n.summary.running">执行者上报：{{ label(n.health.stage) }}<template v-if="n.health.expected_until"> · 声明期限 {{ stamp(n.health.expected_until) }}</template></p>
           <p v-if="t.status === 'open' && currentBlocker?.reason" class="blocked-reason">
             {{ blockerText(currentBlocker.reason) }}
@@ -898,7 +895,7 @@ function checkReason(c: any) {
           >
             {{ blockerText(b) }}
           </p>
-          <p v-if="t.status === 'open' && !n.summary.requires_task_decision && !n.summary.needs_history_review" class="next-action"><strong>下一步</strong> {{ !mayJudge && availableHumanChecks.length ? '等待有验收权限的人员处理当前检查' : nextAction(n.summary) }}</p>
+          <p v-if="t.status === 'open' && !n.summary.requires_task_decision && !n.summary.needs_history_review" class="next-action"><strong>下一步</strong> {{ presentation.role }} · {{ !mayJudge && availableHumanChecks.length ? '等待有验收权限的人员处理当前检查' : presentation.next }}</p>
           <p v-if="t.status === 'open' && currentBlocker">
             解除条件：{{
               currentBlocker.recovery || "尚未记录，请核实阻塞原因"
@@ -907,18 +904,20 @@ function checkReason(c: any) {
           <p v-if="activeFailure">同单元失败 {{ activeFailure.count }} 次 · {{ activeFailure.state === 'review_required' ? '需要限定根因复核' : activeFailure.state === 'blocked' ? '复核后仍未收敛，已停止' : activeFailure.state === 'reviewed' ? '复核已记录，等待恢复' : activeFailure.state }}<template v-if="activeFailure.failure_class"> · 类别 {{ activeFailure.failure_class }}</template></p>
           <small v-if="t.historical && t.status !== 'completed'">历史记录 · 当前未复验</small>
           <div v-if="!n.summary.requires_task_decision" class="actions">
-            <button v-if="primaryKind" class="primary" :disabled="busy" @click="primaryAction">{{ primaryLabels[primaryKind] }}</button>
+            <button v-if="primaryKind && !(primaryKind === 'review' && availableHumanChecks.length === 1 && !n.check_access[availableHumanChecks[0].id].evidence_required)" class="primary" :disabled="busy" @click="primaryAction">{{ primaryLabels[primaryKind] }}</button>
             <button v-if="n.summary.needs_history_review && primaryKind !== 'history'" @click="selectSection('execution')">核对历史资料</button>
             <button v-if="showReviewEntry && !n.summary.requires_task_decision && !n.summary.needs_history_review && (!['review', 'blocked_review'].includes(primaryKind) || !!reviewState)" :disabled="busy" @click="openTaskReview">{{ reviewState || pendingReviewCheck !== null ? '查看人工意见与记录' : '记录人工意见' }}</button>
           </div>
           <div v-if="unownedRunning && !remoteProject" class="lost-claim-help"><p>当前标签页没有这次接手的凭据。若原执行确已停止，可以确认后恢复任务。</p><button @click="start('resume', '恢复无法继续的接手')">恢复无法继续的接手</button></div>
           </div>
         </div>
-        <EpicOverview v-if="t.definition.type === 'epic'" :key="id" :id="id" @open-artifact="openArtifact" />
+        <DirectHumanReview v-if="mayJudge && availableHumanChecks.length === 1 && !n.check_access[availableHumanChecks[0].id].evidence_required" :key="id + ':' + availableHumanChecks[0].id" :snapshot="n" :check="availableHumanChecks[0]" @saved="reviewSaved" @advanced="manualCheck = availableHumanChecks[0].id" />
+        <EpicOverview v-if="t.definition.type === 'epic'" :key="id" :id="id" @open-artifact="(ref, task) => openArtifact(ref, task)" />
         <section v-if="t.definition.type !== 'epic'" class="content-section task-progress">
           <div class="section-heading"><h2>工作进度</h2><button class="inline-link" @click="selectSection('execution')">查看执行记录</button></div>
           <article v-for="outcome in workOutcomes.slice(0, 3)" :key="outcome.id" class="timeline-item">
             <div><h3>{{ outcome.title }}<template v-if="outcome.status"> · {{ outcome.status }}</template></h3>
+              <small v-if="outcome.prior">先前候选或修订结果，当前需复验</small>
               <p v-if="outcome.summary">{{ blockerText(outcome.summary) }}</p>
               <time>{{ stamp(outcome.at) }}</time>
             </div>
@@ -1190,11 +1189,12 @@ function checkReason(c: any) {
               <section v-if="n.current_checks[c.id]" class="evidence">
                 <h4>当前版本的有效证据 · {{ label(n.current_checks[c.id].result) }}</h4>
                 <p>{{ stamp(n.current_checks[c.id].at) }} · {{ n.current_checks[c.id].executor || n.current_checks[c.id].source }}</p>
+                <p class="secondary">{{ n.current_checks[c.id].reused_from ? "复用已有证据，已按当前定义核对" : "本次检查记录" }} · {{ n.current_checks[c.id].evidence_mode === "direct_observation" ? "具名人工直接观察" : n.current_checks[c.id].evidence_mode === "observation_with_attachments" ? "人工观察与附件" : "" }}</p>
                 <p class="secondary">候选 {{ n.current_checks[c.id].candidate?.slice(0, 12) }} · 定义 {{ n.current_checks[c.id].acceptance_revision }} / 计划 {{ n.current_checks[c.id].plan_revision }}</p>
                 <p v-if="n.current_runs[c.id]">{{ blockerText(n.current_checks[c.id].reason) }}</p>
                 <div class="actions">
-                  <button v-for="ref in n.current_checks[c.id].artifacts" :key="ref" @click="openArtifact(ref)">查看证据 {{ ref }}</button>
-                  <button v-for="ref in n.current_checks[c.id].diagnostic_artifacts" :key="ref" @click="openArtifact(ref)">查看诊断材料 {{ ref }}</button>
+                  <button v-for="ref in n.current_checks[c.id].artifacts" :key="ref" @click="openArtifact(ref)">查看证据 {{ artifactName(ref) }}</button>
+                  <button v-for="ref in n.current_checks[c.id].diagnostic_artifacts" :key="ref" @click="openArtifact(ref)">查看诊断材料 {{ artifactName(ref) }}</button>
                 </div>
               </section>
               <details v-if="historyForCheck(c.id).length" class="source-detail" :open="!n.current_checks[c.id] && route.query.get('check') === c.id">
@@ -1208,6 +1208,7 @@ function checkReason(c: any) {
                 </section>
               </details>
               <p v-if="checkReason(c)" class="secondary">{{ checkReason(c) }}</p>
+              <DirectHumanReview v-if="mayJudge && n.check_access?.[c.id]?.can_review && !n.check_access[c.id].evidence_required" :key="id + ':' + c.id" :snapshot="n" :check="c" @saved="reviewSaved" @advanced="manualCheck = c.id" />
               <div class="actions">
                 <button v-if="mayJudge && n.check_access?.[c.id]?.can_review" class="primary" :disabled="busy" @click="manualCheck = c.id">进行人工验收</button>
                 <button v-else-if="mayJudge && t.status === 'open' && n.check_access?.[c.id]?.effective_method === 'human' && checkState(c.id) !== 'pass'" :disabled="busy" @click="manualCheck = c.id">记录人工意见</button>
@@ -1232,7 +1233,7 @@ function checkReason(c: any) {
                 <time>{{ stamp(item.at) }}</time>
                 <div v-if="item.outputs.length || item.check" class="actions">
                   <a v-if="item.check" :href="taskHref(id, 'checks', item.check)">查看对应检查</a>
-                  <button v-for="ref in item.outputs" :key="ref" @click="openArtifact(ref)">{{ item.historical && !remoteProject ? '读取现存引用' : '查看产物' }} {{ ref }}</button>
+                  <button v-for="ref in item.outputs" :key="ref" @click="openArtifact(ref)">{{ item.historical && !remoteProject ? '读取现存引用' : '查看产物' }} {{ artifactName(ref) }}</button>
                 </div>
               </div>
             </article>
@@ -1364,14 +1365,19 @@ function checkReason(c: any) {
         :error="artifactError"
         @retry="attachments.retry"
       />
-      <p v-if="artifact">{{ artifact.ref }}</p>
+      <p v-if="artifact">{{ artifact.filename || artifactName(artifact.ref) }}</p>
+      <details v-if="artifact"><summary>来源与技术信息</summary><p>所属任务 {{ artifactTask }} · {{ artifact.source || '任务记录' }}</p><p>候选 {{ artifact.candidate || report?.candidate || '以关联记录为准' }}</p><code>{{ artifact.ref }}</code><p>{{ artifact.sha256 }}</p></details>
       <a v-if="artifact?.download" :href="artifact.download" download>下载原件</a>
+      <label v-if="artifact?.image">图片缩放 {{ imageZoom }}%<input v-model="imageZoom" type="range" min="50" max="300" step="25" /></label>
+      <a v-if="artifact?.image" :href="artifact.image" target="_blank" rel="noopener">打开原图</a>
       <img
         v-if="artifact?.image"
+        :style="{width:imageZoom+'%',maxWidth:'none'}"
         :src="artifact.image"
         alt="任务验收证据原件"
         class="artifact-image"
       />
+      <section v-else-if="report" aria-label="验收报告摘要"><h3>报告结论与观察</h3><p v-if="report.summary || report.result">{{ readableValue(report.summary || report.result) }}</p><p v-if="report.observations" class="fact-full">{{ readableValue(report.observations) }}</p><p v-if="report.findings">{{ readableValue(report.findings) }}</p><p v-if="report.covers">检查范围：{{ readableValue(report.covers) }}</p><p>适用候选：{{ report.candidate || report.candidate_id || artifact.candidate || '报告未记录，以关联验收记录为准' }}</p><p>执行来源：{{ report.source || artifact.source || '报告未记录' }}</p><p v-if="report.artifacts?.length">报告引用：{{ readableValue(report.artifacts) }}。仅有报告引用不等于原图已附；请从检查关联附件打开原件。</p><details><summary>查看报告原文</summary><pre>{{ JSON.stringify(report,null,2) }}</pre></details></section>
       <pre v-else-if="artifact">{{ artifact.body || "（空文件）" }}</pre>
     </aside>
     <ActionDialog

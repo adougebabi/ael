@@ -5,6 +5,7 @@ import {
   type APIRequestContext,
 } from "@playwright/test";
 import fs from "node:fs";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 
 const manifestPath = process.env.AEL_UI_FIXTURE;
@@ -22,7 +23,7 @@ if (
   );
 const projects = fixture.projects;
 const expectedVersion =
-  fixture.version || process.env.AEL_EXPECT_VERSION || "0.1.6";
+  process.env.AEL_EXPECT_VERSION || fixture.version || "0.1.6";
 const output = process.env.AEL_UI_OUT || "/tmp/ael-ui-browser";
 fs.mkdirSync(output, { recursive: true });
 function ensureIsolatedOutput() {
@@ -2422,4 +2423,37 @@ test("TD-05 任务读取错误保留页面与重试入口，断线明确标记�
   unavailable = false;
   await error.getByRole("button", { name: "重试" }).click();
   await expect(error).toHaveCount(0);
+});
+
+
+test("UC03 当前上报在列表和详情一致，不冒充成果",async({page,request})=>{
+ const c=await connect(request,"single"),id="uc03-current-"+Date.now();
+ const serviceInfo=await c.get("/api/info");if(process.env.AEL_EXPECT_BUILD) expect(serviceInfo.service_build).toBe(process.env.AEL_EXPECT_BUILD);
+ await c.post('/api/tasks',{id,title:'UC03 隔离当前工作',type:'bug',goal:'verified',acceptance:['实际结果']});
+ const {value:claim}=await c.post('/api/action',{action:'claim',id,executor:'uc03-agent'});
+ const file=path.join(fixture.out,'uc03-progress.json');fs.writeFileSync(file,JSON.stringify({summary:'已复现窄屏菜单遮挡，正在修复定位',next:'修复后运行窄屏交互验证',stage:'execute',artifacts:[]}));
+ execFileSync(process.env.AEL_UI_BINARY || path.join(projects.single.root,'ael'),['progress','--project',projects.single.root,'--task',id,'--attempt',claim.attempt.id,'--token',claim.attempt.token,'--file',file,'--json'],{env:{...process.env,AEL_DATA_DIR:projects.single.runtime}});
+ await goto(page,'single','/tasks?board=all&q='+id);
+ const row=page.locator('.task-row').filter({hasText:'UC03 隔离当前工作'});
+ await expect(row).toContainText('已复现窄屏菜单遮挡，正在修复定位');
+ await expect(row).toContainText('最近有效成果尚未回报');
+ const title=await row.locator('.status').innerText();
+ await row.getByRole('link',{name:'UC03 隔离当前工作',exact:true}).click();
+ await expect(page.locator('.result-banner h2')).toHaveText(title);
+ await expect(page.locator('.result-banner')).toContainText('修复后运行窄屏交互验证');
+ await expect(page.locator('.task-progress')).toContainText('尚无已提交工程成果');
+ await page.screenshot({path:path.join(output,'UC03-current-work.png'),fullPage:true});
+});
+
+test("UC03 JSON 证据先展示结论与观察，原文按需展开",async({page,request})=>{
+ ensureIsolatedOutput();const c=await connect(request,'single'),id='uc03-report-'+Date.now();
+ fs.writeFileSync(path.join(projects.single.root,'app/readable-report.json'),JSON.stringify({summary:'隔离报告：菜单和验收入口可用',observations:['键盘可关闭','内容未被遮挡'],source:'isolated-command',covers:['可读报告']}));
+ await c.post('/api/tasks',{id,title:'UC03 可读报告',type:'bug',goal:'verified',acceptance:['可读报告'],checks:[{id:'report',kind:'functional',method:'command',command:['true'],required:true,covers:['可读报告'],artifacts:['app/readable-report.json']}]});
+ await step(c,id);await step(c,id,['app/readable-report.json']);await c.post('/api/action',{action:'verify',id,unit:'report'});
+ await goto(page,'single','/tasks/'+id+'?section=checks&check=report');
+ await page.getByRole('button',{name:'查看证据 readable-report.json',exact:true}).click();
+ const report=page.getByRole('region',{name:'验收报告摘要'});
+ await expect(report).toContainText('隔离报告：菜单和验收入口可用');await expect(report).toContainText('键盘可关闭');
+ await expect(report.locator('pre')).toBeHidden();await report.getByText('查看报告原文',{exact:true}).click();await expect(report.locator('pre')).toBeVisible();
+ await page.screenshot({path:path.join(output,'UC03-readable-report.png'),fullPage:true});
 });

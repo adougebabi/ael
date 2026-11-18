@@ -164,7 +164,7 @@ for(const [file,padding] of [[BASELINE,24],[ACTUAL,12]]) {await page.setContent(
 
     def prepare(task):
         (projects['a'] / 'app.txt').write_text('original\n')
-        definition = {'id': task, 'title': 'Review ' + task, 'type': 'bug', 'goal': 'verified', 'scope': ['app.txt'], 'acceptance': ['fixed'], 'knowledge': ['source:spec/rules.md'], 'checks': [{'id': 'visual', 'kind': 'ui', 'method': 'human', 'covers': ['fixed'], 'required': True}, {'id': 'unit', 'kind': 'functional', 'method': 'command', 'command': command, 'covers': ['fixed'], 'required': True}]}
+        definition = {'id': task, 'title': 'Review ' + task, 'original_request': '' if task.startswith('direct') else '必须提供真实截图', 'type': 'bug', 'goal': 'verified', 'scope': ['app.txt'], 'acceptance': ['fixed'], 'knowledge': ['source:spec/rules.md'], 'checks': [{'id': 'visual', 'kind': 'ui', 'method': 'human', 'covers': ['fixed'], 'required': True}, {'id': 'unit', 'kind': 'functional', 'method': 'command', 'command': command, 'covers': ['fixed'], 'required': True}]}
         cli('a', 'task', 'create', '--file', private('definition-' + task, definition), '--operation-id', 'create-' + task, '--idempotency-key', 'create-' + task)
         work = claim('a', task)
         while work['state']['current_step'] in ('define', 'analysis'):
@@ -182,7 +182,7 @@ for(const [file,padding] of [[BASELINE,24],[ACTUAL,12]]) {await page.setContent(
         actual = upload_context('a', task, out / 'actual.png', 'actual-host-render; external Chromium; viewport=640x480; page=/fixture')
         state = cli('a', 'task', 'show', '--task', task)
         tasks[task] = {'baseline': baseline, 'actual': actual, 'candidate': state['task']['candidate'], 'revision': state['definition_revision'], 'plan_revision': state['plan_revision']}
-    for task in ('api-pass', 'api-fail', 'api-blocked', 'opinion', 'browser', 'stale', 'missing', 'postchange', 'slow'):
+    for task in ('api-pass', 'api-fail', 'api-blocked', 'opinion', 'browser', 'stale', 'missing', 'postchange', 'slow', 'direct', 'direct-fail', 'direct-blocked', 'direct-retry'):
         prepare(task)
 
     api('POST', '/api/v1/projects/shared/tasks', {'definition': {'id': 'before-candidate', 'title': 'Review before candidate', 'type': 'bug', 'goal': 'verified', 'acceptance': ['Retain the human observation']}, 'expected_revision': 'absent', 'operation_id': 'before-candidate', 'idempotency_key': 'before-candidate'})
@@ -227,7 +227,10 @@ for(const [file,padding] of [[BASELINE,24],[ACTUAL,12]]) {await page.setContent(
     with sqlite3.connect(database) as connection:
         connection.execute("UPDATE artifact_objects SET status='purged' WHERE id=?", (missing['baseline'],))
     object_file = out / 'server-data/attachments' / hashlib.sha256(b'shared').hexdigest()[:32] / 'objects' / missing['actual']
-    object_file.unlink()
+    # Shared bytes can back several logical artifacts. Corrupt only this
+    # disposable logical reference, leaving other candidates' shared originals.
+    with sqlite3.connect(database) as connection:
+        connection.execute("UPDATE artifact_objects SET sha256=? WHERE id=?", ("0" * 64, missing['actual']))
     nonce = os.urandom(20).hex()
 
     class Control(http.server.BaseHTTPRequestHandler):

@@ -110,11 +110,12 @@ func remoteCommand(cmd string, a args, binding remote.Binding) (any, error) {
 		"finding show":       {"finding"},
 		"doctor":             {}, "task list": {"parent", "limit", "offset", "days", "query", "board"},
 		"task show": {"task"}, "task plan": {"task"}, "next": {"task"}, "task tree": {"task"}, "task progress": {"task"},
-		"task integrate":      {"task", "context", "impact-artifact", "expected-revision", "operation-id", "idempotency-key"},
-		"task review-failure": {"task", "file", "expected-revision", "operation-id", "idempotency-key"},
-		"operation show":      {"idempotency-key"},
-		"artifact upload":     {"context", "lease-file", "task", "file", "mime", "source", "attempt", "candidate", "operation-id", "idempotency-key", "expected-revision"},
-		"artifact list":       {"task"}, "artifact show": {"artifact"}, "artifact download": {"artifact", "out"},
+		"task integrate":        {"task", "context", "impact-artifact", "expected-revision", "operation-id", "idempotency-key"},
+		"task reconcile-import": {"task", "context", "reason", "start", "expected-revision", "operation-id", "idempotency-key"},
+		"task review-failure":   {"task", "file", "expected-revision", "operation-id", "idempotency-key"},
+		"operation show":        {"idempotency-key"},
+		"artifact upload":       {"context", "lease-file", "task", "file", "mime", "source", "attempt", "candidate", "operation-id", "idempotency-key", "expected-revision"},
+		"artifact list":         {"task"}, "artifact show": {"artifact"}, "artifact download": {"artifact", "out"},
 		"artifact cancel":        {"upload", "operation-id", "idempotency-key"},
 		"artifact upload-status": {"idempotency-key"},
 		"artifact reference":     {"artifact", "task", "purpose", "candidate", "expected-revision", "operation-id", "idempotency-key"},
@@ -261,7 +262,7 @@ func remoteCommand(cmd string, a args, binding remote.Binding) (any, error) {
 		method = http.MethodPost
 		path = "/tasks/" + url.PathEscape(id) + "/review-failure"
 		payload = map[string]any{"review": review, "expected_revision": a.get("expected-revision", ""), "operation_id": a.get("operation-id", ""), "idempotency_key": a.get("idempotency-key", "")}
-	case "task create", "task edit", "task pause", "task cancel", "resume", "task link":
+	case "task create", "task edit", "task pause", "task cancel", "resume", "task link", "task reconcile-import":
 		method = http.MethodPost
 		expected := a.get("expected-revision", "")
 		if cmd == "task create" && expected == "" {
@@ -288,6 +289,9 @@ func remoteCommand(cmd string, a args, binding remote.Binding) (any, error) {
 		case "task pause", "task cancel":
 			path = "/tasks/" + url.PathEscape(id) + "/" + strings.TrimPrefix(cmd, "task ")
 			mutation["reason"] = a.get("reason", "")
+		case "task reconcile-import":
+			path = "/tasks/" + url.PathEscape(id) + "/reconcile-import"
+			mutation["context_id"], mutation["reason"], mutation["start"] = a.get("context", ""), a.get("reason", ""), a.get("start", "")
 		case "resume":
 			path = "/tasks/" + url.PathEscape(id) + "/resume"
 			mutation["return_to"], mutation["ack_stopped"] = a.get("return-to", ""), a.has("ack-stopped")
@@ -306,6 +310,17 @@ func remoteCommand(cmd string, a args, binding remote.Binding) (any, error) {
 	}
 	result, err := remote.Call(config, project, binding, method, path, payload, nil)
 	if err != nil {
+		if cmd == "task reconcile-import" {
+			for code, detail := range map[string]string{
+				"IMPORT_SOURCE_UNKNOWN":   "原归档缺少可信的暂停/未决决定来源。请 reviewer 在任务页核对当前恢复范围；可审阅一批明确范围后使用准确版本确认，勿逐项盲点恢复。",
+				"IMPORT_PAUSE_PROTECTED":  "存在人工暂停、未决决定、失败或其他执行责任。读取 task show 的 blocker/confirmation/attempt，按该具体事项处理；其他责任使用 runner recover。",
+				"IMPORT_CONTEXT_REQUIRED": "先核对当前工程候选和现行依据，publish/show 当前身份、准确任务版本的 context，并填写核对结果与继续起点。",
+			} {
+				if strings.Contains(err.Error(), code) {
+					return nil, core.Error(code, detail)
+				}
+			}
+		}
 		if method == http.MethodPost && strings.Contains(err.Error(), "REMOTE_UNAVAILABLE") {
 			return nil, core.Error("REMOTE_UNAVAILABLE", "outcome may be unknown; query operation show with the same --idempotency-key before retrying")
 		}
@@ -319,6 +334,14 @@ func remoteCommand(cmd string, a args, binding remote.Binding) (any, error) {
 				}
 			}
 		}
+	}
+	if cmd == "task reconcile-import" {
+		next, nextErr := remote.Call(config, project, binding, http.MethodGet, "/tasks/"+url.PathEscape(id)+"/next", nil, nil)
+		if nextErr != nil {
+			return nil, nextErr
+		}
+		result["next"] = next
+		result["conclusion"] = "历史核对已记录；导入专属暂停已解除，按 next_action 继续领取。"
 	}
 	return remoteOutput(result), nil
 }

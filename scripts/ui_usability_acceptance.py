@@ -42,7 +42,10 @@ try:
                     if r.status==200:break
             except OSError:time.sleep(.1)
         else:raise RuntimeError(f'{name} server did not become ready')
-    env=dict(os.environ,AEL_UI_FIXTURE=str(manifest_path),AEL_UI_OUT=str(out/'browser'))
+    env=dict(os.environ,AEL_UI_FIXTURE=str(manifest_path),AEL_UI_OUT=str(out/'browser'),AEL_UI_BINARY=str(Path(args.binary).resolve()) if args.binary else str(Path(manifest["projects"]["single"]["root"])/"ael"))
+    if args.binary:
+        actual=json.loads(subprocess.check_output([str(Path(args.binary).resolve()),'version','--json'],text=True))
+        env.update(AEL_EXPECT_VERSION=actual['version'],AEL_EXPECT_BUILD=actual['build'])
     command=['npm','--prefix',str(repo/'web'),'run','test:usability','--']
     if args.grep:command+=['--grep',args.grep]
     p=subprocess.run(command,env=env,cwd=repo)

@@ -72,6 +72,7 @@ type artifactUpload struct {
 }
 
 type artifactObject struct {
+	ContentID string `json:"-"`
 	ID        string `json:"id"`
 	ProjectID string `json:"project_id"`
 	TaskID    string `json:"task_id"`
@@ -129,6 +130,8 @@ CREATE TABLE IF NOT EXISTS artifact_objects(id TEXT PRIMARY KEY,project_id TEXT 
 CREATE TABLE IF NOT EXISTS artifact_references(artifact_id TEXT NOT NULL,task_id TEXT NOT NULL,purpose TEXT NOT NULL,candidate TEXT NOT NULL,actor TEXT NOT NULL,actor_name TEXT NOT NULL,operation_id TEXT NOT NULL,idempotency_key TEXT NOT NULL,request_hash TEXT NOT NULL,created TEXT NOT NULL,PRIMARY KEY(actor,idempotency_key));
 CREATE TABLE IF NOT EXISTS portable_context_sources(context_id TEXT NOT NULL,id TEXT NOT NULL,path TEXT NOT NULL,artifact_id TEXT NOT NULL,sha256 TEXT NOT NULL,status TEXT NOT NULL,kind TEXT NOT NULL,reason TEXT NOT NULL,PRIMARY KEY(context_id,id));
 CREATE TABLE IF NOT EXISTS remote_artifact_leases(upload_id TEXT PRIMARY KEY,runner_id TEXT NOT NULL,attempt_id TEXT NOT NULL,fence INTEGER NOT NULL,token_hash TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS artifact_content(artifact_id TEXT PRIMARY KEY,object_id TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS artifact_content_object ON artifact_content(object_id);
 CREATE TABLE IF NOT EXISTS artifact_settings(key TEXT PRIMARY KEY,value INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS artifact_upload_state ON artifact_uploads(status);`)
 	return err
@@ -182,11 +185,11 @@ const uploadColumns = "id,artifact_id,project_id,task_id,attempt_id,candidate,fi
 
 func scanArtifact(row artifactScanner) (artifactObject, error) {
 	var item artifactObject
-	err := row.Scan(&item.ID, &item.ProjectID, &item.TaskID, &item.AttemptID, &item.Candidate, &item.Filename, &item.MIME, &item.Size, &item.SHA256, &item.Source, &item.Uploader, &item.Created, &item.Status)
+	err := row.Scan(&item.ID, &item.ProjectID, &item.TaskID, &item.AttemptID, &item.Candidate, &item.Filename, &item.MIME, &item.Size, &item.SHA256, &item.Source, &item.Uploader, &item.Created, &item.Status, &item.ContentID)
 	return item, err
 }
 
-const artifactColumns = "id,project_id,task_id,attempt_id,candidate,filename,mime,size,sha256,source,uploader,created,status"
+const artifactBaseColumns = "id,project_id,task_id,attempt_id,candidate,filename,mime,size,sha256,source,uploader,created,status"
 
 func (a *artifactStore) uploadPath(id string) (string, error) {
 	if !standaloneID.MatchString(id) {
@@ -201,6 +204,8 @@ func (a *artifactStore) objectPath(id string) (string, error) {
 	}
 	return store.SafePath(a.objects, id)
 }
+
+const artifactColumns = artifactBaseColumns + ",COALESCE((SELECT object_id FROM artifact_content WHERE artifact_id=artifact_objects.id),id)"
 
 func verifyImportUploadState(tx *store.Tx, upload artifactUpload) error {
 	var exists int
@@ -369,20 +374,39 @@ func (a *artifactStore) begin(principal standalonePrincipal, in artifactStartInp
 				return errors.New("ATTEMPT_NOT_FOUND")
 			}
 		}
+		shared, err := a.reusableContent(tx, in.SHA256, in.Size, in.MIME)
+		if err != nil {
+			return err
+		}
+		requested := in.Size
+		if shared != "" {
+			requested = 0
+		}
 		stats, err := a.usage(tx)
 		if err != nil {
 			return err
 		}
-		if stats.Quota > 0 && stats.Used+stats.Reserved+in.Size > stats.Quota {
-			return &artifactQuotaError{Stats: stats, Requested: in.Size}
+		if stats.Quota > 0 && stats.Used+stats.Reserved+requested > stats.Quota {
+			return &artifactQuotaError{Stats: stats, Requested: requested}
 		}
 		created := time.Now().UTC().Format(time.RFC3339Nano)
 		_, err = tx.Exec("INSERT INTO artifact_uploads("+uploadColumns+") VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", uploadID, artifactID, a.project, in.TaskID, in.AttemptID, in.Candidate, in.Filename, in.MIME, in.Size, in.SHA256, in.Source, principal.UserID, principal.Username, in.OperationID, in.IdempotencyKey, hash, "open", 0, created)
+		if err == nil && shared != "" {
+			if _, err = tx.Exec("INSERT INTO artifact_content(artifact_id,object_id) VALUES(?,?)", artifactID, shared); err != nil {
+				return err
+			}
+			if _, err = tx.Exec("UPDATE artifact_uploads SET received=size WHERE id=?", uploadID); err != nil {
+				return err
+			}
+		}
 		if err == nil && runnerUpload {
 			_, err = tx.Exec("INSERT INTO remote_artifact_leases(upload_id,runner_id,attempt_id,fence,token_hash) VALUES(?,?,?,?,?)", uploadID, in.RunnerID, in.AttemptID, in.Fence, store.Hash([]byte(in.LeaseToken)))
 		}
 		if err == nil {
 			result = artifactStartResult{UploadID: uploadID, ArtifactID: artifactID, Status: "open"}
+			if shared != "" {
+				result.Received = in.Size
+			}
 		}
 		return err
 	})
@@ -403,7 +427,7 @@ func (a *artifactStore) begin(principal standalonePrincipal, in artifactStartInp
 		if err = a.verifyUploadLease(tx, principal, upload, artifactLeaseInput{RunnerID: in.RunnerID, LeaseToken: in.LeaseToken, Fence: in.Fence}); err != nil {
 			return err
 		}
-		dest, err := a.objectPath(upload.ArtifactID)
+		dest, err := a.contentPath(tx.Row, upload.ArtifactID)
 		if err != nil {
 			return err
 		}
@@ -442,6 +466,24 @@ func (a *artifactStore) chunk(principal standalonePrincipal, id string, offset i
 			return errors.New("UPLOAD_CONFLICT")
 		}
 		if err = a.verifyUploadLease(tx, principal, upload, auth); err != nil {
+			return err
+		}
+		var shared string
+		if err := tx.Row("SELECT object_id FROM artifact_content WHERE artifact_id=?", upload.ArtifactID).Scan(&shared); err == nil {
+			path, e := a.objectPath(shared)
+			if e != nil {
+				return e
+			}
+			original, e := artifactFileBytes(path, upload.Size, upload.SHA256, upload.MIME)
+			if e != nil {
+				return e
+			}
+			if !bytes.Equal(original[offset:offset+int64(len(data))], data) {
+				return errors.New("UPLOAD_CONFLICT")
+			}
+			result = artifactStartResult{UploadID: upload.ID, ArtifactID: upload.ArtifactID, Received: offset + int64(len(data)), Status: upload.Status}
+			return nil
+		} else if err != sql.ErrNoRows {
 			return err
 		}
 		path, err := a.uploadPath(id)
@@ -549,39 +591,87 @@ func (a *artifactStore) finalize(principal standalonePrincipal, id, operationID,
 		if err != nil {
 			return err
 		}
-		dest, err := a.objectPath(upload.ArtifactID)
+		dest, err := a.contentPath(tx.Row, upload.ArtifactID)
 		if err != nil {
 			return err
 		}
-		tempInfo, tempErr := os.Lstat(temp)
-		destInfo, destErr := os.Lstat(dest)
-		if tempErr == nil && destErr == nil && os.SameFile(tempInfo, destInfo) {
-			if err = os.Remove(temp); err != nil {
-				return err
-			}
-			tempErr = os.ErrNotExist
+		var shared string
+		mapErr := tx.Row("SELECT object_id FROM artifact_content WHERE artifact_id=?", upload.ArtifactID).Scan(&shared)
+		if mapErr != nil && mapErr != sql.ErrNoRows {
+			return mapErr
 		}
-		if tempErr == nil {
-			if tempInfo.Size() != upload.Size {
-				return errors.New("UPLOAD_INCOMPLETE")
+		if shared == "" {
+			// Recover our own durable link before considering another donor.
+			// The target survives DB rollback; remove only its paired stage.
+			ownInfo, ownErr := os.Lstat(dest)
+			if ownErr == nil {
+				if stageInfo, stageErr := os.Lstat(temp); stageErr == nil && os.SameFile(stageInfo, ownInfo) {
+					if err = os.Remove(temp); err != nil {
+						return err
+					}
+				}
+				if _, err = artifactFileBytes(dest, upload.Size, upload.SHA256, upload.MIME); err != nil {
+					return err
+				}
+			} else if !os.IsNotExist(ownErr) {
+				return ownErr
 			}
-			if _, err = artifactFileBytes(temp, upload.Size, upload.SHA256, upload.MIME); err != nil {
+			shared, err = a.reusableContent(tx, upload.SHA256, upload.Size, upload.MIME)
+			if err != nil {
 				return err
 			}
-			if destErr == nil {
-				return errors.New("ARTIFACT_CONFLICT")
+			if shared != "" {
+				if _, err = tx.Exec("INSERT INTO artifact_content(artifact_id,object_id) VALUES(?,?)", upload.ArtifactID, shared); err != nil {
+					return err
+				}
 			}
-			if !os.IsNotExist(destErr) {
-				return destErr
+		}
+		if shared != "" {
+			if info, tempErr := os.Lstat(temp); tempErr == nil {
+				if info.Size() != upload.Size {
+					return errors.New("UPLOAD_INCOMPLETE")
+				}
+				if _, err = artifactFileBytes(temp, upload.Size, upload.SHA256, upload.MIME); err != nil {
+					return err
+				}
+			} else if !os.IsNotExist(tempErr) {
+				return tempErr
 			}
-			if err = os.Link(temp, dest); err != nil {
+			dest, err = a.objectPath(shared)
+			if err != nil {
 				return err
 			}
-			if err = os.Remove(temp); err != nil {
-				return err
+		} else {
+			tempInfo, tempErr := os.Lstat(temp)
+			destInfo, destErr := os.Lstat(dest)
+			if tempErr == nil && destErr == nil && os.SameFile(tempInfo, destInfo) {
+				if err = os.Remove(temp); err != nil {
+					return err
+				}
+				tempErr = os.ErrNotExist
 			}
-		} else if !os.IsNotExist(tempErr) {
-			return tempErr
+			if tempErr == nil {
+				if tempInfo.Size() != upload.Size {
+					return errors.New("UPLOAD_INCOMPLETE")
+				}
+				if _, err = artifactFileBytes(temp, upload.Size, upload.SHA256, upload.MIME); err != nil {
+					return err
+				}
+				if destErr == nil {
+					return errors.New("ARTIFACT_CONFLICT")
+				}
+				if !os.IsNotExist(destErr) {
+					return destErr
+				}
+				if err = os.Link(temp, dest); err != nil {
+					return err
+				}
+				if err = os.Remove(temp); err != nil {
+					return err
+				}
+			} else if !os.IsNotExist(tempErr) {
+				return tempErr
+			}
 		}
 		if _, err = artifactFileBytes(dest, upload.Size, upload.SHA256, upload.MIME); err != nil {
 			return err
@@ -594,13 +684,16 @@ func (a *artifactStore) finalize(principal standalonePrincipal, id, operationID,
 		if err = a.verifyUploadLease(tx, principal, upload, auth); err != nil {
 			return err
 		}
-		result = artifactObject{ID: upload.ArtifactID, ProjectID: upload.ProjectID, TaskID: upload.TaskID, AttemptID: upload.AttemptID, Candidate: upload.Candidate, Filename: upload.Filename, MIME: upload.MIME, Size: upload.Size, SHA256: upload.SHA256, Source: upload.Source, Uploader: upload.Uploader, Created: upload.Created, Status: "finalized"}
-		if _, err = tx.Exec("INSERT INTO artifact_objects("+artifactColumns+") VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", result.ID, result.ProjectID, result.TaskID, result.AttemptID, result.Candidate, result.Filename, result.MIME, result.Size, result.SHA256, result.Source, result.Uploader, result.Created, result.Status); err != nil {
+		result = artifactObject{ContentID: shared, ID: upload.ArtifactID, ProjectID: upload.ProjectID, TaskID: upload.TaskID, AttemptID: upload.AttemptID, Candidate: upload.Candidate, Filename: upload.Filename, MIME: upload.MIME, Size: upload.Size, SHA256: upload.SHA256, Source: upload.Source, Uploader: upload.Uploader, Created: upload.Created, Status: "finalized"}
+		if _, err = tx.Exec("INSERT INTO artifact_objects("+artifactBaseColumns+") VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", result.ID, result.ProjectID, result.TaskID, result.AttemptID, result.Candidate, result.Filename, result.MIME, result.Size, result.SHA256, result.Source, result.Uploader, result.Created, result.Status); err != nil {
 			return err
 		}
 		_, err = tx.Exec("UPDATE artifact_uploads SET status='finalized',received=size WHERE id=?", id)
 		return err
 	})
+	if err == nil {
+		err = a.clearSharedStage(id)
+	}
 	return result, err
 }
 
@@ -612,7 +705,11 @@ func (a *artifactStore) read(item artifactObject) ([]byte, error) {
 	if item.Status != "finalized" {
 		return nil, errors.New("ARTIFACT_PURGED")
 	}
-	path, err := a.objectPath(item.ID)
+	key := item.ContentID
+	if key == "" {
+		key = item.ID
+	}
+	path, err := a.objectPath(key)
 	if err != nil {
 		return nil, err
 	}

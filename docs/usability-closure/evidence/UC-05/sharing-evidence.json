@@ -1,0 +1,20 @@
+{
+  "logical_copies": 2,
+  "content_bytes": 54,
+  "physical_bytes_after": 128,
+  "stats_before": {
+    "quota_bytes": 104857600,
+    "used_bytes": 128,
+    "temporary_bytes": 0,
+    "artifact_bytes": 128,
+    "reserved_bytes": 0
+  },
+  "stats_after": {
+    "quota_bytes": 104857600,
+    "used_bytes": 128,
+    "temporary_bytes": 0,
+    "artifact_bytes": 128,
+    "reserved_bytes": 0
+  },
+  "additional_physical_bytes": 0
+}

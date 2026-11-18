@@ -257,12 +257,10 @@ func validateHumanReview(t Task, check, actor, reason, recovery, result string, 
 	if result != "pass" && result != "fail" && result != "blocked" {
 		return Check{}, Error("INVALID_RESULT", "select pass, fail or blocked")
 	}
-	if strings.TrimSpace(actor) == "" || strings.TrimSpace(reason) == "" || (result != "blocked" && len(refs) == 0) {
-		return Check{}, Error("HUMAN_EVIDENCE_REQUIRED", "actor and observation are required; pass and fail require actual evidence")
+	if strings.TrimSpace(actor) == "" || (result != "pass" && strings.TrimSpace(reason) == "") {
+		return Check{}, Error("HUMAN_EVIDENCE_REQUIRED", "actor is required; fail and blocked require an observation")
 	}
-	if result != "pass" && strings.TrimSpace(recovery) == "" {
-		return Check{}, Error("RECOVERY_REQUIRED", "describe the correction or conditions needed to continue")
-	}
+
 	if expected != nil {
 		if expected.Candidate == "" || expected.DefinitionRevision <= 0 || expected.PlanRevision <= 0 {
 			return Check{}, Error("REVIEW_VERSION_REQUIRED", "refresh the task and review its exact candidate and revisions")
@@ -282,6 +280,10 @@ func validateHumanReview(t Task, check, actor, reason, recovery, result string, 
 	}
 	if EffectiveCheckMethod(c) != "human" {
 		return Check{}, Error("CHECK_METHOD_MISMATCH", "declared check capability cannot be replaced with human review")
+	}
+	required, _ := HumanEvidenceRequirements(t, c)
+	if required && result != "blocked" && len(refs) == 0 {
+		return Check{}, Error("HUMAN_EVIDENCE_REQUIRED", "this check explicitly requires evidence")
 	}
 	if noteID != "" {
 		var note *HumanReviewNote
@@ -337,9 +339,14 @@ func (s *Service) review(id, check, actor, reason, recovery, result string, refs
 			}
 		}
 	}
-	if c.Kind == "ui" && result != "blocked" && !image {
+	if err := validateHumanArtifacts(c, refs, nil, result); err != nil {
+		return Next{}, err
+	}
+	_, screenshotRequired := HumanEvidenceRequirements(t, c)
+	if screenshotRequired && result != "blocked" && !image {
 		return Next{}, Error("SCREENSHOT_REQUIRED", check)
 	}
+	reason, recovery, mode := humanObservation(reason, recovery, result, refs)
 	n, e := s.claim(id, check, actor, "", "", expected)
 	if e != nil {
 		if key != "" {
@@ -351,7 +358,7 @@ func (s *Service) review(id, check, actor, reason, recovery, result string, refs
 	}
 	a := n.Attempt
 	config, _ := json.Marshal(c)
-	ev := Evidence{ReviewNoteID: noteID, Check: check, Candidate: t.Candidate, Revision: t.Definition.Revision, PlanRevision: t.Plan.Revision, Config: store.Hash(config), Result: result, Source: "human:" + actor, Executor: actor, Recovery: recovery, Environment: runtime.GOOS + "/" + runtime.GOARCH, Artifacts: refs, ArtifactHashes: hashes, Reason: reason, At: time.Now().UTC()}
+	ev := Evidence{EvidenceMode: mode, ReviewNoteID: noteID, Check: check, Candidate: t.Candidate, Revision: t.Definition.Revision, PlanRevision: t.Plan.Revision, Config: store.Hash(config), Result: result, Source: "human:" + actor, Executor: actor, Recovery: recovery, Environment: runtime.GOOS + "/" + runtime.GOARCH, Artifacts: refs, ArtifactHashes: hashes, Reason: reason, At: time.Now().UTC()}
 	step := StepResult{Status: result, Summary: reason, Artifacts: refs}
 	if result == "blocked" {
 		step.Blocker = &Blocker{Category: "environment", Reason: reason, Scope: t.Definition.Scope, Tried: reason, Recovery: recovery, ResumeAt: "verify"}

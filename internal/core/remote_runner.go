@@ -246,6 +246,7 @@ func (s *Service) RemoteProgressTx(tx *store.Tx, taskID, runner, attemptID, toke
 		return task, Error("INVALID_WORK_STAGE", "a future expected_until requires a named stage")
 	}
 	attempt.LastContact = &progress.At
+	attempt.ReportedSummary, attempt.ReportedNext, attempt.ProgressAt = progress.Summary, progress.Next, &progress.At
 	if progress.Stage != "" || progress.ExpectedUntil != nil {
 		attempt.Stage, attempt.ExpectedUntil = progress.Stage, progress.ExpectedUntil
 	}

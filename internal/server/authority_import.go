@@ -103,7 +103,7 @@ func reconcileImportedFiles(tx *store.Tx, artifacts *artifactStore, id string, b
 		if err != nil || object.Status != "finalized" || object.TaskID != file.TaskID || object.Source != "authority-import:"+id || object.SHA256 != file.SHA256 || object.Size != file.Size {
 			return nil, errors.New("IMPORT_FILE_UNAVAILABLE")
 		}
-		path, err := artifacts.objectPath(artifact)
+		path, err := artifacts.contentPath(tx.Row, artifact)
 		if err != nil {
 			return nil, err
 		}
@@ -398,7 +398,14 @@ func validateAuthorityArchive(archive core.AuthorityArchive) error {
 		if task.Snapshot.Status != "open" && task.Snapshot.Status != "completed" && task.Snapshot.Status != "cancelled" {
 			return errors.New("IMPORT_ARCHIVE_INVALID")
 		}
-		clean, _ := json.Marshal(core.ArchiveTask(task.Snapshot, task.MappedID))
+		canonical := core.ArchiveTask(task.Snapshot, task.MappedID)
+		// Older exports omitted recovery provenance. Keep them readable without
+		// manufacturing the missing authorization facts.
+		canonical.Recovery = task.Recovery
+		if task.Recovery != nil && task.Recovery.Paused != task.Snapshot.Paused {
+			return errors.New("IMPORT_ARCHIVE_INVALID")
+		}
+		clean, _ := json.Marshal(canonical)
 		provided, _ := json.Marshal(task)
 		if string(clean) != string(provided) {
 			return errors.New("IMPORT_ARCHIVE_INVALID")
@@ -658,7 +665,7 @@ func (h *standaloneHandler) remoteAuthorityImports(w http.ResponseWriter, r *htt
 			if err != nil || object.Status != "finalized" || object.SHA256 != file.SHA256 || object.Size != file.Size {
 				continue
 			}
-			path, err := artifacts.objectPath(file.ArtifactID)
+			path, err := artifacts.contentPath(service.Store.DB.QueryRow, file.ArtifactID)
 			if err != nil || standaloneSafeDatabaseFile(path) != nil {
 				continue
 			}

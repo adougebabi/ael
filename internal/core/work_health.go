@@ -12,6 +12,8 @@ import (
 // Seen hashes/outcomes prevent repeated logs or identical results from resetting
 // the no-progress clock. It is a projection, not an acceptance gate.
 type EvidenceProgress struct {
+	Revision         int               `json:"definition_revision,omitempty"`
+	PlanRevision     int               `json:"plan_revision,omitempty"`
 	At               *time.Time        `json:"at,omitempty"`
 	Kind             string            `json:"kind,omitempty"`
 	Unit             string            `json:"unit,omitempty"`
@@ -22,6 +24,12 @@ type EvidenceProgress struct {
 }
 
 type WorkHealth struct {
+	LastValidity     string     `json:"last_progress_validity,omitempty"`
+	CurrentWork      string     `json:"current_work,omitempty"`
+	ReportedNext     string     `json:"reported_next,omitempty"`
+	ReportedAt       *time.Time `json:"reported_at,omitempty"`
+	LastUnit         string     `json:"last_progress_unit,omitempty"`
+	LastCandidate    string     `json:"last_progress_candidate,omitempty"`
 	LastContact      *time.Time `json:"last_contact,omitempty"`
 	LastProgress     *time.Time `json:"last_progress_at,omitempty"`
 	LastProgressKind string     `json:"last_progress_kind,omitempty"`
@@ -67,6 +75,7 @@ func recordArtifactProgress(t *Task, unit, candidate, summary string, hashes map
 		}
 	}
 	if changed {
+		p.Revision, p.PlanRevision = t.Definition.Revision, t.Plan.Revision
 		p.At, p.Kind, p.Unit, p.Candidate, p.Summary = &at, "artifact", unit, candidate, summary
 	}
 	return changed
@@ -86,7 +95,7 @@ func checkConclusion(e Evidence) string {
 }
 
 func recordCheckProgress(t *Task, e Evidence, prior []Evidence, at time.Time) bool {
-	if len(e.Artifacts) == 0 {
+	if len(e.Artifacts) == 0 && e.EvidenceMode != "direct_observation" {
 		return false
 	}
 	p := progressState(t)
@@ -103,6 +112,7 @@ func recordCheckProgress(t *Task, e Evidence, prior []Evidence, at time.Time) bo
 		return false
 	}
 	p.CheckConclusions[key] = conclusion
+	p.Revision, p.PlanRevision = e.Revision, e.PlanRevision
 	p.At, p.Kind, p.Unit, p.Candidate, p.Summary = &at, "check", "check:"+e.Check, e.Candidate, e.Reason
 	return true
 }
@@ -156,6 +166,13 @@ func (s *Service) workHealth(t Task, now time.Time) (WorkHealth, error) {
 	base := t.Created
 	if p := t.EvidenceProgress; p != nil && p.At != nil {
 		h.LastProgress, h.LastProgressKind, h.LastSummary = p.At, p.Kind, p.Summary
+		h.LastUnit, h.LastCandidate = p.Unit, p.Candidate
+		h.LastValidity = "prior"
+		if p.Revision == 0 || p.PlanRevision == 0 {
+			h.LastValidity = "unknown"
+		} else if !t.Historical && p.Revision == t.Definition.Revision && p.PlanRevision == t.Plan.Revision && p.Candidate != "" && p.Candidate == t.Candidate {
+			h.LastValidity = "current"
+		}
 		base = *p.At
 	}
 	if cycle, ok := t.FailureCycles[t.ActiveFailure]; ok {
@@ -184,6 +201,9 @@ func (s *Service) workHealth(t Task, now time.Time) (WorkHealth, error) {
 		}
 		if a.Status == "running" && a.Lease.After(now) {
 			running = true
+			if a.ProgressAt != nil && (h.ReportedAt == nil || a.ProgressAt.After(*h.ReportedAt)) {
+				h.CurrentWork, h.ReportedNext, h.ReportedAt = a.ReportedSummary, a.ReportedNext, a.ProgressAt
+			}
 			declaredLong := a.Stage != "" && a.ExpectedUntil != nil && a.ExpectedUntil.After(now)
 			if declaredLong || (h.Stage == "" && a.Stage != "") {
 				h.Stage, h.ExpectedUntil = a.Stage, a.ExpectedUntil

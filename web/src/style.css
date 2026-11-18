@@ -1778,12 +1778,14 @@ main { max-width: 1600px; margin: 0 auto; padding: 32px 38px 42px; }
 .project-options-list strong { overflow-wrap: anywhere; font-size: 12px; }
 .project-options-list small { color: var(--muted); font-size: 11px; }
 .sidebar-bottom { gap: 9px; }
-.account-menu summary { display: flex; align-items: center; gap: 12px; cursor: pointer; padding: 10px 12px; color: var(--muted); font-size: 13px; border-radius: 8px; }
-.account-menu summary::-webkit-details-marker { display: none; }
-.account-menu summary > span:first-of-type { flex: 1; overflow-wrap: anywhere; }
-.account-menu[open] { background: var(--paper); border-radius: 8px; }
-.account-menu > div { display: grid; padding: 0 12px 10px; gap: 5px; }
-.account-menu a, .account-menu button { padding: 7px 0; text-align: left; border: 0; background: transparent; color: var(--ink); font-size: 12px; }
+.account-menu { position: relative; width: 100%; padding: 0; border: 0; }
+.account-menu .account-trigger { display: flex; width: 100%; align-items: center; gap: 12px; min-height: 43px; padding: 9px 12px; border: 0; background: transparent; color: var(--muted); font-size: 13px; border-radius: 8px; text-align: left; }
+.account-trigger > span:first-of-type { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.account-trigger:hover, .account-trigger[aria-expanded="true"] { background: var(--tint); color: var(--brand); }
+.account-options { position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 45; width: 100%; min-width: 180px; display: grid; gap: 2px; padding: 5px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); box-shadow: 0 8px 24px #1b203c1c; }
+.account-menu .account-options a, .account-menu .account-options button { display: flex; width: 100%; min-height: 40px; align-items: center; justify-content: flex-start; padding: 8px 10px; border: 0; border-radius: 5px; background: transparent; color: inherit; font-size: 13px; text-align: left; text-decoration: none; }
+.account-options a:hover, .account-options button:hover { background: var(--tint); }
+@media (max-width: 720px) { .account-menu .account-trigger, .account-menu .account-options a, .account-menu .account-options button { min-height: 44px; } .direct-human-review .actions > button { min-height: 44px; } }
 .remote-facts { display: grid; gap: 13px; margin: 20px 0; }
 .remote-facts > div { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 16px; }
 .remote-facts dt { color: var(--muted); font-size: 12px; }
@@ -1852,3 +1854,9 @@ main { max-width: 1600px; margin: 0 auto; padding: 32px 38px 42px; }
 .detail-page .check-list > .secondary,
 .detail-page .check-list > .check-criteria { margin-inline: 20px; }
 .detail-page .check-list > .secondary { margin-top: 10px; }
+
+.direct-human-review { padding: 16px; margin-bottom: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); }
+.direct-human-review h3 { margin: 0 0 8px; }
+.direct-human-review textarea { width: 100%; }
+.direct-human-review code { overflow-wrap: anywhere; }
+.direct-human-review .actions { flex-wrap: wrap; margin-top: 12px; }

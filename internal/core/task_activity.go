@@ -8,17 +8,18 @@ import (
 // TaskActivity projects submitted outcomes and business state changes.
 // Coordination and raw protocol records remain available in Events.
 type TaskActivity struct {
-	ID         int      `json:"id"`
-	Kind       string   `json:"kind"`
-	Summary    string   `json:"summary,omitempty"`
-	At         string   `json:"at"`
-	Historical bool     `json:"historical,omitempty"`
-	Attempt    string   `json:"attempt,omitempty"`
-	Check      string   `json:"check,omitempty"`
-	Actor      string   `json:"actor,omitempty"`
-	Status     string   `json:"status,omitempty"`
-	Next       string   `json:"next,omitempty"`
-	Artifacts  []string `json:"artifacts,omitempty"`
+	EvidenceChanged *bool    `json:"evidence_changed,omitempty"`
+	ID              int      `json:"id"`
+	Kind            string   `json:"kind"`
+	Summary         string   `json:"summary,omitempty"`
+	At              string   `json:"at"`
+	Historical      bool     `json:"historical,omitempty"`
+	Attempt         string   `json:"attempt,omitempty"`
+	Check           string   `json:"check,omitempty"`
+	Actor           string   `json:"actor,omitempty"`
+	Status          string   `json:"status,omitempty"`
+	Next            string   `json:"next,omitempty"`
+	Artifacts       []string `json:"artifacts,omitempty"`
 }
 
 func (s *Service) TaskActivity(id string) ([]TaskActivity, bool, error) {
@@ -42,19 +43,21 @@ func (s *Service) TaskActivity(id string) ([]TaskActivity, bool, error) {
 			return nil, false, err
 		}
 		var event struct {
-			Attempt   string          `json:"attempt"`
-			Failure   string          `json:"failure"`
-			Reason    string          `json:"reason"`
-			Summary   string          `json:"summary"`
-			Actor     string          `json:"actor"`
-			Next      string          `json:"next"`
-			Artifacts []string        `json:"artifacts"`
-			Result    json.RawMessage `json:"result"`
-			Evidence  *Evidence       `json:"evidence"`
+			EvidenceChanged *bool           `json:"evidence_changed"`
+			Attempt         string          `json:"attempt"`
+			Failure         string          `json:"failure"`
+			Reason          string          `json:"reason"`
+			Summary         string          `json:"summary"`
+			Actor           string          `json:"actor"`
+			Next            string          `json:"next"`
+			Artifacts       []string        `json:"artifacts"`
+			Result          json.RawMessage `json:"result"`
+			Evidence        *Evidence       `json:"evidence"`
 		}
 		if err = json.Unmarshal([]byte(body), &event); err != nil {
 			return nil, false, Error("INVALID_EVENT", "cannot read task activity")
 		}
+		item.EvidenceChanged = event.EvidenceChanged
 		item.Summary, item.Attempt, item.Actor = event.Summary, event.Attempt, event.Actor
 		switch item.Kind {
 		case "paused":

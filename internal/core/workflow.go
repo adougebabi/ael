@@ -211,6 +211,7 @@ func (s *Service) Progress(id, attempt, token string, p Progress) (Next, error) 
 			return Error("INVALID_WORK_STAGE", "a future expected_until requires a named stage")
 		}
 		a.LastContact = &p.At
+		a.ReportedSummary, a.ReportedNext, a.ProgressAt = p.Summary, p.Next, &p.At
 		if p.Stage != "" || p.ExpectedUntil != nil {
 			a.Stage, a.ExpectedUntil = p.Stage, p.ExpectedUntil
 		}

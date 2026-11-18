@@ -8,6 +8,9 @@ import Pagination from "./Pagination.vue";
 import ActionDialog from "./ActionDialog.vue";
 
 type Item = {
+  retention_reasons?: string[];
+  shared_content?: boolean;
+  sha256?: string;
   id: string;
   artifact_id: string;
   kind: string;
@@ -34,6 +37,11 @@ type Stats = {
   reserved_bytes: number;
 };
 type Inventory = {
+ file_types?: {kind:string;logical_count:number;physical_bytes:number}[];
+ sources?: {kind:string;logical_count:number;physical_bytes:number}[];
+ logical_bytes?: number;
+ shared_savings_bytes?: number;
+ duplicate_physical_bytes?: number;
   stats: Stats;
   items: Item[];
   tasks: { task_id: string; title: string; bytes: number; count: number }[];
@@ -297,6 +305,7 @@ onUnmounted(() => clearTimeout(debounce));
       <p class="secondary">
         按附件目录文件大小统计。数据库与备份使用服务器的其他存储空间。
       </p>
+      <details v-if="data.file_types" class="storage-task-breakdown"><summary>占用组成与内容复用</summary><p>逻辑附件 {{ bytes(data.logical_bytes || 0) }}；共享内容避免保存 {{ bytes(data.shared_savings_bytes || 0) }}；现存相同哈希的物理重复 {{ bytes(data.duplicate_physical_bytes || 0) }}。</p><p class="secondary">物理占用仅计一次；共享对象按稳定顺序归属一个任务。新重复上传复用内容，保留独立任务与候选身份；旧原件不会自动迁移或删除。</p><ul><li v-for="item in data.file_types" :key="item.kind">{{ item.kind }} · {{ item.logical_count }} 份逻辑附件 · {{ bytes(item.physical_bytes) }}</li></ul><ul><li v-for="item in data.sources" :key="item.kind">{{ item.kind }} · {{ bytes(item.physical_bytes) }}</li></ul><p class="secondary">当前依据、未完成任务、未决验收及其他有效引用继续保护；删除一份逻辑附件不会删除其他引用仍需的共享原件。</p></details>
       <form v-if="admin" class="storage-quota" @submit.prevent="saveQuota">
         <label
           ><input
@@ -393,9 +402,9 @@ onUnmounted(() => clearTimeout(debounce));
               <td>
                 <strong>{{ item.filename }}</strong
                 ><a :href="taskHref(item.task_id)">{{ item.task_title }}</a
-                ><small>{{ item.mime }}</small>
+                ><small>{{ item.mime }}</small><small v-if="item.retention_reasons?.length">保留依据：{{ item.retention_reasons.join('；') }}</small>
               </td>
-              <td>{{ bytes(item.stored_bytes) }}</td>
+              <td>{{ bytes(item.stored_bytes) }}<small v-if="item.shared_content">共享原件 · 保留独立证据身份</small><small v-if="item.kind === 'files' && item.stored_bytes === 0">物理容量由同内容的一份记录计入</small></td>
               <td v-if="kind === 'uploads'">
                 {{ bytes(item.reserved_bytes) }}
               </td>
@@ -478,7 +487,7 @@ onUnmounted(() => clearTimeout(debounce));
     <ActionDialog
       v-if="prune"
       title="清理原件"
-      :description="`本次可清理 ${prune.count} 项，合计 ${bytes(prune.bytes)}。原件删除后保留历史元数据。`"
+      :description="`本次可清理 ${prune.count} 项，合计 ${bytes(prune.bytes)}。原件删除后保留历史元数据；仍被其他引用持有的共享内容不会释放。`"
       :busy="busy"
       :error="mutationError"
       :submit-disabled="prune.count === 0"

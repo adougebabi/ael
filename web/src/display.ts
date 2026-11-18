@@ -175,6 +175,7 @@ export function relativeStamp(value: string | null | undefined) {
 }
 export function schedule(s: any) {
   if (s.needs_history_review) return "历史工作待核对";
+  if (s.next_action === "wait_children") return "等待必需子任务";
   if (s.requires_task_decision) return "等待版本决定";
   if (s.historical && s.next_action === "completed") return "历史完成 · 当前未复验";
   if (s.next_action === "wait_confirmation") return "等待规范核实";
@@ -309,4 +310,16 @@ export function readableError(error: string) {
   if (/JSON|SyntaxError/i.test(error))
     return "内容格式有误，请检查后再次提交。";
   return "操作或数据读取失败，输入已保留。请查看原因后重试。";
+}
+
+// A read-only presentation of authority-owned facts, shared by rows and detail.
+export function workPresentation(s: any) {
+  s=s || {};const h=s.health || {};
+  const title=schedule(s);
+  const reason=s.blocker_reason ? blockerText(s.blocker_reason) : (s.blocking_reasons || []).map((x:string)=>blockerText(x)).join('；');
+  const role=s.needs_history_review || s.requires_task_decision ? '负责人' : s.manual_reviews?.length ? '验收人' : s.next_action === 'wait_environment' ? '阻塞处理人' : s.running ? '当前执行者' : '执行者';
+  const next=h.reported_next && s.running && !reason ? h.reported_next : nextAction(s);
+  const latest=h.last_progress_summary ? ((h.last_progress_validity === 'prior' || (h.last_progress_candidate && h.last_progress_candidate!==h.candidate) ? '先前候选或修订结果，当前需复验：' : h.last_progress_validity === 'unknown' ? '适用版本待核对：' : '')+(['define','analysis'].includes(h.last_progress_unit) ? '分析产物：' : '')+h.last_progress_summary) : '';
+  const current=reason || (s.running ? h.current_work || (h.stage ? '正在处理：'+label(h.stage) : '已领取当前工作，尚未回报具体工作内容') : s.next_action === 'completed' || s.next_action === 'cancelled' ? '' : next);
+  return {title,reason,role,next,latest,current,at:h.last_progress_at,reportedAt:h.reported_at,action:s.needs_history_review?'核对历史资料':s.requires_task_decision?'审阅方案':s.manual_reviews?.length?'进行人工验收':s.next_action==='completed'?'查看交付结果':s.next_action==='wait_environment'?'查看阻塞':s.running?'查看当前工作':'查看下一步'};
 }

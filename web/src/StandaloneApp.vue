@@ -26,7 +26,10 @@ type TaskContext = { status?: string; validity?: string; validity_reasons?: stri
 
 type ClientReport = { client_id: string; actor: string; session_id?: string; runner?: string; cli_version: string; cli_build?: string; skill_version: string; update_policy: string; specification_state: string; hooks?: Record<string, string>; reported_at: string; compatible: boolean };
 const pickerOpen = ref(false), projectSearch = ref("");
-const accountMenu = ref<HTMLDetailsElement | null>(null);
+const accountMenu = ref<HTMLElement | null>(null), accountOpen = ref(false);
+const accountTrigger = ref<HTMLButtonElement | null>(null);
+function closeAccount(restoreFocus = false) { accountOpen.value=false;if(restoreFocus) accountTrigger.value?.focus(); }
+async function toggleAccount() { accountOpen.value=!accountOpen.value;pickerOpen.value=false;if(accountOpen.value){await nextTick();accountMenu.value?.querySelector<HTMLAnchorElement>(".account-options a")?.focus();} }
 const pickerRoot = ref<HTMLElement | null>(null), pickerInput = ref<HTMLInputElement | null>(null);
 const panelLoading = ref(false), panelError = ref("");
 const projectConfiguration = ref<any>(null), clients = ref<ClientReport[]>([]), serviceInfo = ref<any>(null);
@@ -37,8 +40,8 @@ const projectTokens = computed(() => tokens.value.filter(token => token.project_
 const policyNames: Record<string, string> = { notify: "只提示", auto: "自动兼容更新", pinned: "固定版本" };
 const specificationNames: Record<string, string> = { awaiting_sources: "资料待完善", readable_snapshots_require_checkout_verification: "快照可读，待核对 checkout", checkout_differs_from_server_snapshots: "本机与规范快照有差异", session_prepared: "工具会话已准备" };
 function hookSummary(client: ClientReport) { const states = Object.values(client.hooks || {}); return states.includes("pending_host_trust") ? "Hook 待宿主信任" : states.includes("unsupported_or_unavailable") ? "显式恢复可用" : "未上报 Hook 状态"; }
-async function openPicker() { pickerOpen.value = !pickerOpen.value; if (pickerOpen.value) { projectSearch.value = ""; await nextTick(); pickerInput.value?.focus(); } }
-function closePicker(event: MouseEvent) { if (pickerRoot.value && !pickerRoot.value.contains(event.target as Node)) pickerOpen.value = false; }
+async function openPicker() { closeAccount();pickerOpen.value = !pickerOpen.value; if (pickerOpen.value) { projectSearch.value = ""; await nextTick(); pickerInput.value?.focus(); } }
+function closePicker(event: MouseEvent) { if (pickerRoot.value && !pickerRoot.value.contains(event.target as Node)) pickerOpen.value = false;if(accountMenu.value && !accountMenu.value.contains(event.target as Node)) closeAccount(); }
 async function chooseProject(id: string) { pickerOpen.value = false; await view(id); }
 async function loadPanel() {
   if (!session.value || !["settings", "service"].includes(panel.value)) return;
@@ -372,7 +375,7 @@ async function preview(item: Artifact) {
 
 watch(() => route.value.key, () => {
   pickerOpen.value = false;
-  if (accountMenu.value) accountMenu.value.open = false;
+  closeAccount();
   const id = route.value.query.get("project");
   if (id && workspaceMode.value && id !== selected.value?.id) {
     if (projects.value.some(project => project.id === id)) void view(id);
@@ -389,7 +392,7 @@ onUnmounted(() => { document.removeEventListener("click", closePicker); if (prev
 <template>
   <WorkspaceApp v-if="session && selected && workspaceMode" :key="selected.id + session.csrf">
     <template #workspace>
-      <div ref="pickerRoot" class="project-switcher" @keydown.esc="pickerOpen = false">
+      <div ref="pickerRoot" class="project-switcher" @keydown.esc.stop.prevent="pickerOpen = false; pickerRoot?.querySelector('button')?.focus()">
         <button class="workspace project-switcher-button" aria-label="切换项目" :aria-expanded="pickerOpen" aria-controls="remote-project-options" @click.stop="openPicker">
           <span class="workspace-avatar" aria-hidden="true">{{ selected.name.slice(0, 2).toUpperCase() }}</span>
           <span class="workspace-info"><strong>{{ selected.name }}</strong><small>{{ roles[selected.role] || selected.role }}</small></span><span aria-hidden="true">⌄</span>
@@ -404,7 +407,10 @@ onUnmounted(() => { document.removeEventListener("click", closePicker); if (prev
     <template #sidebar-controls>
       <a :href="href('/settings')" :class="{ chosen: panel === 'settings' }"><AppIcon name="settings"/>项目设置</a>
       <a v-if="session.admin" :href="href('/service')" :class="{ chosen: panel === 'service' }"><AppIcon name="layers"/>服务管理</a>
-      <details ref="accountMenu" class="account-menu"><summary aria-label="账户菜单"><AppIcon name="user"/><span>{{ session.username }}</span><span aria-hidden="true">⌄</span></summary><div><a :href="href('/account')">身份与个人设置</a><button :disabled="busy" @click="logout">退出登录</button></div></details>
+      <div ref="accountMenu" class="account-menu" @keydown.esc.stop.prevent="closeAccount(true)" @focusout="(event) => { if(event.relatedTarget && !accountMenu?.contains(event.relatedTarget as Node)) closeAccount(); }">
+        <button ref="accountTrigger" class="account-trigger" aria-label="账户菜单" :aria-expanded="accountOpen" aria-controls="account-options" @click="toggleAccount"><AppIcon name="user"/><span>{{ session.username }}</span><span aria-hidden="true">⌄</span></button>
+        <div v-if="accountOpen" id="account-options" class="account-options" role="region" aria-label="账户操作"><a :href="href('/account')">身份与个人设置</a><button :disabled="busy" @click="logout">{{ busy ? '正在退出…' : '退出登录' }}</button></div>
+      </div>
     </template>
     <template #workspace-feedback><p v-if="error" role="alert" class="notice">{{ error }}</p><p v-if="notice" role="status" class="notice">{{ notice }}</p></template>
     <template #remote-page="{ area }">

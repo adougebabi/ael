@@ -12,9 +12,10 @@ import (
 // Validate and ReadArtifact run under the same write transaction as the result.
 // Neither callback opens client paths.
 type RemoteReviewEnvironment struct {
-	Comparison   *ReviewComparison
-	Validate     func(*store.Tx, *Task) error
-	ReadArtifact func(*store.Tx, string) ([]byte, error)
+	ArtifactNames map[string]string
+	Comparison    *ReviewComparison
+	Validate      func(*store.Tx, *Task) error
+	ReadArtifact  func(*store.Tx, string) ([]byte, error)
 }
 
 type RemoteReviewInput struct {
@@ -95,9 +96,15 @@ func (s *Service) RemoteReviewTx(tx *store.Tx, input RemoteReviewInput, key, has
 		mime := http.DetectContentType(data)
 		image = image || mime == "image/png" || mime == "image/jpeg"
 	}
-	if check.Kind == "ui" && input.Result != "blocked" && !image {
+	if err := validateHumanArtifacts(check, input.Artifacts, env.ArtifactNames, input.Result); err != nil {
+		return Next{}, err
+	}
+	_, screenshotRequired := HumanEvidenceRequirements(task, check)
+	if screenshotRequired && input.Result != "blocked" && !image {
 		return Next{}, Error("SCREENSHOT_REQUIRED", check.ID)
 	}
+	var mode string
+	input.Reason, input.Recovery, mode = humanObservation(input.Reason, input.Recovery, input.Result, input.Artifacts)
 	duration, err := s.leaseDuration()
 	if err != nil {
 		return Next{}, err
@@ -112,7 +119,7 @@ func (s *Service) RemoteReviewTx(tx *store.Tx, input RemoteReviewInput, key, has
 		return Next{}, err
 	}
 	config, _ := json.Marshal(check)
-	evidence := Evidence{Comparison: env.Comparison, ReviewNoteID: input.NoteID, Check: check.ID, Candidate: task.Candidate, Revision: task.Definition.Revision, PlanRevision: task.Plan.Revision, Config: store.Hash(config), Result: input.Result, Source: "human:" + input.Actor, Executor: input.Actor, Recovery: input.Recovery, Environment: "human remote review", Artifacts: input.Artifacts, ArtifactHashes: hashes, Reason: input.Reason, At: now}
+	evidence := Evidence{EvidenceMode: mode, Comparison: env.Comparison, ReviewNoteID: input.NoteID, Check: check.ID, Candidate: task.Candidate, Revision: task.Definition.Revision, PlanRevision: task.Plan.Revision, Config: store.Hash(config), Result: input.Result, Source: "human:" + input.Actor, Executor: input.Actor, Recovery: input.Recovery, Environment: "human remote review", Artifacts: input.Artifacts, ArtifactHashes: hashes, Reason: input.Reason, At: now}
 	step := StepResult{Status: input.Result, Summary: input.Reason, Artifacts: input.Artifacts}
 	if input.Result == "blocked" {
 		step.Blocker = &Blocker{Category: "environment", Reason: input.Reason, Scope: task.Definition.Scope, Tried: input.Reason, Recovery: input.Recovery, ResumeAt: "verify"}

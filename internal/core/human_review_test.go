@@ -35,7 +35,7 @@ func TestHumanReviewOutcomesAndIdempotency(t *testing.T) {
 	for _, result := range []string{"pass", "fail", "blocked"} {
 		t.Run(result, func(t *testing.T) {
 			s, id, expected := humanReviewFixture(t, "human", "verified", false)
-			refs := []string{"runtime:review.md"}
+			refs := []string(nil)
 			recovery := "repair the finding before checking again"
 			if result == "blocked" {
 				refs = nil
@@ -114,9 +114,8 @@ func TestHumanReviewEligibilityAndValidation(t *testing.T) {
 		}{
 			{"no explicit result", "", "reviewer", "observation", "", []string{"runtime:review.md"}, expected},
 			{"blank actor", "pass", "  ", "observation", "", []string{"runtime:review.md"}, expected},
-			{"no evidence", "pass", "reviewer", "observation", "", nil, expected},
 			{"missing evidence", "pass", "reviewer", "observation", "", []string{"runtime:missing"}, expected},
-			{"failure without recovery", "fail", "reviewer", "observation", "", []string{"runtime:review.md"}, expected},
+			{"failure without description", "fail", "reviewer", "", "", nil, expected},
 			{"wrong candidate", "pass", "reviewer", "observation", "", []string{"runtime:review.md"}, core.ReviewExpectation{Candidate: "wrong", DefinitionRevision: expected.DefinitionRevision, PlanRevision: expected.PlanRevision}},
 			{"wrong revision", "pass", "reviewer", "observation", "", []string{"runtime:review.md"}, core.ReviewExpectation{Candidate: expected.Candidate, DefinitionRevision: expected.DefinitionRevision + 1, PlanRevision: expected.PlanRevision}},
 			{"wrong plan", "pass", "reviewer", "observation", "", []string{"runtime:review.md"}, core.ReviewExpectation{Candidate: expected.Candidate, DefinitionRevision: expected.DefinitionRevision, PlanRevision: expected.PlanRevision + 1}},
@@ -234,7 +233,7 @@ func TestHumanFailureInInspectionDeliversFindingsWithoutChangingSource(t *testin
 
 func TestHumanVisualReviewRequiresActualScreenshot(t *testing.T) {
 	s := fixture(t)
-	d := core.Definition{Title: "真实视觉证据", Type: "bug", Goal: "verified", Acceptance: []string{"visual result"}, Checks: []core.Check{{ID: "visual", Kind: "ui", Method: "human", Covers: []string{"visual result"}, Required: true}}}
+	d := core.Definition{Title: "真实视觉证据", Type: "bug", Goal: "verified", Acceptance: []string{"visual result with screenshot"}, Checks: []core.Check{{ID: "visual", Kind: "ui", Method: "human", Covers: []string{"visual result with screenshot"}, Required: true}}}
 	id := atVerify(t, s, d)
 	if err := os.WriteFile(filepath.Join(s.Store.Dir, "review.md"), []byte("actual review"), 0644); err != nil {
 		t.Fatal(err)
@@ -446,5 +445,49 @@ func TestBlockedHumanReviewSurvivesLaterParallelCheckResult(t *testing.T) {
 	resumed, err := s.ResumeBlockedHumanReview(id, "ui", expected)
 	if err != nil || resumed.Task.Paused || core.CurrentEvidence(resumed.Task, checks[0]).Result != "pass" {
 		t.Fatal("parallel pass or resume lost", resumed, err)
+	}
+}
+
+func TestHumanEvidenceRequiresExplicitAgreement(t *testing.T) {
+	for _, item := range []struct {
+		request  string
+		required bool
+	}{
+		{"实现截图上传功能", false}, {"修复 logo.png 的显示位置", false}, {"无需截图", false}, {"必须提供真实截图", true}, {"请提交对照图", true},
+	} {
+		attachment, screenshot := core.HumanEvidenceRequirements(core.Task{Definition: core.Definition{OriginalRequest: item.request}}, core.Check{Kind: "ui", Method: "human"})
+		if attachment != item.required || screenshot != item.required {
+			t.Fatalf("%s: %v %v", item.request, attachment, screenshot)
+		}
+	}
+}
+
+func TestProgressValidityRetainsPriorCandidateAndRevision(t *testing.T) {
+	s, id, expected := humanReviewFixture(t, "human", "verified", true)
+	n, err := s.ReviewResultExact(id, "owner", "reviewer", "looked at actual candidate", "", "pass", nil, "progress-validity", expected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	health, err := s.WorkHealthAt(id, time.Now().UTC())
+	if err != nil || health.LastValidity != "current" {
+		t.Fatal(health, err)
+	}
+	task := *n.Task
+	task.Candidate = ""
+	if err = s.ImportTask(task); err != nil {
+		t.Fatal(err)
+	}
+	health, err = s.WorkHealthAt(id, time.Now().UTC())
+	if err != nil || health.LastValidity != "prior" {
+		t.Fatal("cleared candidate appeared current", health, err)
+	}
+	task.Candidate = expected.Candidate
+	task.Plan.Revision++
+	if err = s.ImportTask(task); err != nil {
+		t.Fatal(err)
+	}
+	health, err = s.WorkHealthAt(id, time.Now().UTC())
+	if err != nil || health.LastValidity != "prior" {
+		t.Fatal("changed plan appeared current", health, err)
 	}
 }
