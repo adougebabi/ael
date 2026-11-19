@@ -170,6 +170,14 @@ human 检查交由项目 reviewer/admin 登录中央 Dashboard 完成。普通�
 
 ## 导入历史的核对与接管
 
+先逐项读取最新 task/next，不根据上次失败或任务标题判断整批都需要人工恢复：
+
+- `continue` / `repair`：已可工作，按原协议准备或刷新 context 并 claim，不再要求浏览器恢复。
+- `recovery_action=resume`，或旧响应中可核实已有准确当前定义/计划的真实 restore approve、confirmation为空、仅剩导入暂停且无后续人工暂停/失败/责任：直接由 executor 调用 `resume --task ID --expected-revision REV --operation-id OP --idempotency-key KEY --json`。没有旧责任时不添加 ack-stopped。消费回执后重新获取 task/candidate/context，再 claim；普通 resume 已在旧客户端提供，无需仅为这个步骤再次找人确认。
+- 没有当前恢复批准时，按下述 reconcile-import 的受限来源规则处理；未知旧归档缺授权只报告具体缺口，不把该限制套到已经批准或已经可继续的其他任务。
+
+核对 `version --check`、Server metadata 与当前会话实际 CLI/Skill 的 build/路径；同为0.1.31可能一个包含新接管命令、另一个仍是旧代码。新命令缺失先按受管更新与明确交接处理，不改写冻结会话，不冒充人工，也不把客户端不支持统一说成用户必须网页恢复。
+
 在既有用户执行授权内，先读取 task show、原导入历史和现行工程依据，capture 当前候选并 publish/show context。若仅有导入恢复阻塞，调用 `task reconcile-import --task ID --context CONTEXT --reason "核对的事实与差异" --start "具体继续起点" --expected-revision REV --operation-id OP --idempotency-key KEY`。身份来自执行令牌；它只记录 Agent 核对，不产生人工 approval 或当前验收。成功后立即消费返回 next.next_action，刷新候选/context 的任务版本并 runner claim，实际实施、上报结果，再继续 next；不要只输出建议结束。
 
 IMPORT_NOT_ACTIVE：等待导入负责人激活；IMPORT_PAUSE_PROTECTED：按具体 blocker/未决决定/其他责任处理，不反复恢复；IMPORT_CONTEXT_REQUIRED：补当前候选和依据；IMPORT_SOURCE_UNKNOWN：缺少可信暂停或决定来源，给出任务页和缺失的恢复范围，请 reviewer 按准确版本确认。原来已有可信恢复批准时可沿用，不能由 Agent 自述用户同意来替代。重复请求保留原 operation/key 查询原回执，任务版本变化须重新核对。

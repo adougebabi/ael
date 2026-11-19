@@ -636,6 +636,9 @@ func (s *Service) nextWithConstraints(id string, includeArtifacts bool, resolveB
 			n.Reasons = append(n.Reasons, "budget exhausted; reviewed definition revision required")
 		}
 	}
+	if n.RecoveryAction != "" && (!s.Active || n.Action != "wait_environment" || len(n.Reasons) != 1) {
+		n.RecoveryAction = ""
+	}
 	n.Task = &t
 	health, e := s.workHealth(t, time.Now().UTC())
 	if e != nil {

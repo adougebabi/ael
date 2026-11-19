@@ -1,13 +1,13 @@
 # AEL 可用性整改工作记录
 
-当前任务：UC-05 附件占用归因与针对性优化
-当前状态：DONE（UC-01至UC-05全部完成；真实统计已补齐；未部署或变更生产数据）
-代码基线及本轮改动：main / cbb29fb566330a2471fd970db4d1cd1d320e3885 + 当前工作区；最终完整构建 0.1.31 / cbb29fb-f5d256631c72，dirty=true，local_unpublished。已有 cli-onboarding WORKLOG与历史截图修改保留；按用户要求形成本轮本地提交，未推送。
-本项已经完成：项目内相同内容复用、独立逻辑附件身份、唯一物理容量/分类/重复量、共享引用保护及回收、崩溃重试、现有存储页展示；原有/专项测试、真实双客户端与浏览器验证通过。
-本项尚未完成：本轮实施与统计无剩余项。最终产物尚未部署，旧附件未迁移/清理；这些生产操作不自动执行，线上释放量为0。
-已执行验证与结果：全仓 go test -race ./... 通过；最后修复后相关 Server race 通过；go vet ./...、web build、完整四平台 package、发行内容校验通过；最终分发15项人工验收/公共交互浏览器与2项存储浏览器通过；工作台/详情7项和Epic 5项通过。
-具体阻塞及影响范围：已解除。403实为Cloudflare 1010 browser_signature_banned，拦截了取数用的Python客户端；公开meta也受相同拦截。原AEL CLI同一profile正常online/authoritative，用标准Go HTTP客户端已读取完整stats/inventory/附件元数据。无需重新登录或额外AEL授权。
-下一条可以直接执行的动作：本轮已完成，审阅最终构建与evidence/UC-05/field-analysis.json；若后续明确授权上线，沿现有部署流程使用cbb29fb-f5d256631c72。旧数据的内容复用迁移须另给预览与备份/恢复方案，不直接删除重复逻辑证据。
+当前任务：UC-01 现场复发修复——已批准存量任务的技术恢复与下一步指引
+当前状态：DONE（UC-01现场技术恢复与指引补修完成；按用户要求本地提交，未发布）
+代码基线及本轮改动：main / 7acfabf；线上Server已是7acfabf-f5d256631c72，Mac共享CLI仍cbb29fb-97b6f1d1a497，业务工程Skill未包含新接管指引。本次新增只读recovery_action=resume与Skill分支，不改审批/恢复写入规则。
+本项已经完成：核对原导入active、真实owner准确版本恢复批准、当前无责任/阻塞/后续暂停；4项由executor执行CAS技术resume后continue，PrimitiveString原本可继续未改，最后已由既有业务执行者领取；本线程未新增租约。补只读下一步指引，避免再要求人工重复确认。
+本项尚未完成：本次现场与源码补修验证无剩余项；补修代码本地提交，尚未发布/部署。业务实现继续由该工程Agent负责；本线程未领取业务执行责任。
+已执行验证与结果：本次先红后绿的core回归通过；旧归档已批准→executor恢复的HTTP/仪表盘与幂等测试通过；相关core/server race通过（1.441s/56.022s），最后失败复核保护补测core race通过（2.187s）；显示契约、web类型/构建、相关go vet、原生构建和diff检查通过。上轮全仓回归记录仍保留。
+具体阻塞及影响范围：现场恢复门禁已解除。发现是已批准后仍缺技术resume、旧CLI/Skill与新Server不同步；不再要求用户整批网页恢复。来源未知且没有当前授权的其他任务仍按原规则保护。
+下一条可以直接执行的动作：业务Agent重新读取各项next：4项continue可按原协议领取；PrimitiveString当前wait_executor，已有执行者处理，不抢占。补充提示代码如需上线，沿正常版本交付同步Server/CLI/Skill，不原地改写冻结会话。
 
 | 任务 | 状态 |
 |---|---|
@@ -120,3 +120,19 @@ UC-01至UC-04保持DONE，UC-05保持IMPLEMENTED_PENDING_FIELD。本次无须重
 ## 本地提交
 
 用户明确要求提交。本次提交包含UC-01至UC-05的源码、产品Skill、测试、已生成的内嵌前端资源、根目录本轮提示词与本目录结果/代表证据。此前已有cli-onboarding WORKLOG和历史截图修改保留在工作区，不混入。提交前git diff --check通过；产品源码未再修改，不重复已通过回归。提交标识以git log为准，未推送或部署。
+
+## 2026-11-19 UC-01 现场复发：已批准恢复后仍要求网页操作
+
+用户报告业务Agent要求在工作台恢复第一批5项。只读核对发现：线上已经是7acfabf新代码；Mac共享CLI及业务工程Skill仍是cbb29fb旧版。该批旧导入的Recovery来源字段缺失，但当前owner已逐项留下准确版本restore approve；confirm只清confirmation而不会清Paused。PrimitiveString已continue，其余4项只差技术resume。原回复把这两步混在一起，并把整批视作仍需要人处理，是流程指引缺口。
+
+针对用户明确指定的5项，逐项重读当前状态与活动，检查真实当前批准、无执行/中断责任、无失败/阻塞/后续人工暂停。使用现有executor身份与expected_revision/原请求键，对Actor、Provider、LoRA、提交歧义执行技术resume；4项返回continue/paused=false/attempt_count=0；PrimitiveString已可继续，跳过。没有生成审批，没有claim，没有修改业务源码、候选或验收。证据evidence/UC-01/approved-restores-20261119.json。
+
+补充源码：Next与TaskSummary只读投影recovery_action=resume，限当前准确恢复批准、仅导入暂停、空候选/无责任且无其他保护项；不改变原写接口。人工暂停、未决决定、旧版本批准、失败、责任与其他Server约束不推荐自动恢复。列表/详情明确执行者下一动作；产品Skill主入口与协议写明已continue直接claim、已批准由executor resume并刷新context，不能再要求用户网页重复确认或回复已恢复。客户端/冻结Skill与Server的实际build应分别核对，不改写冻结会话。
+
+反馈环：`go test ./internal/core -run '^TestApprovedImportRecovery'`先复现失败（recovery_action为空）；修改后相关core测试通过。Server集成覆盖旧无Recovery归档→真实owner准确批准→executor读取指引→resume→幂等重放→continue，保留1条owner审批、0租约、0旧证据。
+
+本次补修完成：core/server相关race分别通过（1.441s/56.022s），最后新增待失败复核保护的core race通过（2.187s）。Go vet、显示契约、web类型/构建、原生构建及git diff --check通过。原生验证产物 `/tmp/ael-approved-import-bundle/ael-darwin-arm64`，build=`7acfabf-approved-import-resume`，是未发布验证构建，不冒充线上版本。新增core/server回归覆盖当前批准、人工暂停、未决决定、失效版本、有效/中断责任、失败复核、已有候选、幂等与不复活历史验收。
+
+2026-11-19 09:23只读复核：Actor、Provider、LoRA、提交歧义仍为continue；PrimitiveString已经wait_executor，由既有业务执行者领取。4次resume之外未创建审批/租约、未改业务源码/候选/验收。证据 `evidence/UC-01/final-status-20261119.json`。CLI/Skill仍旧版是已记录的交付不同步问题；已批准导入的技术resume在旧CLI也可执行，因此本次不强行升级活动会话或要求用户重复登录/确认。
+
+2026-11-19 用户要求提交本次补修：将恢复下一步投影、显示/Skill、回归测试、更新后的内嵌资源与本次现场记录形成本地提交。原有cli-onboarding记录与截图不纳入，提交标识以git log为准；未推送或部署。产品源码未再次修改，沿用上述验证结果。

@@ -189,3 +189,18 @@ func (s *Service) FinalizeArchivedTaskTx(tx *store.Tx, archived ArchivedTask, so
 	task.Completed = archived.Record.Completed
 	return s.save(tx, &task)
 }
+
+// This is read-only next-action guidance. Resume retains all write-time checks;
+// neither a legacy flag nor an Agent's assertion supplies restoration approval.
+func (t *Task) approvedImportResumeReady() bool {
+	source, _ := t.Legacy["authority_import"].(string)
+	if source == "" || t.Status != "open" || !t.Paused || t.Confirmation != nil || t.Blocker != nil || t.ActiveFailure != "" || pendingFailureKey(t) != "" || t.Candidate != "" || len(t.Attempts) != 0 {
+		return false
+	}
+	for _, a := range t.Approvals {
+		if a.Kind == "restore" && a.Decision == "approve" && a.Actor != "" && !a.At.IsZero() && a.Revision == t.Definition.Revision && a.PlanRevision == t.Plan.Revision && a.Candidate == "" {
+			return true
+		}
+	}
+	return false
+}

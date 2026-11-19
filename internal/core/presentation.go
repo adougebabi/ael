@@ -78,6 +78,7 @@ func ReviewAccess(n Next, c Check) CheckAccess {
 }
 
 type TaskSummary struct {
+	RecoveryAction       string                    `json:"recovery_action,omitempty"`
 	Health               *WorkHealth               `json:"health,omitempty"`
 	Epic                 *EpicSummary              `json:"epic,omitempty"`
 	Parent               string                    `json:"parent,omitempty"`
@@ -111,7 +112,7 @@ type TaskSummary struct {
 
 func (s *Service) Summarize(n Next) (TaskSummary, error) {
 	t := n.Task
-	r := TaskSummary{Health: n.Health, ID: t.Definition.ID, Title: t.Definition.Title, Type: t.Definition.Type, Board: n.Board, Step: n.Step, Action: n.Action, Reasons: n.Reasons, Executors: []string{}, ManualReviews: []PendingHumanReview{}, Completed: t.Completed, Historical: t.Historical}
+	r := TaskSummary{RecoveryAction: n.RecoveryAction, Health: n.Health, ID: t.Definition.ID, Title: t.Definition.Title, Type: t.Definition.Type, Board: n.Board, Step: n.Step, Action: n.Action, Reasons: n.Reasons, Executors: []string{}, ManualReviews: []PendingHumanReview{}, Completed: t.Completed, Historical: t.Historical}
 	if r.Health == nil {
 		health, err := s.workHealth(*t, time.Now().UTC())
 		if err != nil {

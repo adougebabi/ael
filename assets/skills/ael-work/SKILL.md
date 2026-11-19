@@ -17,6 +17,8 @@ description: 在已初始化的 AEL 工程执行已授权的项目迭代、修�
 
 远程 authority 使用 [外部 Agent 通信协议](references/remote-agent.md)：已有 Agent 自行编辑、测试、截图和管理宿主；AEL 只接收并校验。先登记客户端，准备候选/context，再 runner claim；领取私有回执直接传给后续命令的 --lease-file；runner submit --repository REPO 接收 result.artifacts 中的实际文件路径并自动登记候选、上传与绑定，runtime 报告另带 --artifacts-dir。每次 submit 消费 next_action。断网按 operation_file 调用 runner retry，未知工作区使用 runner recover 明确接收方与停工/独立工作区决定。远程不使用下述本地 claim/verify/loop 命令；不需要客户端 Docker，不启动其他 Agent。run/resume-result/recover-claim 已退出，不能用于恢复新模式。默认只上传选定依据与证据，不上传整个代码库、HOME、聊天或凭据。
 
+导入任务不要整批机械要求用户网页恢复。先逐项读取当前 task/next：已是 continue/repair 的直接按原协议 claim；若恢复批准已经绑定当前定义/计划、confirmation已清除，且无后续人工暂停/阻塞/其他责任，技术性 resume 由当前 executor 执行，再刷新 context 并 claim，不再要求用户回复“已恢复”。新 Server 的 recovery_action=resume 是这条只读指引，不代替写入校验。来源不明且仍缺真实恢复授权时只列具体缺口与准确范围；不得用 Agent 自述用户同意生成审批。CLI/冻结 Skill 与 Server 的实际 build 必须分开核对，版本号相同不代表功能相同；不要修改正在使用的冻结会话文件。
+
 新的 Remote 工作会话先运行 `./ael session start --session HOST_SESSION_ID --runner RUNNER --json`，读取返回的冻结 Skill 路径。它在领取前查询兼容性，只按安装级明确选择的策略更新可信稳定版。后续 Remote 命令都带 `--session HOST_SESSION_ID`，或由用户显式提供 AEL_SESSION_ID。同一会话固定 CLI、Skill 和协议，已有会话不会因机器级升级切换。`session show` 可查看引用，责任完成或明确交接后可 `session end` 结束工具绑定。旧调用未给会话 ID 时按 runner ID 隔离兼容工具会话，恢复与新接入优先使用宿主的稳定会话 ID。
 
 Remote 上下文压缩、会话恢复、任务切换或进度不确定后，先执行 `./ael recovery check --session HOST_SESSION_ID --json`。先核对 Server 项目、父/叶任务、步骤、版本、已通过检查和最近阻塞，再决定唯一下一动作。Server 当前记录是权威。保留已验收成果、原任务身份与范围，只继续当前未完成项。未在线核对成功前，只做只读定位与现场保存。检查点显示无当前任务时等待明确选择。
