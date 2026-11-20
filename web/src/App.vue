@@ -44,7 +44,7 @@ function focusMain() {
 }
 const mobileMenu = ref(false), showSearch = ref(false), attentionCount = ref(0), attentionTruncated = ref(false);
 async function refreshAttention() {
-  try { const result = await api('/api/attention'); attentionCount.value = result.total || 0; attentionTruncated.value = !!result.truncated; }
+  try { const result = await api('/api/attention?human=1'); attentionCount.value = result.total || 0; attentionTruncated.value = !!result.truncated; }
   catch { attentionCount.value = 0; attentionTruncated.value = false; }
 }
 function keyboard(e: KeyboardEvent) {
@@ -120,7 +120,7 @@ onUnmounted(() => { clearInterval(timer); window.removeEventListener('keydown', 
     </aside>
     <div class="app-frame"><header class="topbar"><button class="mobile-menu-button" aria-label="打开导航" :aria-expanded="mobileMenu" @click="mobileMenu = true"><AppIcon name="menu"/></button><div class="breadcrumbs">工作空间 <span>›</span> {{ titles[area] || '页面' }}<span v-if="id">› 详情</span></div><div class="topbar-actions"><span v-if="infoError" class="connection-alert">连接异常</span><button class="top-search" @click="showSearch = true"><AppIcon name="search"/>快速查找 <kbd>⌘ K</kbd></button><button class="icon-button" aria-label="刷新项目状态" @click="refreshCurrentView"><AppIcon name="loop"/></button></div></header>
     <main id="main-content" tabindex="-1">
-      <header v-if="!id || (area === 'tasks' && id === 'new')" class="page-header">
+      <header v-if="(area!=='tasks' && !id) || (area === 'tasks' && id === 'new')" class="page-header">
         <div>
           <p class="eyebrow">{{ remoteProject?.name || info.project?.split("/").pop() || "AEL" }}</p>
           <h1>{{ titles[area] || "页面不存在" }}</h1>

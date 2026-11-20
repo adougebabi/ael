@@ -111,6 +111,10 @@ type TaskSummary struct {
 }
 
 func (s *Service) Summarize(n Next) (TaskSummary, error) {
+	return s.summarize(n, true)
+}
+
+func (s *Service) summarize(n Next, includeEpic bool) (TaskSummary, error) {
 	t := n.Task
 	r := TaskSummary{RecoveryAction: n.RecoveryAction, Health: n.Health, ID: t.Definition.ID, Title: t.Definition.Title, Type: t.Definition.Type, Board: n.Board, Step: n.Step, Action: n.Action, Reasons: n.Reasons, Executors: []string{}, ManualReviews: []PendingHumanReview{}, Completed: t.Completed, Historical: t.Historical}
 	if r.Health == nil {
@@ -124,7 +128,7 @@ func (s *Service) Summarize(n Next) (TaskSummary, error) {
 	if t.EpicMembership != nil {
 		r.Parent = t.EpicMembership.Parent
 	}
-	if t.Definition.Type == "epic" {
+	if includeEpic && t.Definition.Type == "epic" {
 		tree, err := s.epicTree(t.Definition.ID, false)
 		if err != nil {
 			return r, err

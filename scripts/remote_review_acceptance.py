@@ -182,7 +182,7 @@ for(const [file,padding] of [[BASELINE,24],[ACTUAL,12]]) {await page.setContent(
         actual = upload_context('a', task, out / 'actual.png', 'actual-host-render; external Chromium; viewport=640x480; page=/fixture')
         state = cli('a', 'task', 'show', '--task', task)
         tasks[task] = {'baseline': baseline, 'actual': actual, 'candidate': state['task']['candidate'], 'revision': state['definition_revision'], 'plan_revision': state['plan_revision']}
-    for task in ('api-pass', 'api-fail', 'api-blocked', 'opinion', 'browser', 'stale', 'missing', 'postchange', 'slow', 'direct', 'direct-fail', 'direct-blocked', 'direct-retry'):
+    for task in ('api-pass', 'api-fail', 'api-blocked', 'opinion', 'browser', 'stale', 'missing', 'postchange', 'slow', 'direct', 'direct-fail', 'direct-blocked', 'direct-retry', 'direct-home'):
         prepare(task)
 
     api('POST', '/api/v1/projects/shared/tasks', {'definition': {'id': 'before-candidate', 'title': 'Review before candidate', 'type': 'bug', 'goal': 'verified', 'acceptance': ['Retain the human observation']}, 'expected_revision': 'absent', 'operation_id': 'before-candidate', 'idempotency_key': 'before-candidate'})

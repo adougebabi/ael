@@ -103,7 +103,7 @@ func (h *standaloneHandler) remoteArtifacts(w http.ResponseWriter, r *http.Reque
 		if kind == "" {
 			kind = "files"
 		}
-		result, err := a.inventory(principal, role == "admin" || role == "executor" || role == "reviewer", kind, r.URL.Query().Get("q"), limit, offset)
+		result, err := a.inventoryFiltered(principal, role == "admin" || role == "executor" || role == "reviewer", kind, r.URL.Query().Get("q"), limit, offset, artifactFilter{Task: r.URL.Query().Get("task"), MIME: r.URL.Query().Get("mime"), Source: r.URL.Query().Get("source"), Since: r.URL.Query().Get("since"), Until: r.URL.Query().Get("until"), Order: r.URL.Query().Get("order")})
 		if err != nil {
 			artifactError(w, err)
 			return

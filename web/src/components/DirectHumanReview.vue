@@ -3,7 +3,7 @@ import { computed, ref } from "vue";
 import { api, ApiError, info, remoteProject } from "../api";
 import { readableError } from "../display";
 import { readReviewDraft, writeReviewDraft, clearReviewDraft } from "../reviewDraft";
-const props = defineProps<{ snapshot: any; check: any }>();
+const props = defineProps<{ snapshot: any; check: any; compact?: boolean }>();
 const emit = defineEmits<{ saved: []; advanced: [] }>();
 const task = computed(() => props.snapshot.task);
 const scope = info.value.project || "";
@@ -39,16 +39,16 @@ function recheck() { if(pending.value)return;target.value={candidate:task.value.
 </script>
 <template>
   <section class="direct-human-review" :aria-label="'直接验收 ' + check.id">
-    <h3>确认本项实际效果</h3>
-    <p>{{ check.covers?.join('；') || check.id }}</p>
-    <p class="secondary">本次确认针对下列当前候选。请确认你查看的实际效果属于此版本；无法关联时选择“暂无法验证”。</p>
+    <h3 v-if="!compact">确认本项实际效果</h3>
+    <p v-if="!compact">{{ check.covers?.join('；') || check.id }}</p>
+    <p v-if="!compact" class="secondary">本次确认针对下列当前候选。请确认你查看的实际效果属于此版本；无法关联时选择“暂无法验证”。</p>
     <details><summary>验收对象与版本</summary><p>{{ task.definition.title }} · {{ check.id }}</p><code>{{ target.candidate }}</code><p>定义 {{ target.revision }} · 计划 {{ target.plan_revision }}</p></details>
     <p v-if="receipt" role="status">{{ receipt }}</p>
     <template v-else>
       <label v-if="!remoteProject">记录人<input v-model="actor" autocomplete="name" @input="persist" /></label>
       <div v-if="changed" class="alert" role="alert">验收对象或修订已变化，旧结论不会套用到新版本；你的说明已保留。<p>待重新查看的当前候选：<code>{{ task.candidate }}</code> · 定义 {{ snapshot.definition_revision }} / 计划 {{ snapshot.plan_revision }}</p><button v-if="!pending" :disabled="busy" @click="recheck">已重新查看，采用页面所示版本</button></div>
       <label v-if="choice"><span>{{ choice === 'fail' ? '问题描述' : '暂无法验证的原因' }}</span><textarea v-model="reason" rows="2" @input="persist" /></label>
-      <details v-else :open="details" @toggle="details=($event.target as HTMLDetailsElement).open"><summary>补充说明（可选）</summary><textarea v-model="reason" aria-label="补充验收说明" rows="2" @input="persist" /></details>
+      <details v-else-if="!compact" :open="details" @toggle="details=($event.target as HTMLDetailsElement).open"><summary>补充说明（可选）</summary><textarea v-model="reason" aria-label="补充验收说明" rows="2" @input="persist" /></details>
       <p v-if="error" class="alert" role="alert">{{ error }}</p>
       <div class="actions">
         <button v-if="pending" class="primary" :disabled="busy" @click="submit(pending.result)">原样重试提交</button>
@@ -57,7 +57,7 @@ function recheck() { if(pending.value)return;target.value={candidate:task.value.
           <button :disabled="busy || changed" @click="choice='fail';persist()">发现问题</button>
           <button :disabled="busy || changed" @click="choice='blocked';persist()">暂无法验证</button>
           <button v-if="choice" :disabled="busy || changed" @click="submit(choice)">{{ choice === 'fail' ? '提交问题' : '记录无法验证' }}</button>
-          <button :disabled="busy" @click="emit('advanced')">补充附件与完整记录</button>
+          <button :disabled="busy" @click="emit('advanced')">{{ compact ? '完整验收记录' : '补充附件与完整记录' }}</button>
         </template>
       </div>
     </template>

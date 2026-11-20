@@ -1,0 +1,401 @@
+{
+  "build": "ff578f1-acc82fa51ede",
+  "version": "0.1.31",
+  "isolated": true,
+  "production_mutations": false,
+  "suites": {
+    "local_paths": {
+      "source": "/tmp/ael-workbench-accepted-local/browser/report.json",
+      "tests": [
+        {
+          "title": "A12b 精确版本确认、过期失败保留输入与重新审阅",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 829
+            }
+          ]
+        },
+        {
+          "title": "A12f 人工通过明确绑定所审阅候选，过期提交不能批准新产物",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 1364
+            }
+          ]
+        },
+        {
+          "title": "A23 提交已保存但回执丢失时刷新后使用原请求重试",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 609
+            }
+          ]
+        },
+        {
+          "title": "A44 已有候选的受阻 UI 检查可恢复并逐项人工验收",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 1530
+            }
+          ]
+        },
+        {
+          "title": "A45 工作区变化时人工验收入口提示候选失效且不改变任务",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 462
+            }
+          ]
+        },
+        {
+          "title": "TD-05 任务读取错误保留页面与重试入口，断线明确标记旧数据",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 4245
+            }
+          ]
+        },
+        {
+          "title": "UC03 JSON 证据先展示结论与观察，原文按需展开",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 511
+            }
+          ]
+        },
+        {
+          "title": "WB01 主要事项聚合、子任务命中和完整分页",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 1600
+            }
+          ]
+        },
+        {
+          "title": "WB02 默认概览直接看图片、报告与键盘返回",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 803
+            }
+          ]
+        },
+        {
+          "title": "WB03 首页真实人工待办验收并回流交付",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 538
+            }
+          ]
+        },
+        {
+          "title": "WB04 既有存量标题、原始需求与未知资料保持可读",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 453
+            }
+          ]
+        },
+        {
+          "title": "WB05 父项下待验子任务可定位，验收后仍需父级集成",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 1153
+            }
+          ]
+        },
+        {
+          "title": "WB05 材料版本变化关闭旧预览，历史图片仍可直接找到",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 5423
+            }
+          ]
+        },
+        {
+          "title": "WB05 同一数据的历史前端与聚合首页对照",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 512
+            }
+          ]
+        }
+      ],
+      "stats": {
+        "startTime": "2026-11-20T03:25:16.982Z",
+        "duration": 20788.128,
+        "expected": 14,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      }
+    },
+    "remote_reviews": {
+      "source": "/tmp/ael-workbench-compact-review/browser/report.json",
+      "tests": [
+        {
+          "title": "WB05 Remote 首页材料与真实验收回执",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 832
+            }
+          ]
+        },
+        {
+          "title": "明确基准、键盘比较、丢失响应和幂等人工回执",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 1096
+            }
+          ]
+        },
+        {
+          "title": "新候选拒绝旧表单且保留输入及图片选择",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 2309
+            }
+          ]
+        },
+        {
+          "title": "缺失、清理及未完成上传分别显示并阻止错误验收",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 807
+            }
+          ]
+        },
+        {
+          "title": "只读会话可读图片并受到人工裁定权限保护",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 273
+            }
+          ]
+        },
+        {
+          "title": "人工 blocked 后可精确恢复且保留原阻塞证据",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 500
+            }
+          ]
+        },
+        {
+          "title": "已提交回执之后版本再次变化时提示重新审阅",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 600
+            }
+          ]
+        },
+        {
+          "title": "慢于轮询周期的原件读取仍能显示比较图片",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 11390
+            }
+          ]
+        },
+        {
+          "title": "读取项目身份失败时不使用空命名空间保存草稿",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 509
+            }
+          ]
+        },
+        {
+          "title": "无候选的任务级意见不用选附件或比较图片",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 566
+            }
+          ]
+        },
+        {
+          "title": "存量普通 UI 检查在任务首屏一次通过，仍显示剩余门禁",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 491
+            }
+          ]
+        },
+        {
+          "title": "直接人工 fail 只收集一段说明",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 401
+            }
+          ]
+        },
+        {
+          "title": "直接人工 blocked 只收集一段说明",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 389
+            }
+          ]
+        },
+        {
+          "title": "直接通过丢失响应后用原请求重试",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 370
+            }
+          ]
+        },
+        {
+          "title": "UC04 账户菜单与公共组件 1280",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 637
+            }
+          ]
+        },
+        {
+          "title": "UC04 账户菜单与公共组件 390",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 787
+            }
+          ]
+        }
+      ],
+      "stats": {
+        "startTime": "2026-11-20T03:24:28.185Z",
+        "duration": 22689.75,
+        "expected": 16,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      }
+    },
+    "remote_materials": {
+      "source": "/tmp/ael-workbench-accepted-materials/browser/report.json",
+      "tests": [
+        {
+          "title": "WB04 资料默认浏览、组合筛选、原图与报告",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 1458
+            }
+          ]
+        },
+        {
+          "title": "管理员在项目设置查看占用、修改额度和放弃未完成上传",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 3180
+            }
+          ]
+        },
+        {
+          "title": "授权用户预览真实证据，清理后不显示假预览",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 2442
+            }
+          ]
+        }
+      ],
+      "stats": {
+        "startTime": "2026-11-20T03:25:15.914Z",
+        "duration": 7682.742,
+        "expected": 3,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      }
+    },
+    "remote_findings": {
+      "source": "/tmp/ael-workbench-accepted-findings/browser/report.json",
+      "tests": [
+        {
+          "title": "发现归并、来源、证据与受检版本可追溯",
+          "status": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration_ms": 1333
+            }
+          ]
+        }
+      ],
+      "stats": {
+        "startTime": "2026-11-20T03:25:20.540Z",
+        "duration": 1885.24,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      }
+    }
+  },
+  "passed": 34
+}

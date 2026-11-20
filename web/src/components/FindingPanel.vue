@@ -4,6 +4,7 @@ import { api, params, refreshRevision, remoteProject } from "../api";
 import { route, setQuery, href } from "../router";
 import { useResource } from "../resource";
 import { stamp } from "../display";
+import ResultsGallery from "./ResultsGallery.vue";
 import FindingActions from "./FindingActions.vue";
 import EvidenceComparison from "./EvidenceComparison.vue";
 import LoadState from "./LoadState.vue";
@@ -98,6 +99,7 @@ onUnmounted(() => clearInterval(timer));
           <ol><li v-for="(step,index) in appearance.input.reproduction" :key="index">{{ step }}</li></ol>
           <p v-if="appearance.input.viewport">视口 {{ appearance.input.viewport.width }} × {{ appearance.input.viewport.height }}</p><p v-if="appearance.input.environment">上报环境 {{ appearance.input.environment }}</p>
           <p v-if="appearance.current_missing_evidence?.length" class="alert">待补证 · {{ appearance.current_missing_evidence.map(missingLabel).join('、') }}</p><p v-else>本次证据已齐</p>
+          <ResultsGallery :files="appearance.current_evidence.filter((e:any)=>e.status==='finalized').map((e:any)=>({ref:e.id,task:taskId,name:e.filename,mime:e.mime,state:record.data.value.validity==='current'?'current':record.data.value.validity==='historical'?'historical':'unknown',purpose:e.role==='screenshot'?'实际观察截图':e.role==='report'?'发现原始报告':e.role}))" heading="问题截图与材料" />
           <ul><li v-for="evidence in appearance.current_evidence" :key="evidence.id">{{ evidence.filename }} · {{ evidence.role }} · 上传者 {{ evidence.uploader }}<button v-if="evidence.status === 'finalized'" @click="emit('artifact', evidence.id)">{{ evidence.role === 'report' ? '查看原始报告' : evidence.role === 'screenshot' ? '查看截图' : '查看交互或附件' }}</button><span v-else>原件不可用</span></li></ul>
         </article>
       </template>

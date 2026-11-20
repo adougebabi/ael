@@ -10,6 +10,30 @@ if (!fixture.isolated || !fs.existsSync(path.join(fixture.out, "ISOLATED-ARTIFAC
 const output = process.env.AEL_UI_OUT || "/tmp/ael-artifact-browser";
 fs.mkdirSync(output, { recursive: true });
 
+test("WB04 资料默认浏览、组合筛选、原图与报告",async({page})=>{
+ const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(fixture.url+'/#/tasks?project=shared');
+ await page.getByLabel('用户名',{exact:true}).fill('reader');await page.getByLabel('密码',{exact:true}).fill('fixture-reader-password');await page.getByRole('button',{name:'登录',exact:true}).click();
+ await page.getByRole('link',{name:'项目设置',exact:true}).click();await page.getByRole('link',{name:'存储与附件',exact:true}).click();
+ const storage=page.getByRole('region',{name:'存储与附件',exact:true});
+ await expect(storage.getByLabel('不限制附件容量')).toHaveCount(0);
+ await expect(storage.locator('.result-file').filter({hasText:'resume.txt'})).toContainText('报告较长，打开读取结论与原文');
+ await storage.getByLabel('资料类型',{exact:true}).selectOption('image/');
+ const imageButton=storage.locator('.result-file').filter({hasText:'screen.png'});await imageButton.scrollIntoViewIfNeeded();await expect(imageButton.locator('img')).toBeVisible();
+ await expect(storage.locator('.result-file')).toHaveCount(1);
+ await expect(storage).toContainText('原文件');await imageButton.click();
+ const preview=page.getByRole('dialog',{name:'成果预览'});await expect(preview.locator('img')).toBeVisible();await expect.poll(()=>preview.locator('img').evaluate((e:HTMLImageElement)=>e.naturalWidth)).toBeGreaterThan(0);
+ await page.keyboard.press('Escape');await expect(imageButton).toBeFocused();
+ await storage.getByLabel('开始日期',{exact:true}).fill('2099-01-01');await expect(storage.locator('.result-file')).toHaveCount(0);
+ await storage.getByLabel('开始日期',{exact:true}).fill('');await storage.getByLabel('资料类型',{exact:true}).selectOption('text/');
+ await storage.getByLabel('搜索附件或任务').fill('report.txt');await expect(storage.locator('.result-file')).toHaveCount(1);
+ await storage.locator('.result-file').click();await expect(preview).toContainText('Synthetic cross-device report');await page.keyboard.press('Escape');
+ await storage.getByRole('button',{name:'清除搜索',exact:true}).click();await storage.getByLabel('资料类型',{exact:true}).selectOption('');
+ await page.screenshot({path:path.join(output,'WB04-materials-1440.png'),fullPage:true});
+ await page.setViewportSize({width:390,height:844});await expect(page.locator('.sidebar')).toBeHidden();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();await page.screenshot({path:path.join(output,'WB04-materials-390.png'),fullPage:true});expect(errors).toEqual([]);
+});
+
 test("管理员在项目设置查看占用、修改额度和放弃未完成上传", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
@@ -21,6 +45,7 @@ test("管理员在项目设置查看占用、修改额度和放弃未完成上�
   await page.getByRole("link", { name: "存储与附件", exact: true }).click();
   const storage = page.getByRole("region", { name: "存储与附件", exact: true });
   await expect(storage.getByText("report.txt", { exact: true })).toBeVisible();
+  await storage.getByRole("button",{name:"存储管理",exact:true}).click();
   await storage.getByText("占用组成与内容复用",{exact:true}).click();
   await expect(storage).toContainText("共享内容避免保存");
   await expect(storage).toContainText("现存相同哈希的物理重复 0 B");
@@ -124,15 +149,13 @@ test("授权用户预览真实证据，清理后不显示假预览", async ({ pa
   const current = await (await request.get(fixture.url + "/api/v1/projects/shared/tasks/task")).json();
   const cancelled = await request.post(fixture.url + "/api/v1/projects/shared/tasks/task/cancel", { headers: adminHeaders, data: { operation_id: "browser-cancel", idempotency_key: "browser-cancel", expected_revision: current.revision, reason: "isolated cleanup fixture" } });
   expect(cancelled.status()).toBe(200);
-  const adminContext = await browser.newContext();
+  const adminContext = await browser.newContext({storageState:await request.storageState()});
   const adminPage = await adminContext.newPage();
   await adminPage.goto(fixture.url + "/#/tasks?project=shared");
-  await adminPage.getByLabel("用户名", { exact:true }).fill("owner");
-  await adminPage.getByLabel("密码", { exact:true }).fill("fixture-admin-password");
-  await adminPage.getByRole("button", { name:"登录", exact:true }).click();
   await adminPage.getByRole("link", { name:"项目设置", exact:true }).click();
   await adminPage.getByRole("link", { name:"存储与附件", exact:true }).click();
   const adminStorage = adminPage.getByRole("region", { name:"存储与附件", exact:true });
+  await adminStorage.getByRole("button",{name:"存储管理",exact:true}).click();
   await adminStorage.getByLabel("创建日期早于").fill(new Date(Date.now()+2*86400000).toISOString().slice(0,10));
   await adminStorage.getByRole("button", { name:"预览可清理项", exact:true }).click();
   await expect(adminPage.getByRole("dialog")).toContainText("本次可清理 4 项");

@@ -1,0 +1,12 @@
+{
+  "version": "0.1.31",
+  "build": "ff578f1-e866be82efc6",
+  "commit": "ff578f1e80a5b4acb8298d695a74181cd10df195",
+  "dirty": true,
+  "publication": "local_unpublished",
+  "protocols": {
+    "api": 1,
+    "skill": 1,
+    "cli_output": 1
+  }
+}

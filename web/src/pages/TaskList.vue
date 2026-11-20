@@ -1,124 +1,71 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { api, info, params, refreshRevision, remoteProject } from "../api";
-import { route, setQuery, taskHref, knowledgeHref, href } from "../router";
-import { useResource } from "../resource";
-import { workPresentation, boards, label, schedule, reviewNoteStatus, stamp, relativeStamp, blockerText, checkStatusSummary } from "../display";
-import LoadState from "../components/LoadState.vue";
-import Pagination from "../components/Pagination.vue";
-import AttentionCard from "../components/AttentionCard.vue";
-import ManualReviewDialog from "../components/ManualReviewDialog.vue";
-import AppIcon from "../components/AppIcon.vue";
-import { pendingReviews } from "../reviewDraft";
-
-const r = useResource<any>({ groups: {}, counts: {}, total: 0, attention: [], attentionTotal: 0, attentionIds: [] });
-const { data, loading, error, last } = r;
-const recent = useResource<any>({ items: [] });
-const basis = useResource<any>({ items: [] });
-const search = ref(route.value.query.get("q") || "");
-const board = computed(() => route.value.query.get("board") || "");
-const taskType = computed(() => route.value.query.get("type") || "");
-const canJudge = computed(() => !remoteProject.value || ["admin", "reviewer"].includes(remoteProject.value.role));
-const parent = computed(() => route.value.query.get("parent") || "");
-const days = computed(() => route.value.query.get("days") || "30");
-function showTaskReview(id: string, check = "") { if (remoteProject.value) { location.hash = taskHref(id, "checks", check); } else manualTarget.value = { id, check }; }
-const manualTarget = ref<{ id: string; check: string } | null>(null);
-const pendingTargets = ref(pendingReviews(info.value.project || ""));
-watch(() => info.value.project, (project) => { pendingTargets.value = pendingReviews(project || ""); }, { immediate: true });
-const attention = computed(() => (data.value.attention || []).filter((item: any) => !pendingTargets.value.some((pending) => pending.taskId === item.task.id)));
-const attentionCount = computed(() => {
-  const known = new Set<string>(data.value.attentionIds || []);
-  const pending = new Set(pendingTargets.value.map((item) => item.taskId));
-  return (data.value.attentionTotal || 0) + [...pending].filter((id) => !known.has(id)).length;
-});
-const currentCount = computed(() => ["active", "pending", "confirmation"].reduce((sum, id) => sum + (data.value.counts[id] || 0), 0));
-const compactEmpty = computed(() => !!last.value && !loading.value && !error.value && !board.value && !search.value && !taskType.value && !parent.value && currentCount.value === 0);
-const visibleBoards = computed(() => boards.filter(([id]) => board.value === "all" ? !!data.value.counts[id] : board.value ? board.value === id : ["active", "pending", "confirmation"].includes(id) && !!data.value.counts[id]));
-const filteredCount = computed(() => board.value === "all" ? data.value.total : board.value ? data.value.counts[board.value] || 0 : currentCount.value);
-const boardName = (id: string, title: string) => ({ active: "推进中", completed: "已完成" } as Record<string, string>)[id] || title;
-const initials = (name: string) => name.split(/[\s_-]+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "—";
-const offset = (id: string) => Number(route.value.query.get("p_" + id) || 0);
-function filter(values: Record<string, string>) {
-  setQuery({ ...Object.fromEntries(boards.map(([id]) => ["p_" + id, undefined])), ...values });
-}
-async function load(quiet = false) {
-  const query = route.value.query.toString();
-  await r.load(async () => {
-    const [page, attentionResult] = await Promise.all([
-      api("/api/tasks?" + params({ compact: 1, limit: 20,
-        ...Object.fromEntries(boards.map(([id]) => ["offset_" + id, offset(id)])),
-        days: days.value === "all" ? 0 : days.value, q: route.value.query.get("q") || "",
-        type: taskType.value, parent: parent.value, board: board.value === "all" ? "" : board.value })),
-      api("/api/attention").then((value) => ({ value, error: "" })).catch((error) => ({ value: null, error: String(error) })),
-    ]);
-    if (query !== route.value.query.toString()) throw new Error("请求已由新筛选替代");
-    return {
-      groups: Object.fromEntries(boards.map(([id]) => [id, page.items.filter((item: any) => item.board === id)])),
-      counts: page.counts || {}, total: page.total || 0,
-      attention: attentionResult.value?.items || [], attentionTruncated: !!attentionResult.value?.truncated,
-      attentionTotal: attentionResult.value?.total || 0, attentionIds: attentionResult.value?.task_ids || [],
-      attentionError: attentionResult.error,
-    };
-  }, quiet);
-}
-function loadRecent(quiet = false) { return recent.load(() => api("/api/tasks?" + params({ compact: 1, board: "completed", days: 0, limit: 2 })), quiet); }
-function loadBasis(quiet = false) { return basis.load(() => api("/api/knowledge-page?" + params({ view: "current", limit: 2 })), quiet); }
-function reviewSaved() { pendingTargets.value = pendingReviews(info.value.project || ""); load(true); loadRecent(true); }
-function reviewClosed() { manualTarget.value = null; pendingTargets.value = pendingReviews(info.value.project || ""); }
-watch(() => route.value.key, () => { search.value = route.value.query.get("q") || ""; load(); });
-watch(refreshRevision, () => { load(); loadRecent(); loadBasis(); });
-let debounce: ReturnType<typeof setTimeout>;
-function input() { clearTimeout(debounce); debounce = setTimeout(() => filter({ q: search.value }), 180); }
-let timer: ReturnType<typeof setInterval>;
-let refreshCount = 0;
-onMounted(() => { load(); loadRecent(); loadBasis(); timer = setInterval(() => { load(true); refreshCount++; if (refreshCount % 5 === 0) loadRecent(true); if (refreshCount % 15 === 0) loadBasis(true); }, 4000); });
-onUnmounted(() => { clearInterval(timer); clearTimeout(debounce); });
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { api, info, params, refreshRevision, remoteProject } from '../api';
+import { route, setQuery, taskHref } from '../router';
+import { useResource } from '../resource';
+import { boards, label, workPresentation } from '../display';
+import LoadState from '../components/LoadState.vue';
+import Pagination from '../components/Pagination.vue';
+import AttentionCard from '../components/AttentionCard.vue';
+import ManualReviewDialog from '../components/ManualReviewDialog.vue';
+import ResultsGallery from '../components/ResultsGallery.vue';
+import WorkSummary from '../components/WorkSummary.vue';
+import { pendingReviews } from '../reviewDraft';
+const r=useResource<any>({items:[],counts:{},total:0,project_total:0,project_children:0,unfinished:0,anomalies:0});
+const {data,loading,error,last}=r;
+const recent=useResource<any>({items:[]});
+const todo=useResource<any>({items:[]});
+const search=ref(route.value.query.get('q') || '');
+const board=computed(()=>route.value.query.get('board') || '');
+const offset=computed(()=>Number(route.value.query.get('offset') || 0));
+const canJudge=computed(()=>!remoteProject.value || ['admin','reviewer'].includes(remoteProject.value.role));
+const attention=computed(()=>(todo.data.value.items || []).filter((x:any)=>['human','decision','history'].includes(x.kind) && !pendingTargets.value.some(p=>p.taskId===x.task.id)));
+const manualTarget=ref<{id:string;check:string}|null>(null);
+const pendingTargets=ref(pendingReviews(info.value.project || ''));
+watch(()=>info.value.project,project=>{pendingTargets.value=pendingReviews(project || '');},{immediate:true});
+const childPages=ref<Record<string,any>>({});
+const childErrors=ref<Record<string,string>>({});
+const childBusy=ref<Record<string,boolean>>({});
+const opened=computed(()=>(route.value.query.get('open') || '').split(',').filter(Boolean));
+let generation=0;const childSequences:Record<string,number>={};
+const childOffset=(id:string)=>Number(route.value.query.get("c_"+id) || 0);
+async function refreshChildren(){await Promise.all(opened.value.map(id=>children(id,childOffset(id))));}
+function query(extra:Record<string,unknown>={}){return params({view:'workbench',limit:20,board:board.value,q:route.value.query.get('q') || '',type:route.value.query.get('type') || '',days:['completed','all'].includes(board.value)?route.value.query.get('days') || 30:0,...extra});}
+function filter(values:Record<string,string>){const clear:Record<string,undefined>={};route.value.query.forEach((_value,key)=>{if(key.startsWith("c_"))clear[key]=undefined;});setQuery({...clear,offset:undefined,open:undefined,...values});}
+async function load(quiet=false){await r.load(()=>api('/api/tasks?'+query({offset:offset.value})),quiet);await refreshChildren();}
+async function children(id:string,offset=0){const gen=generation;const requestID=(childSequences[id] || 0)+1;childSequences[id]=requestID;childBusy.value[id]=true;try{const value=await api('/api/tasks?'+query({parent:id,offset}));if(gen!==generation || childSequences[id]!==requestID)return;if(offset>0 && offset>=value.total){setQuery({['c_'+id]:Math.max(0,Math.ceil(value.total/20)-1)*20});return;}childPages.value[id]=value;childErrors.value[id]='';}catch(e){if(gen===generation && childSequences[id]===requestID)childErrors.value[id]=String(e);}finally{if(gen===generation && childSequences[id]===requestID)childBusy.value[id]=false;}}
+function toggle(id:string){const open=opened.value.includes(id)?opened.value.filter(x=>x!==id):[...opened.value,id];setQuery({open:open.join(',') || undefined});}
+async function extras(quiet=false){pendingTargets.value=pendingReviews(info.value.project || '');await Promise.all([recent.load(()=>api('/api/tasks?'+params({compact:1,board:'completed',days:0,limit:2})),quiet),todo.load(()=>api('/api/attention?human=1'),quiet)]);}
+function showTaskReview(id:string,check=''){if(remoteProject.value)location.hash=taskHref(id,'overview',check);else manualTarget.value={id,check};}
+function saved(){pendingTargets.value=pendingReviews(info.value.project || '');load(true);extras(true);}
+watch(()=>route.value.key,()=>{generation++;search.value=route.value.query.get('q') || '';load();});
+watch(refreshRevision,()=>{load();extras();});
+let debounce:ReturnType<typeof setTimeout>;function input(){clearTimeout(debounce);debounce=setTimeout(()=>filter({q:search.value}),180);}
+let timer:ReturnType<typeof setInterval>;
+onMounted(()=>{load();extras();timer=setInterval(()=>{load(true);extras(true);},10000);});
+onUnmounted(()=>{generation++;clearInterval(timer);clearTimeout(debounce);});
 </script>
 <template>
-  <section v-if="attentionCount || data.attentionError || data.attentionTruncated" class="attention-section">
-    <div class="section-heading"><h2>需要你处理 <span class="count">{{ data.attentionTruncated ? '≥' : '' }}{{ attentionCount }}</span></h2><small>验收、决策与阻塞，不必在任务里反复寻找</small></div>
-    <div v-if="attentionCount" class="attention-grid"><article v-for="pending in pendingTargets" :key="pending.taskId + ':' + pending.checkId" class="attention-card featured"><div class="attention-meta"><span><AppIcon name="clock"/>验收提交待确认</span><small>{{ pending.taskId }}</small></div><h3>{{ pending.title }}</h3><p>上次提交结果尚未确认，请原样重试并核对回执。</p><div class="attention-bottom"><small>本标签页保存的验收请求</small><button class="primary" @click="manualTarget = { id: pending.taskId, check: pending.checkId }">查看并重试</button></div></article><AttentionCard v-for="item in attention" :key="item.kind + ':' + item.task.id" :kind="item.kind" :task="item.task" @review="showTaskReview" /></div>
-    <p v-else-if="!loading && !data.attentionError && !data.attentionTruncated" class="attention-empty">目前没有需要你介入的事项。</p>
-    <p v-if="data.attentionTruncated" class="secondary">待处理事项较多，此处仅检查了最近的部分任务；请使用下方分组查看全部任务。</p>
-    <p v-if="data.attentionError" class="secondary">暂时无法读取待处理事项，请刷新工作台重试。</p>
+  <header class="workbench-heading"><div class="workbench-title-line"><h1>{{ remoteProject?.name || info.project?.split('/').filter(Boolean).pop() || '工作台' }}</h1><a v-if="!remoteProject" class="button primary" href="#/tasks/new">＋ 创建任务</a></div><p>未完成 {{ data.unfinished }} 个主要事项 · 完整项目 {{ data.project_total }} 个主要事项 / {{ data.project_children }} 个子任务</p></header>
+  <section v-if="attention.length || pendingTargets.length || todo.error.value" class="attention-section">
+    <div class="section-heading"><h2>{{ canJudge ? '需要你处理' : '等待有权限的负责人处理' }} · {{ todo.data.value.truncated?'至少 ':'' }}{{ todo.data.value.total || 0 }} 项</h2></div>
+    <LoadState :loading="todo.loading.value" :error="todo.error.value" :last="todo.last.value" @retry="extras()" />
+    <div class="attention-grid"><article v-for="pending in pendingTargets" :key="pending.taskId+pending.checkId" class="attention-card"><h3>{{ pending.title }}</h3><p>验收提交结果待确认</p><button @click="manualTarget={id:pending.taskId,check:pending.checkId}">核对原请求回执</button></article><AttentionCard v-for="item in attention" :key="item.task.id" :kind="item.kind" :task="item.task" @review="showTaskReview" @saved="saved" /></div><p class="secondary">此处显示少量待办。<a href="#/tasks?board=human">全部待人工验收</a> · <a href="#/tasks?board=confirmation">全部待决定 / 历史核对</a><span v-if="todo.data.value.truncated"> · 扫描范围受限，完整记录请使用工作视图。</span></p>
   </section>
-  <section v-if="compactEmpty" class="workbench-empty" aria-label="当前工作空状态"><div><h2>当前没有活跃任务</h2><p class="secondary">最近交付保留在下方，历史任务可从全部记录继续查看。</p></div><button @click="filter({ board: 'all' })">查看全部记录</button></section>
-  <div v-else class="workbench-controls">
-    <nav class="group-counts" aria-label="任务分组定位">
-      <a href="#/tasks" :aria-current="!board ? 'page' : undefined" :class="{ chosen: !board }" @click.prevent="filter({ board: '' })">当前工作 <strong>{{ currentCount }}</strong></a>
-      <a v-for="[id, title] in boards" :key="id" :href="'#/tasks?board=' + id" :aria-current="board === id ? 'page' : undefined" :class="{ chosen: board === id }" @click.prevent="filter({ board: id })"><span>{{ boardName(id, title) }}</span><strong>{{ data.counts[id] || 0 }}</strong></a>
-    </nav>
-    <div class="toolbar workbench-filters">
-      <label class="search"><span class="visually-hidden">搜索任务</span><AppIcon name="search"/><input v-model="search" type="search" placeholder="搜索任务…" @input="input" /></label>
-      <select aria-label="任务类型" :value="taskType" @change="filter({ type: ($event.target as HTMLSelectElement).value })"><option value="">所有类型</option><option v-for="kind in ['epic', 'feature', 'bug', 'improvement', 'refactor', 'research', 'docs', 'chore', 'test', 'qa', 'verify']" :key="kind" :value="kind">{{ label(kind) }}</option></select>
-      <select v-if="['completed', 'all'].includes(board)" aria-label="完成历史" :value="days" @change="filter({ days: ($event.target as HTMLSelectElement).value })"><option value="7">最近 7 天</option><option value="30">最近 30 天</option><option value="all">全部历史</option></select>
-    </div>
+  <div class="workbench-controls">
+    <nav class="group-counts" aria-label="任务分组定位"><a href="#/tasks" :class="{chosen:!board}" @click.prevent="filter({board:''})">未完成 <strong>{{ data.unfinished }}</strong></a><a v-for="[id,title] in boards" :key="id" :href="'#/tasks?board='+id" :class="{chosen:board===id}" @click.prevent="filter({board:id})">{{ title }} <strong>{{ data.counts[id] || 0 }}</strong></a></nav>
+    <div class="toolbar workbench-filters"><label class="search"><span class="visually-hidden">搜索任务</span><input v-model="search" type="search" placeholder="搜索事项、子任务或原始需求…" @input="input" /></label><select aria-label="工作视图" :value="board" @change="filter({board:($event.target as HTMLSelectElement).value})"><option value="">全部未完成</option><option value="human">待人工验收</option><option value="blocked">受阻</option><option value="repair">待修复</option><option value="issues">状态与关系待核对（{{ data.anomalies }} 条记录）</option><option value="all">全部记录</option><option v-for="[id,title] in boards" :key="id" :value="id">{{ title }}</option></select><select aria-label="任务类型" :value="route.query.get('type') || ''" @change="filter({type:($event.target as HTMLSelectElement).value})"><option value="">所有类型</option><option v-for="kind in ['epic','feature','bug','improvement','refactor','research','docs','chore','test','qa','verify']" :key="kind" :value="kind">{{ label(kind) }}</option></select><select v-if="['completed','all'].includes(board)" aria-label="完成历史" :value="route.query.get('days') || '30'" @change="filter({days:($event.target as HTMLSelectElement).value})"><option value="7">最近 7 天</option><option value="30">最近 30 天</option><option value="0">全部历史</option></select></div>
   </div>
-  <p v-if="parent" class="secondary">子任务 · 父任务 <a :href="taskHref(parent)">{{ parent }}</a> <button class="inline-link" @click="filter({ parent: '' })">显示全部任务</button></p>
   <LoadState :loading="loading" :error="error" :last="last" @retry="load()" />
-  <template v-if="!compactEmpty"><p class="table-scroll-hint">左右滑动可查看执行者、验收和进展。</p><div class="board-scroll" tabindex="0" aria-label="任务分组列表，可横向滚动">
-    <div class="task-table-head" aria-hidden="true"><span>工作内容</span><span>当前状态</span><span>执行 / 负责</span><span>必要验收</span><span>最近进展</span><span></span></div>
-    <div class="board">
-      <section v-for="[id, title] in visibleBoards" :key="id" :data-board="id" class="task-group">
-        <div class="group-heading"><span class="group-dot" :class="id"></span><h2>{{ title }}</h2><span class="count">{{ data.counts[id] || 0 }}</span></div>
-          <div v-for="s in data.groups[id] || []" :key="s.id" class="task task-row">
-            <div class="task-title"><div class="task-title-line"><span class="task-icon"><AppIcon :name="s.type === 'research' ? 'file' : s.type === 'refactor' ? 'evolution' : 'layers'" /></span><a :id="'task-link-' + s.id" class="task-title-link" :href="taskHref(s.id)"><h3>{{ s.title }}</h3></a></div><p class="task-subline"><span :title="s.id">{{ s.id }}</span><span>{{ label(s.step) }}</span><a v-if="s.parent" :href="taskHref(s.parent)">父任务 {{ s.parent }}</a><a v-if="s.type === 'epic'" :href="href('/tasks', { parent: s.id, board: 'all', days: 'all' })">子任务 {{ s.children }}</a></p></div>
-            <div class="task-state"><span class="status" :class="[s.board, { confirmation: s.manual_reviews?.length || s.next_action === 'wait_environment' }]">{{ workPresentation(s).title }}</span><small v-if="reviewNoteStatus(s)" class="review-note-status">{{ reviewNoteStatus(s) }}</small><small v-if="s.type === 'epic' && s.epic"><a v-if="s.epic.issues.length" :href="taskHref(s.epic.issues[0].task, s.epic.issues[0].check ? 'checks' : 'overview', s.epic.issues[0].check || '')">{{ s.epic.issues[0].title }}：{{ blockerText(s.epic.issues[0].reason) }}</a><template v-else>{{ s.epic.waiting_handoff }} 项等待接手</template></small><small v-else-if="!reviewNoteStatus(s) || s.blocker_reason || s.blocking_reasons?.length" :class="{ 'blocked-reason': s.blocker_reason || s.blocking_reasons?.length }">{{ s.blocker_reason ? blockerText(s.blocker_reason) : s.blocking_reasons?.length ? s.blocking_reasons.map(blockerText).join('；') : s.manual_reviews?.length ? (canJudge ? '等待你操作' : '等待有权限的验收人员') : workPresentation(s).current }}</small></div>
-            <div class="task-owner"><span class="owner-avatar" aria-hidden="true">{{ s.executors.length ? initials(s.executors[0]) : '—' }}</span><span>{{ s.executors.length ? s.executors.join('、') : (['completed','cancelled'].includes(s.next_action) ? '责任已结束' : '等待执行者接手') }}</span><small v-if="s.historical">历史记录 · 当前未复验</small></div>
-            <div class="task-checks"><template v-if="s.type === 'epic' && s.epic"><span>叶子 {{ s.epic.total }} · 已实施 {{ s.epic.implemented }}</span><small>已验收 {{ s.epic.accepted }} · 集成 {{ s.epic.integrated }} · 交付 {{ s.epic.delivered }}</small><small v-if="s.epic.failed || s.epic.blocked">失败 {{ s.epic.failed }} · 阻塞 {{ s.epic.blocked }}</small></template><span v-else>{{ checkStatusSummary(s.checks) }}</span></div>
-            <div class="task-activity"><span>{{ workPresentation(s).latest || (s.historical ? '历史记录，当前成果待核对' : '最近有效成果尚未回报') }}</span><small v-if="workPresentation(s).at" :title="stamp(workPresentation(s).at)">{{ relativeStamp(workPresentation(s).at) }}</small><small v-if="s.health?.no_progress">长时间无新成果；宿主状态未知</small></div>
-            <button v-if="!s.requires_task_decision && s.manual_reviews?.length && canJudge" class="task-row-action" @click="showTaskReview(s.id, s.manual_reviews.length === 1 ? s.manual_reviews[0].check : '')">进行人工验收</button><a v-else class="task-row-action button" :href="taskHref(s.id)">{{ workPresentation(s).action }}</a>
-          </div>
-          <p v-if="!loading && !(data.groups[id] || []).length" class="empty">{{ search ? '当前筛选无匹配任务。' : data.counts[id] || 0 ? '本页无任务，请返回上一页。' : '暂无' + title + '的任务。' }}</p>
-          <Pagination v-if="(data.counts[id] || 0) > 20 || offset(id) > 0" :offset="offset(id)" :limit="20" :total="data.counts[id] || 0" :name="title" @change="setQuery({ ['p_' + id]: $event })" />
-      </section>
-      <p v-if="!loading && !visibleBoards.length" class="empty">{{ search ? '当前筛选无匹配任务。' : '当前分组暂无工作。' }}</p>
-    </div>
-    <footer class="task-table-footer"><span>{{ filteredCount }} 项工作 · {{ board === 'completed' ? '按所选时间查看完成记录' : '活跃任务不受完成时间限制' }}</span><button class="inline-link" @click="filter({ board: 'all' })">查看全部记录 →</button></footer>
-  </div>
-  </template><div class="dashboard-bottom" :class="{ 'compact-dashboard': compactEmpty && !basis.data.value.items.length }">
-    <section class="dashboard-panel"><div class="dashboard-panel-heading"><h2>最近交付</h2><a href="#/evolution?kind=delivery">查看演进 →</a></div><LoadState :loading="recent.loading.value" :error="recent.error.value" :last="recent.last.value" @retry="loadRecent" /><p v-if="!recent.loading.value && !recent.error.value && !recent.data.value.items.length" class="empty">尚无可追溯的交付结果。</p><a v-for="item in recent.data.value.items" :key="item.id" class="dashboard-item" :href="taskHref(item.id)"><span class="dashboard-item-icon"><AppIcon name="package" /></span><span class="dashboard-item-body"><strong>{{ item.title }}</strong><small>{{ label(item.last_result) }}<span v-if="item.historical"> · 历史记录，未复验</span></small></span><small>{{ stamp(item.completed_at) }}</small></a></section>
-    <section v-if="!compactEmpty || basis.data.value.items.length || basis.error.value" class="dashboard-panel"><div class="dashboard-panel-heading"><h2>项目依据</h2><a href="#/knowledge">规范库 →</a></div><LoadState :loading="basis.loading.value" :error="basis.error.value" :last="basis.last.value" @retry="loadBasis" /><p v-if="!basis.loading.value && !basis.error.value && !basis.data.value.items.length" class="empty">尚无现行资料。</p><a v-for="item in basis.data.value.items" :key="item.id" class="dashboard-item" :href="knowledgeHref(item.id)"><span class="dashboard-item-icon"><AppIcon name="file" /></span><span class="dashboard-item-body"><strong>{{ item.title }}</strong><small>{{ label(item.status) }} · {{ item.paths?.join('、') || '项目级' }}</small></span><span aria-hidden="true">›</span></a></section>
-  </div>
-  <ManualReviewDialog v-if="manualTarget" :key="manualTarget.id + ':' + manualTarget.check" :task-id="manualTarget.id" :check-id="manualTarget.check" @select-check="manualTarget.check = $event" @close="reviewClosed" @saved="reviewSaved" />
+  <p class="secondary">当前视图 {{ data.total }} 个主要事项 · 命中 {{ data.matched_children || 0 }} 个子任务。各视图范围可重叠，按主要事项去重；未完成工作不受时间限制。</p>
+  <section class="work-list" aria-label="主要事项">
+    <article v-for="row in data.items" :key="row.task.id" class="work-item task-row" :data-task="row.task.id"><WorkSummary :row="row" />
+      <div class="work-actions"><button v-if="row.children" :aria-expanded="opened.includes(row.task.id)" @click="toggle(row.task.id)">{{ opened.includes(row.task.id)?'收起子任务':'展开子任务' }} · {{ row.matches }} 项命中</button><a class="button" :href="taskHref(row.task.id)">{{ workPresentation(row.task).action }}</a></div>
+      <div v-if="opened.includes(row.task.id)" class="work-children"><p class="secondary">{{ board || search ? '当前筛选命中的子任务（保留真实路径）' : '未完成子任务' }} · <a :href="'#/tasks?board=all&days=0&open='+row.task.id">包含已完成记录</a></p><p v-if="childBusy[row.task.id]" role="status">正在读取子任务…</p><p v-if="childErrors[row.task.id]" role="alert">{{ childErrors[row.task.id] }} <button @click="children(row.task.id)">重试</button></p><div v-for="child in childPages[row.task.id]?.items || []" :key="child.task.id" class="work-child"><WorkSummary :row="child" /></div><p v-if="childPages[row.task.id]?.total===0">此筛选下没有命中的子任务。</p><Pagination v-if="childPages[row.task.id]?.total>20" :offset="childPages[row.task.id].offset" :limit="20" :total="childPages[row.task.id].total" :busy="childBusy[row.task.id]" name="子任务" @change="setQuery({['c_'+row.task.id]:$event})" /></div>
+    </article>
+    <p v-if="!loading && !error && !data.items.length" class="empty">{{ search || board ? '当前筛选没有匹配事项，可切换视图或清除搜索。' : '目前没有未完成工作，最近交付保留在下方。' }}</p>
+  </section>
+  <Pagination v-if="data.total>20 || offset" :offset="offset" :limit="20" :total="data.total" name="主要事项" :busy="loading" @change="setQuery({offset:$event})" />
+  <section class="dashboard-panel recent-deliveries"><div class="dashboard-panel-heading"><h2>最近交付</h2><a href="#/tasks?board=completed&days=0">全部完成记录 →</a><a href="#/knowledge">规范库 →</a></div><LoadState :loading="recent.loading.value" :error="recent.error.value" :last="recent.last.value" @retry="extras()" /><article v-for="item in recent.data.value.items" :key="item.id" class="dashboard-item"><div><a :href="taskHref(item.id)"><strong>{{ item.title }}</strong></a><p>{{ workPresentation(item).latest || label(item.last_result) }}<span v-if="item.historical"> · 历史结果，当前未复验</span></p><ResultsGallery :task-id="item.id" heading="交付成果" /></div></article><p v-if="!recent.loading.value && !recent.data.value.items.length" class="empty">尚无可追溯的交付结果。</p></section>
+  <ManualReviewDialog v-if="manualTarget" :key="manualTarget.id+':'+manualTarget.check" :task-id="manualTarget.id" :check-id="manualTarget.check" @select-check="manualTarget.check=$event" @close="manualTarget=null" @saved="saved" />
 </template>

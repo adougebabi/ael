@@ -191,6 +191,10 @@ func (h *standaloneHandler) remoteDashboard(w http.ResponseWriter, r *http.Reque
 			value, _ := strconv.Atoi(q.Get("offset_" + board))
 			offsets[board] = max(0, value)
 		}
+		if q.Get("view") == "workbench" {
+			result, err = service.Workbench(core.Query{Limit: limit, Offset: offset, Days: days, Text: q.Get("q"), Type: q.Get("type"), Board: q.Get("board"), Parent: q.Get("parent")})
+			break
+		}
 		page, e := service.QueryPage(core.Query{Limit: limit, Offset: offset, Offsets: offsets, Days: days, Text: q.Get("q"), Type: q.Get("type"), Board: q.Get("board"), Parent: q.Get("parent")})
 		err = e
 		labels, e := dashboardClientLabels(service)
@@ -259,7 +263,11 @@ func (h *standaloneHandler) remoteDashboard(w http.ResponseWriter, r *http.Reque
 		}
 		result = tree
 	case "attention":
-		result, err = service.Attention()
+		if q.Get("human") == "1" {
+			result, err = service.HumanAttention()
+		} else {
+			result, err = service.Attention()
+		}
 	case "events":
 		result, err = service.Events(id)
 	case "artifact", "artifact-status":

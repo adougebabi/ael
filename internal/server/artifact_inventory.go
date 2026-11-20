@@ -7,9 +7,11 @@ import (
 	"errors"
 	"sort"
 	"strings"
+	"time"
 )
 
 type artifactStorageItem struct {
+	Purpose        string   `json:"purpose"`
 	Retention      []string `json:"retention_reasons,omitempty"`
 	SHA256         string   `json:"sha256"`
 	ContentID      string   `json:"content_id"`
@@ -60,10 +62,34 @@ type artifactInventory struct {
 	UntrackedBytes    int64                      `json:"untracked_bytes"`
 }
 
+type artifactFilter struct{ Task, MIME, Source, Since, Until, Order string }
+
 func (a *artifactStore) inventory(principal standalonePrincipal, canWrite bool, kind, query string, limit, offset int) (artifactInventory, error) {
+	return a.inventoryFiltered(principal, canWrite, kind, query, limit, offset, artifactFilter{})
+}
+func artifactSourceCategory(source string) string {
+	switch {
+	case strings.Contains(source, "context") || strings.Contains(source, "knowledge"):
+		return "context snapshot"
+	case strings.HasPrefix(source, "authority-import:"):
+		return "import history"
+	case strings.Contains(source, "runner"):
+		return "execution evidence"
+	default:
+		return "other"
+	}
+}
+func (a *artifactStore) inventoryFiltered(principal standalonePrincipal, canWrite bool, kind, query string, limit, offset int, filter artifactFilter) (artifactInventory, error) {
 	result := artifactInventory{Items: []artifactStorageItem{}, Tasks: []artifactTaskStorage{}, Limit: limit, Offset: offset}
 	if (kind != "files" && kind != "uploads") || limit < 1 || limit > 100 || offset < 0 || len(query) > 500 {
 		return result, errors.New("ARTIFACT_INVALID")
+	}
+	for _, date := range []string{filter.Since, filter.Until} {
+		if date != "" {
+			if _, err := time.Parse("2006-01-02", date); err != nil {
+				return result, errors.New("ARTIFACT_INVALID")
+			}
+		}
 	}
 	conn, err := a.service.Store.DB.Conn(context.Background())
 	if err != nil {
@@ -97,10 +123,10 @@ func (a *artifactStore) inventory(principal standalonePrincipal, canWrite bool, 
 WITH visible_objects AS MATERIALIZED (SELECT o.*,COALESCE(m.object_id,o.id) AS content_id FROM artifact_objects o LEFT JOIN artifact_content m ON m.artifact_id=o.id WHERE o.status IN ('finalized','purging')),
 visible_uploads AS MATERIALIZED (SELECT * FROM artifact_uploads WHERE status IN ('open','purging') OR id IN (SELECT value FROM json_each(?))),
 task_titles AS MATERIALIZED (SELECT id,json_extract(body,'$.definition.title') AS title,status FROM tasks WHERE id IN (SELECT task_id FROM visible_objects UNION SELECT task_id FROM visible_uploads))
-SELECT a.id,a.id,'files',a.task_id,coalesce(t.title,a.task_id),a.filename,a.mime,a.size,a.status,a.uploader,a.source,a.created,'','','',a.sha256,a.content_id,EXISTS(SELECT 1 FROM portable_context_sources s WHERE s.artifact_id=a.id),EXISTS(SELECT 1 FROM artifact_references r WHERE r.artifact_id=a.id),coalesce(t.status,'')
+SELECT a.id,a.id,'files',a.task_id,coalesce(t.title,a.task_id),a.filename,a.mime,a.size,a.status,a.uploader,a.source,a.created,'','','',a.sha256,a.content_id,EXISTS(SELECT 1 FROM portable_context_sources s WHERE s.artifact_id=a.id),EXISTS(SELECT 1 FROM artifact_references r WHERE r.artifact_id=a.id),coalesce(t.status,''),coalesce((SELECT group_concat(DISTINCT json_extract(e.value,'$.check')) FROM tasks et,json_each(et.body,'$.evidence') e,json_each(e.value,'$.artifacts') ar WHERE et.id=a.task_id AND ar.value=a.id),'')
 FROM visible_objects a LEFT JOIN task_titles t ON t.id=a.task_id
 UNION ALL
-SELECT a.id,a.artifact_id,'uploads',a.task_id,coalesce(t.title,a.task_id),a.filename,a.mime,a.size,a.status,a.uploader,a.source,a.created,a.owner_id,a.operation_id,a.idempotency_key,a.sha256,COALESCE(m.object_id,a.artifact_id),0,0,coalesce(t.status,'')
+SELECT a.id,a.artifact_id,'uploads',a.task_id,coalesce(t.title,a.task_id),a.filename,a.mime,a.size,a.status,a.uploader,a.source,a.created,a.owner_id,a.operation_id,a.idempotency_key,a.sha256,COALESCE(m.object_id,a.artifact_id),0,0,coalesce(t.status,''),''
 FROM visible_uploads a LEFT JOIN task_titles t ON t.id=a.task_id LEFT JOIN artifact_content m ON m.artifact_id=a.artifact_id ORDER BY 3,1`, string(uploadJSON))
 		if err != nil {
 			return err
@@ -117,13 +143,18 @@ FROM visible_uploads a LEFT JOIN task_titles t ON t.id=a.task_id LEFT JOIN artif
 			var item artifactStorageItem
 			var owner, operation, key, taskStatus string
 			var contextRef, taskRef bool
-			if err := rows.Scan(&item.ID, &item.ArtifactID, &item.Kind, &item.TaskID, &item.TaskTitle, &item.Filename, &item.MIME, &item.Size, &item.Status, &item.Uploader, &item.Source, &item.Created, &owner, &operation, &key, &item.SHA256, &item.ContentID, &contextRef, &taskRef, &taskStatus); err != nil {
+			if err := rows.Scan(&item.ID, &item.ArtifactID, &item.Kind, &item.TaskID, &item.TaskTitle, &item.Filename, &item.MIME, &item.Size, &item.Status, &item.Uploader, &item.Source, &item.Created, &owner, &operation, &key, &item.SHA256, &item.ContentID, &contextRef, &taskRef, &taskStatus, &item.Purpose); err != nil {
 				return err
 			}
+			if item.Purpose != "" {
+				item.Purpose = "关联检查：" + item.Purpose
+			}
 			if contextRef {
+				item.Purpose += " 规范快照"
 				item.Retention = append(item.Retention, "现行或历史规范快照引用")
 			}
 			if taskRef {
+				item.Purpose += " 任务显式引用"
 				item.Retention = append(item.Retention, "其他任务存在显式引用")
 			}
 			if taskStatus == "open" {
@@ -143,15 +174,7 @@ FROM visible_uploads a LEFT JOIN task_titles t ON t.id=a.task_id LEFT JOIN artif
 				}
 				seen[item.ContentID] = true
 				category := item.MIME
-				source := "other"
-				switch {
-				case strings.Contains(item.Source, "context") || strings.Contains(item.Source, "knowledge"):
-					source = "context snapshot"
-				case strings.HasPrefix(item.Source, "authority-import:"):
-					source = "import history"
-				case strings.Contains(item.Source, "runner"):
-					source = "execution evidence"
-				}
+				source := artifactSourceCategory(item.Source)
 				for _, group := range []struct {
 					m map[string]*artifactStorageBreakdown
 					k string
@@ -187,7 +210,12 @@ FROM visible_uploads a LEFT JOIN task_titles t ON t.id=a.task_id LEFT JOIN artif
 			}
 			groups[item.TaskID].Bytes += item.Stored + item.Reserved
 			groups[item.TaskID].Count++
-			if item.Kind == kind && strings.Contains(strings.ToLower(item.Filename+" "+item.TaskID+" "+item.TaskTitle), query) {
+			date := item.Created
+			if len(date) >= 10 {
+				date = date[:10]
+			}
+			matched := (filter.Task == "" || item.TaskID == filter.Task) && (filter.MIME == "" || strings.HasPrefix(item.MIME, filter.MIME)) && (filter.Source == "" || artifactSourceCategory(item.Source) == filter.Source) && (filter.Since == "" || date >= filter.Since) && (filter.Until == "" || date <= filter.Until)
+			if matched && item.Kind == kind && strings.Contains(strings.ToLower(item.Filename+" "+item.TaskID+" "+item.TaskTitle), query) {
 				result.Items = append(result.Items, item)
 			}
 		}
@@ -224,6 +252,9 @@ FROM visible_uploads a LEFT JOIN task_titles t ON t.id=a.task_id LEFT JOIN artif
 	})
 	sort.Slice(result.Items, func(i, j int) bool {
 		left, right := result.Items[i], result.Items[j]
+		if filter.Order == "recent" && left.Created != right.Created {
+			return left.Created > right.Created
+		}
 		if left.Stored+left.Reserved == right.Stored+right.Reserved {
 			return left.ID < right.ID
 		}

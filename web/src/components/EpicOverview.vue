@@ -5,6 +5,7 @@ import { workPresentation, blockerText, checkStatusSummary, label, nextAction, s
 import { route, setQuery, taskHref } from "../router";
 import { useResource } from "../resource";
 import LoadState from "./LoadState.vue";
+import ResultsGallery from "./ResultsGallery.vue";
 import Pagination from "./Pagination.vue";
 
 const props = defineProps<{ id: string }>();
@@ -126,7 +127,7 @@ function mappedLeaf(key: string) {
       <section class="content-section">
         <h2>关键进展</h2>
         <p v-if="!tree.progress.length" class="empty">尚无已记录的工作结果。</p>
-        <ol v-else class="epic-events"><li v-for="(event, index) in (showAllProgress ? tree.progress : tree.progress.slice(0, 5))" :key="event.task + ':' + event.at + ':' + index"><a :href="taskHref(event.task, 'execution')">{{ event.title }}</a> · {{ stamp(event.at) }}<template v-if="event.actor"> · {{ event.actor }}</template><span v-if="event.historical"> · 历史记录</span><p class="fact-preview">{{ preview(blockerText(event.summary || "", false)) }}</p><details v-if="event.summary?.length > 180"><summary>查看完整事实</summary><p class="fact-full">{{ event.summary }}</p></details><p v-if="event.artifacts?.length"><button v-for="ref in event.artifacts" :key="ref" @click="$emit('openArtifact',ref,event.task)">查看成果 / 证据 {{ ref.split('/').pop() }}</button></p><details v-if="event.artifacts?.join('、').length > 180"><summary>查看完整产物</summary><p class="fact-full">{{ event.artifacts.join('、') }}</p></details><p v-if="event.next">下一步：{{ preview(event.next) }}</p><details v-if="event.next?.length > 180"><summary>查看完整下一步</summary><p class="fact-full">{{ event.next }}</p></details></li></ol>
+        <ol v-else class="epic-events"><li v-for="(event, index) in (showAllProgress ? tree.progress : tree.progress.slice(0, 5))" :key="event.task + ':' + event.at + ':' + index"><a :href="taskHref(event.task, 'execution')">{{ event.title }}</a> · {{ stamp(event.at) }}<template v-if="event.actor"> · {{ event.actor }}</template><span v-if="event.historical"> · 历史记录</span><p class="fact-preview">{{ preview(blockerText(event.summary || "", false)) }}</p><details v-if="event.summary?.length > 180"><summary>查看完整事实</summary><p class="fact-full">{{ event.summary }}</p></details><ResultsGallery v-if="event.artifacts?.length" :task-id="event.task" :files="event.artifacts.map((ref:string)=>({ref,task:event.task,state:event.historical?'historical':'unknown',purpose:event.summary}))" heading="子任务成果" /><details v-if="event.artifacts?.join('、').length > 180"><summary>查看完整产物</summary><p class="fact-full">{{ event.artifacts.join('、') }}</p></details><p v-if="event.next">下一步：{{ preview(event.next) }}</p><details v-if="event.next?.length > 180"><summary>查看完整下一步</summary><p class="fact-full">{{ event.next }}</p></details></li></ol>
         <button v-if="tree.progress.length > 5" class="inline-link" @click="setQuery({ progress: showAllProgress ? undefined : 'all' })">{{ showAllProgress ? '收起进展' : '查看最近 ' + tree.progress.length + ' 条进展' }}</button>
         <p v-if="tree.progress_truncated" class="secondary">这里只显示最近 100 条已记录进展。</p>
       </section>

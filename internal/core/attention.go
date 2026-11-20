@@ -16,7 +16,11 @@ type AttentionPage struct {
 	Truncated bool            `json:"truncated"`
 }
 
-func (s *Service) Attention() (AttentionPage, error) {
+func (s *Service) Attention() (AttentionPage, error) { return s.attention(false) }
+
+func (s *Service) HumanAttention() (AttentionPage, error) { return s.attention(true) }
+
+func (s *Service) attention(humanOnly bool) (AttentionPage, error) {
 	page := AttentionPage{Items: []AttentionItem{}, TaskIDs: []string{}}
 	seen := map[string]bool{}
 	extras := []AttentionItem{}
@@ -31,6 +35,9 @@ func (s *Service) Attention() (AttentionPage, error) {
 		{"blocked", `(COALESCE(json_extract(body,'$.paused'),0)=1 OR json_type(body,'$.blocker')='object' OR EXISTS (SELECT 1 FROM json_each(body,'$.attempts') a WHERE json_extract(a.value,'$.status')='running' AND json_extract(a.value,'$.lease_until')<=?))`, []any{time.Now().UTC().Format(time.RFC3339Nano)}},
 	}
 	for _, query := range queries {
+		if humanOnly && query.kind == "blocked" {
+			continue
+		}
 		rows, err := s.Store.DB.Query(`SELECT id FROM tasks WHERE status='open' AND `+query.clause+` ORDER BY updated DESC LIMIT 201`, query.args...)
 		if err != nil {
 			return page, err

@@ -30,6 +30,8 @@ test("发现归并、来源、证据与受检版本可追溯", async ({ page }) 
   await expect(panel).toContainText("模型建议 · client-a");
   await expect(panel).toContainText(fixture.candidate);
   await expect(panel).toContainText("#save");
+  await panel.locator(".result-file").first().scrollIntoViewIfNeeded();const inlineImage=panel.locator(".result-file img").first();await expect(inlineImage).toBeVisible();await expect.poll(()=>inlineImage.evaluate((e:HTMLImageElement)=>e.naturalWidth)).toBeGreaterThan(0);
+  await page.screenshot({path:path.join(fixture.out,"WB05-finding-inline.png"),fullPage:true});
   await panel.getByRole("button", { name: "查看原始报告", exact: true }).first().click();
   await expect(page.locator(".artifact-panel")).toContainText("deterministic source classification");
   await page.getByRole("button", { name: "关闭证据", exact: true }).click();

@@ -8,14 +8,14 @@ async function login(page: Page, user = "owner", password = "fixture-admin-passw
   if (user === "owner" && ownerCookies.length) {
     await page.context().addCookies(ownerCookies);
     await page.goto(fixture.url + "/#/tasks?project=shared");
-    await expect(page.getByRole("heading", { name: "工作台", exact: true })).toBeVisible();
+    await expect(page.locator(".workbench-heading")).toBeVisible();
     return;
   }
   await page.goto(fixture.url + "/#/tasks?project=shared");
   await page.getByLabel("用户名", { exact: true }).fill(user);
   await page.getByLabel("密码", { exact: true }).fill(password);
   await page.getByRole("button", { name: "登录", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "工作台", exact: true })).toBeVisible();
+  await expect(page.locator(".workbench-heading")).toBeVisible();
   if (user === "owner") ownerCookies = await page.context().cookies();
 }
 async function open(page: Page, task: string) {
@@ -29,6 +29,18 @@ async function open(page: Page, task: string) {
   await expect(dialog.getByLabel("实际观察与理由", { exact: false })).toBeVisible();
   return dialog;
 }
+
+test("WB05 Remote 首页材料与真实验收回执",async({page})=>{
+ await page.setViewportSize({width:1440,height:900});await login(page);const card=page.locator('.attention-card').filter({hasText:'Review direct-home'});
+ await expect(card).toContainText('要检查什么');await card.scrollIntoViewIfNeeded();await expect(card.locator('.result-file img').first()).toBeVisible();
+ await card.locator('.result-file').first().click();const preview=page.getByRole('dialog',{name:'成果预览'});await expect(preview.locator('img')).toBeVisible();await page.keyboard.press('Escape');
+ await page.evaluate(()=>window.scrollTo(0,0));expect((await page.locator('.work-list').boundingBox())!.y).toBeLessThan(900);await page.screenshot({path:path.join(fixture.out,'WB05-remote-home.png'),fullPage:false,animations:'disabled'});
+ await page.route('**/api/v1/projects/shared/reviews',async route=>{const response=await route.fetch();expect(response.ok()).toBeTruthy();await route.abort();},{times:1});
+ await card.getByRole('button',{name:'验收通过',exact:true}).click();
+ await expect.poll(async()=>{const n=await(await page.request.get(fixture.url+'/api/v1/projects/shared/tasks/direct-home')).json();return (n.task.evidence || []).filter((e:any)=>e.check==='visual'&&e.source==='human:owner').length;}).toBe(1);
+ await page.reload();const pending=page.locator('.attention-card').filter({hasText:'验收提交结果待确认'});await expect(pending).toContainText('Review direct-home');await pending.getByRole('button',{name:'核对原请求回执',exact:true}).click();const retryDialog=page.getByRole('dialog');await retryDialog.getByRole('button',{name:'原样重试提交',exact:true}).click();await expect(retryDialog).toContainText('验收结果已记录');
+ const after=await(await page.request.get(fixture.url+'/api/v1/projects/shared/tasks/direct-home')).json();expect(after.task.evidence.filter((e:any)=>e.check==='visual').length).toBe(1);
+});
 
 test("明确基准、键盘比较、丢失响应和幂等人工回执", async ({ page }) => {
   await login(page);

@@ -21,7 +21,7 @@ description: 在已初始化的 AEL 工程执行已授权的项目迭代、修�
 
 新的 Remote 工作会话先运行 `./ael session start --session HOST_SESSION_ID --runner RUNNER --json`，读取返回的冻结 Skill 路径。它在领取前查询兼容性，只按安装级明确选择的策略更新可信稳定版。后续 Remote 命令都带 `--session HOST_SESSION_ID`，或由用户显式提供 AEL_SESSION_ID。同一会话固定 CLI、Skill 和协议，已有会话不会因机器级升级切换。`session show` 可查看引用，责任完成或明确交接后可 `session end` 结束工具绑定。旧调用未给会话 ID 时按 runner ID 隔离兼容工具会话，恢复与新接入优先使用宿主的稳定会话 ID。
 
-Remote 上下文压缩、会话恢复、任务切换或进度不确定后，先执行 `./ael recovery check --session HOST_SESSION_ID --json`。先核对 Server 项目、父/叶任务、步骤、版本、已通过检查和最近阻塞，再决定唯一下一动作。Server 当前记录是权威。保留已验收成果、原任务身份与范围，只继续当前未完成项。未在线核对成功前，只做只读定位与现场保存。检查点显示无当前任务时等待明确选择。
+Remote 上下文压缩、会话恢复、任务切换或进度不确定后，先执行 `./ael recovery check --session HOST_SESSION_ID --json`。先核对 Server 项目、父/叶任务、步骤、版本、已通过检查和最近阻塞，再决定唯一下一动作。Server 当前记录是权威。保留已验收成果、原任务身份与范围，只继续当前未完成项。未在线核对成功前，只做只读定位与现场保存。检查点显示无当前叶子时，先核对已有明确授权的父任务或批次范围；范围内仍有未完成后继时，按现有队列与权限继续领取，不重复请求用户选择。只有缺少明确授权范围、存在真实未决决定或权限不足时，才列出具体缺口并等待。
 
 首次将宿主会话与执行者绑定用 `./ael recovery save --session HOST_SESSION_ID --runner RUNNER [--parent EPIC]`。每个可验证单元完成、submit 消费回执后和任务切换时再次 save。必要的短交接可用 `--file PRIVATE_JSON`，只接受 next、tried、decisions，禁止凭据、租约、聊天、思考或全量日志。失权使用既有责任恢复，丢响应先查原回执。检查点位于仓库外私有配置目录，按身份、checkout 和 session 隔离。
 

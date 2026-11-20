@@ -5,9 +5,12 @@ import { taskHref } from "../router";
 import { stamp } from "../display";
 import LoadState from "./LoadState.vue";
 import Pagination from "./Pagination.vue";
+import ResultsGallery from "./ResultsGallery.vue";
+import type { ResultFile } from "../results";
 import ActionDialog from "./ActionDialog.vue";
 
 type Item = {
+  purpose?: string;
   retention_reasons?: string[];
   shared_content?: boolean;
   sha256?: string;
@@ -64,6 +67,7 @@ const props = defineProps<{
 const base = `/api/v1/projects/${encodeURIComponent(props.projectId)}/artifacts`;
 const r = useResource<Inventory | null>(null);
 const { data, loading, error, last } = r;
+const mode=ref("materials"),taskFilter=ref(""),mimeFilter=ref(""),sourceFilter=ref(""),since=ref(""),until=ref("");
 const kind = ref("files"),
   search = ref(""),
   query = ref(""),
@@ -105,6 +109,7 @@ function keys(prefix: string) {
 async function load() {
   const options = new URLSearchParams({
     kind: kind.value,
+ task:taskFilter.value,mime:mimeFilter.value,source:sourceFilter.value,since:since.value,until:until.value,order:mode.value==="materials"?"recent":"size",
     q: query.value,
     offset: String(offset.value),
     limit: "25",
@@ -241,7 +246,9 @@ async function cleanup() {
     busy.value = false;
   }
 }
+const materialFiles=computed<ResultFile[]>(()=> (data.value?.items || []).map(item=>({ref:item.artifact_id,task:item.task_id,name:item.filename,mime:item.mime,size:item.size,sizeLabel:bytes(item.size),taskTitle:item.task_title,at:item.created_at,state:item.source.startsWith('authority-import:')?'historical':'unknown',purpose:item.purpose?.trim() || '用途或关联检查未记录'})));
 watch([kind, query, offset], load);
+watch([taskFilter,mimeFilter,sourceFilter,since,until,mode],()=>{offset.value=0;kind.value='files';void load();});
 onMounted(load);
 onUnmounted(() => clearTimeout(debounce));
 </script>
@@ -249,9 +256,10 @@ onUnmounted(() => clearTimeout(debounce));
 <template>
   <section class="project-storage" aria-label="存储与附件">
     <div class="section-heading">
-      <h2>存储与附件</h2>
+      <h2>项目资料与存储</h2>
       <button :disabled="loading || busy" @click="load">刷新容量</button>
     </div>
+    <nav class="tabs" aria-label="资料与管理"><button :class="{chosen:mode==='materials'}" @click="mode='materials'">资料</button><button :class="{chosen:mode==='management'}" @click="mode='management'">存储管理</button></nav>
     <LoadState :loading="loading" :error="error" :last="last" @retry="load" />
     <p v-if="notice" role="status">{{ notice }}</p>
     <p
@@ -262,6 +270,9 @@ onUnmounted(() => clearTimeout(debounce));
       {{ mutationError }}
     </p>
     <template v-if="data">
+      <p v-if="mode==='materials'" class="secondary">附件占用 {{ bytes(occupied) }} / {{ data.stats.quota_bytes?bytes(data.stats.quota_bytes):'未设上限' }} · {{ data.total }} 份匹配资料；文件大小为原文件长度，共享分摊见存储管理。</p>
+      <p v-if="mode==='materials' && data.stats.quota_bytes && occupied>=data.stats.quota_bytes" class="alert">容量已达上限，请从存储管理处理。</p>
+      <template v-if="mode==='management'">
       <div class="storage-total">
         <strong>{{ bytes(occupied) }}</strong
         ><span>
@@ -347,8 +358,9 @@ onUnmounted(() => clearTimeout(debounce));
       <p v-if="data.untracked_bytes" class="secondary">
         另有 {{ bytes(data.untracked_bytes) }} 附件目录文件待管理员核对。
       </p>
+      </template>
       <div class="storage-toolbar">
-        <nav class="tabs" aria-label="附件记录类型">
+        <nav v-if="mode==='management'" class="tabs" aria-label="附件记录类型">
           <button
             :class="{ chosen: kind === 'files' }"
             @click="
@@ -385,13 +397,16 @@ onUnmounted(() => clearTimeout(debounce));
           清除搜索
         </button>
       </div>
+      <div v-if="mode==='materials'" class="toolbar material-filters"><label>所属任务<select v-model="taskFilter" aria-label="所属任务"><option value="">全部任务（含旧记录）</option><option v-for="task in data.tasks" :key="task.task_id" :value="task.task_id">{{ task.title }}</option></select></label><label>资料类型<select v-model="mimeFilter" aria-label="资料类型"><option value="">全部类型</option><option value="image/">图片</option><option value="text/">报告与文本</option></select></label><label>资料来源<select v-model="sourceFilter" aria-label="资料来源"><option value="">全部来源</option><option value="import history">历史导入</option><option value="execution evidence">执行材料</option><option value="context snapshot">规范快照</option><option value="other">其他 / 未分类</option></select></label><label>开始日期<input v-model="since" aria-label="开始日期" type="date" /></label><label>结束日期<input v-model="until" aria-label="结束日期" type="date" /></label></div>
+      <ResultsGallery v-if="mode==='materials'" :files="materialFiles" heading="资料" :limit="25" />
+      <template v-else>
       <p class="table-scroll-hint">左右滑动可查看来源与操作。</p>
       <div class="storage-table-scroll">
         <table class="storage-table">
           <thead>
             <tr>
               <th>文件与任务</th>
-              <th>实际占用</th>
+              <th>原文件大小 / 物理分摊</th>
               <th v-if="kind === 'uploads'">剩余预留</th>
               <th>来源与时间</th>
               <th>操作</th>
@@ -404,7 +419,7 @@ onUnmounted(() => clearTimeout(debounce));
                 ><a :href="taskHref(item.task_id)">{{ item.task_title }}</a
                 ><small>{{ item.mime }}</small><small v-if="item.retention_reasons?.length">保留依据：{{ item.retention_reasons.join('；') }}</small>
               </td>
-              <td>{{ bytes(item.stored_bytes) }}<small v-if="item.shared_content">共享原件 · 保留独立证据身份</small><small v-if="item.kind === 'files' && item.stored_bytes === 0">物理容量由同内容的一份记录计入</small></td>
+              <td>{{ bytes(item.size) }}<small>物理分摊 {{ bytes(item.stored_bytes) }}</small><small v-if="item.shared_content">共享原件 · 保留独立证据身份</small><small v-if="item.kind === 'files' && item.stored_bytes === 0">物理容量由同内容的一份记录计入</small></td>
               <td v-if="kind === 'uploads'">
                 {{ bytes(item.reserved_bytes) }}
               </td>
@@ -438,6 +453,7 @@ onUnmounted(() => clearTimeout(debounce));
           </tbody>
         </table>
       </div>
+      </template>
       <p v-if="!data.items.length" class="empty">
         {{
           query
@@ -455,7 +471,7 @@ onUnmounted(() => clearTimeout(debounce));
         :busy="loading"
         @change="offset = $event"
       />
-      <section v-if="admin" class="storage-cleanup">
+      <section v-if="admin && mode==='management'" class="storage-cleanup">
         <h3>清理可回收原件</h3>
         <p class="secondary">
           清理范围由任务状态、引用和依据快照保护规则确定。先预览可回收项，再确认删除原件。

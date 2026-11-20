@@ -32,6 +32,7 @@ import AppIcon from "../components/AppIcon.vue";
 import ScopeSummary from "../components/ScopeSummary.vue";
 import CopyButton from "../components/CopyButton.vue";
 import TaskRelations from "../components/TaskRelations.vue";
+import ResultsGallery from "../components/ResultsGallery.vue";
 import EpicOverview from "../components/EpicOverview.vue";
 import FindingPanel from "../components/FindingPanel.vue";
 import ImportedHistory from "../components/ImportedHistory.vue";
@@ -831,6 +832,7 @@ function checkReason(c: any) {
         <div>
           <p class="eyebrow">{{ label(t.definition.type) }}</p>
           <h1>{{ t.definition.title }}</h1>
+          <p class="task-goal">{{ (t.definition.intent || t.definition.original_request || t.definition.acceptance?.join("；") || "原目标与需求未记录").slice(0, 180) }}<span v-if="(t.definition.intent || t.definition.original_request || t.definition.acceptance?.join('；') || '').length>180">… 完整目标见任务说明</span></p>
           <p class="inline"><span class="status" :class="n.board">{{ schedule(n.summary) }}</span></p>
         </div>
         <div class="task-heading-actions"><details ref="taskMenu" class="task-more"><summary aria-label="更多任务操作" title="更多任务操作">···</summary><div class="task-more-menu"><CopyButton :value="t.definition.id" label="复制任务 ID" /><a :href="taskHref(id, 'technical')">查看技术详情</a><button v-if="t.status === 'open' && !t.paused && (!remoteProject || ['admin','executor'].includes(remoteProject.role))" :disabled="busy" @click="startFromMenu('pause', '暂缓任务')">暂缓</button><button v-if="t.status === 'open' && !remoteProject" :disabled="busy" @click="startFromMenu('edit', '修订任务定义')">编辑任务定义</button><button v-if="t.status === 'open' && (!remoteProject || ['admin','executor'].includes(remoteProject.role))" :disabled="busy" class="danger-text" @click="startFromMenu('cancel', '取消任务')">取消任务</button><a :href="href('/evolution', { q: t.definition.title })">查看相关演进</a></div></details></div>
@@ -911,8 +913,8 @@ function checkReason(c: any) {
           <div v-if="unownedRunning && !remoteProject" class="lost-claim-help"><p>当前标签页没有这次接手的凭据。若原执行确已停止，可以确认后恢复任务。</p><button @click="start('resume', '恢复无法继续的接手')">恢复无法继续的接手</button></div>
           </div>
         </div>
-        <DirectHumanReview v-if="mayJudge && availableHumanChecks.length === 1 && !n.check_access[availableHumanChecks[0].id].evidence_required" :key="id + ':' + availableHumanChecks[0].id" :snapshot="n" :check="availableHumanChecks[0]" @saved="reviewSaved" @advanced="manualCheck = availableHumanChecks[0].id" />
-        <EpicOverview v-if="t.definition.type === 'epic'" :key="id" :id="id" @open-artifact="(ref, task) => openArtifact(ref, task)" />
+        <section class="content-section remaining-work"><h2>还剩什么</h2><p v-if="t.status!=='open'">{{ label(t.status) }} · {{ goalLabel(t.definition.goal) }}</p><template v-else><p>{{ presentation.next }}</p><p v-if="t.definition.type!=='epic'">必要验收 {{ n.summary.checks.required_passed }} / {{ n.summary.checks.required }} 项通过；原定目标：{{ goalLabel(t.definition.goal) }}</p></template></section>
+        <ResultsGallery :key="id" :task-id="id" :snapshot="n" />
         <section v-if="t.definition.type !== 'epic'" class="content-section task-progress">
           <div class="section-heading"><h2>工作进度</h2><button class="inline-link" @click="selectSection('execution')">查看执行记录</button></div>
           <article v-for="outcome in workOutcomes.slice(0, 3)" :key="outcome.id" class="timeline-item">
@@ -923,10 +925,11 @@ function checkReason(c: any) {
             </div>
           </article>
           <p v-if="!workOutcomes.length" class="secondary">{{ t.attempts?.length ? '已有协作记录，尚无已提交工程成果。' : '尚无已提交工程成果。' }}</p>
-          <p v-if="t.status === 'open' && t.candidate"><strong>当前候选</strong> {{ t.candidate.slice(0, 12) }}</p>
         </section>
-        <section class="content-section">
-          <h2>任务说明</h2>
+        <DirectHumanReview v-if="mayJudge && info.project && availableHumanChecks.length === 1 && !n.check_access[availableHumanChecks[0].id].evidence_required" :key="id + ':' + availableHumanChecks[0].id" :snapshot="n" :check="availableHumanChecks[0]" @saved="reviewSaved" @advanced="manualCheck = availableHumanChecks[0].id" />
+        <EpicOverview v-if="t.definition.type === 'epic'" :key="id" :id="id" @open-artifact="(ref, task) => openArtifact(ref, task)" />
+        <details class="content-section task-description">
+          <summary>完整任务说明与验收条目</summary>
           <p v-if="t.definition.intent">{{ t.definition.intent }}</p>
           <details v-if="t.definition.original_request && t.definition.original_request !== t.definition.intent" :open="!t.definition.intent && t.definition.original_request.length < 550">
             <summary>任务原文</summary>
@@ -954,7 +957,7 @@ function checkReason(c: any) {
           <ul>
             <li v-for="a in t.definition.acceptance">{{ a }}</li>
           </ul>
-        </section>
+        </details>
         <TaskRelations :key="id" :id="id" :task="t" />
         <section id="task-basis" tabindex="-1" class="content-section">
         <div class="section-heading"><h2>相关依据</h2><small v-if="basis">{{ basis.records.length }} 份可核对<template v-if="unresolvedBasisIDs.length"> · {{ unresolvedBasisIDs.length }} 项缺正文</template></small></div>
@@ -1208,7 +1211,7 @@ function checkReason(c: any) {
                 </section>
               </details>
               <p v-if="checkReason(c)" class="secondary">{{ checkReason(c) }}</p>
-              <DirectHumanReview v-if="mayJudge && n.check_access?.[c.id]?.can_review && !n.check_access[c.id].evidence_required" :key="id + ':' + c.id" :snapshot="n" :check="c" @saved="reviewSaved" @advanced="manualCheck = c.id" />
+              <DirectHumanReview v-if="mayJudge && info.project && n.check_access?.[c.id]?.can_review && !n.check_access[c.id].evidence_required" :key="id + ':' + c.id" :snapshot="n" :check="c" @saved="reviewSaved" @advanced="manualCheck = c.id" />
               <div class="actions">
                 <button v-if="mayJudge && n.check_access?.[c.id]?.can_review" class="primary" :disabled="busy" @click="manualCheck = c.id">进行人工验收</button>
                 <button v-else-if="mayJudge && t.status === 'open' && n.check_access?.[c.id]?.effective_method === 'human' && checkState(c.id) !== 'pass'" :disabled="busy" @click="manualCheck = c.id">记录人工意见</button>

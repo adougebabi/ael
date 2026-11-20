@@ -229,6 +229,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 						offsets[board] = max(0, value)
 					}
 				}
+				if r.URL.Query().Get("view") == "workbench" {
+					v, e := h.Service.Workbench(core.Query{Limit: limit, Offset: offset, Days: days, Text: r.URL.Query().Get("q"), Type: r.URL.Query().Get("type"), Board: r.URL.Query().Get("board"), Parent: r.URL.Query().Get("parent")})
+					reply(w, v, e)
+					return
+				}
 				v, e := h.Service.QueryPage(core.Query{Limit: limit, Offset: offset, Offsets: offsets, Days: days, Text: r.URL.Query().Get("q"), Type: r.URL.Query().Get("type"), Board: r.URL.Query().Get("board"), Parent: r.URL.Query().Get("parent")})
 				if r.URL.Query().Get("compact") == "1" && e == nil {
 					items := []core.TaskSummary{}
@@ -354,7 +359,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "METHOD", 405)
 				return
 			}
-			v, e := h.Service.Attention()
+			readAttention := h.Service.Attention
+			if r.URL.Query().Get("human") == "1" {
+				readAttention = h.Service.HumanAttention
+			}
+			v, e := readAttention()
 			reply(w, v, e)
 		case "/api/review-candidate":
 			if r.Method != "GET" {
