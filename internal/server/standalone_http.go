@@ -475,6 +475,19 @@ func (h *standaloneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			standaloneReply(w, http.StatusOK, project)
 			return
 		}
+		if len(parts) == 2 && parts[1] == "members" && r.Method == http.MethodGet {
+			if !p.Admin || method != "session" {
+				standaloneFail(w, http.StatusForbidden, "FORBIDDEN")
+				return
+			}
+			members, err := h.server.members(parts[0])
+			if err != nil {
+				standaloneFail(w, http.StatusInternalServerError, "SERVER_ERROR")
+				return
+			}
+			standaloneReply(w, http.StatusOK, map[string]any{"members": members})
+			return
+		}
 		if len(parts) == 2 && parts[1] == "members" && r.Method == http.MethodPost {
 			if !p.Admin || method != "session" {
 				standaloneFail(w, http.StatusForbidden, "FORBIDDEN")

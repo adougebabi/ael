@@ -9,7 +9,15 @@ function parse() {
     migration: "/settings?section=migrations",
   };
   hash = aliases[hash] || hash;
+  // Reference-layout links stay readable: /workbench and /task/:id map onto
+  // the existing /tasks routes, and settings ?tab= onto ?section=.
+  hash = hash.replace(/^\/workbench(?=$|[?/])/, "/tasks").replace(/^\/task\//, "/tasks/");
   const u = new URL(hash, location.origin);
+  if (u.pathname === "/settings" && u.searchParams.has("tab") && !u.searchParams.has("section")) {
+    const tab = u.searchParams.get("tab")!;
+    u.searchParams.delete("tab");
+    if (tab !== "connection") u.searchParams.set("section", tab);
+  }
   return {
     path: u.pathname,
     query: u.searchParams,

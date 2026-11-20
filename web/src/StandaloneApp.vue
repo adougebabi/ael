@@ -8,8 +8,11 @@ import AppIcon from "./components/AppIcon.vue";
 import RemoteServicePanel from "./components/RemoteServicePanel.vue";
 import RemoteAccountPanel from "./components/RemoteAccountPanel.vue";
 import ProjectStoragePanel from "./components/ProjectStoragePanel.vue";
-import { refreshRevision } from "./api";
-import { stamp } from "./display";
+import MaterialsPage from "./pages/MaterialsPage.vue";
+import { refreshRevision, currentUser } from "./api";
+import { stamp, relativeShort } from "./display";
+import { theme, setTheme } from "./theme";
+import { toast, copyText } from "./toast";
 const workspaceMode = ref(false);
 const locationOrigin = location.origin;
 let projectGeneration = 0;
@@ -29,11 +32,32 @@ const pickerOpen = ref(false), projectSearch = ref("");
 const accountMenu = ref<HTMLElement | null>(null), accountOpen = ref(false);
 const accountTrigger = ref<HTMLButtonElement | null>(null);
 function closeAccount(restoreFocus = false) { accountOpen.value=false;if(restoreFocus) accountTrigger.value?.focus(); }
-async function toggleAccount() { accountOpen.value=!accountOpen.value;pickerOpen.value=false;if(accountOpen.value){await nextTick();accountMenu.value?.querySelector<HTMLAnchorElement>(".account-options a")?.focus();} }
+async function toggleAccount() { accountOpen.value=!accountOpen.value;pickerOpen.value=false;if(accountOpen.value){await nextTick();accountMenu.value?.querySelector<HTMLElement>(".wb-popover a, .wb-popover button")?.focus();} }
+const ownerRoles: Record<string, string> = { admin: "项目管理员", executor: "执行者", reviewer: "验收者", reader: "只读成员" };
+function connectionText() {
+  if (!selected.value) return "";
+  return `AEL 项目接入\n项目：${selected.value.name}（${selected.value.id}）\n中心服务：${locationOrigin}\n在已安装 ael 的设备上，于工程目录运行：\nael init --server ${locationOrigin} --remote-project ${selected.value.id}`;
+}
+async function copyConnection() { closeAccount(true); toast(await copyText(connectionText()) ? "已复制项目连接信息" : "浏览器未允许复制，请在项目设置中手动复制"); }
+async function copyConnectionInfo() { toast(await copyText(connectionText()) ? "已复制接入信息" : "浏览器未允许复制，请手动选择命令"); }
+// Member and token dialogs; the server keeps the only authority over roles.
+const memberDialog = ref<HTMLDialogElement | null>(null), tokenDialog = ref<HTMLDialogElement | null>(null), revokeDialog = ref<HTMLDialogElement | null>(null);
+const memberEditing = ref(false), revokeTarget = ref<Token | null>(null);
+async function openMemberDialog(username = "", role = "executor") { memberEditing.value = !!username; memberUsername.value = username; memberRole.value = role; memberProject.value = selected.value?.id || ""; error.value = ""; await nextTick(); memberDialog.value?.showModal(); }
+async function saveMember() { await addMember(); if (!error.value) { memberDialog.value?.close(); await loadPanel(); } }
+async function openTokenDialog() { tokenProject.value = selected.value?.id || ""; tokenUsername.value = members.value[0]?.username || ""; tokenLabel.value = ""; if (selected.value) delete tokenReplies.value[selected.value.id]; error.value = ""; await nextTick(); tokenDialog.value?.showModal(); }
+async function saveToken() { await createToken(); await loadPanel(); }
+function closeTokenDialog() { tokenDialog.value?.close(); if (selected.value) delete tokenReplies.value[selected.value.id]; }
+async function copyToken() { toast(await copyText(tokenSecret.value) ? "令牌已复制，请保存到安全位置" : "浏览器未允许复制，请手动选择令牌"); }
+async function confirmRevoke(item: Token) { revokeTarget.value = item; await nextTick(); revokeDialog.value?.showModal(); }
+async function doRevoke() { if (!revokeTarget.value) return; await revoke(revokeTarget.value.id); revokeDialog.value?.close(); revokeTarget.value = null; await loadPanel(); }
+function switchTheme() { setTheme(theme.value === "indigo" ? "graphite" : "indigo"); closeAccount(true); }
 const pickerRoot = ref<HTMLElement | null>(null), pickerInput = ref<HTMLInputElement | null>(null);
 const panelLoading = ref(false), panelError = ref("");
 const projectConfiguration = ref<any>(null), clients = ref<ClientReport[]>([]), serviceInfo = ref<any>(null);
 const servicePlatform = ref("");
+const settingsTab = computed(() => ({ storage: "storage", members: "members" } as Record<string, string>)[route.value.query.get("section") || ""] || "connection");
+const members = ref<{ username: string; role: string }[]>([]);
 const panel = computed(() => route.value.path.split("/")[1] || "tasks");
 const filteredProjects = computed(() => projects.value.filter(project => (project.name + " " + project.id).toLowerCase().includes(projectSearch.value.trim().toLowerCase())));
 const projectTokens = computed(() => tokens.value.filter(token => token.project_id === selected.value?.id));
@@ -49,6 +73,13 @@ async function loadPanel() {
   panelLoading.value = true; panelError.value = "";
   try {
     if (currentPanel === "settings" && route.value.query.get("section") === "storage") return;
+    if (currentPanel === "settings" && selected.value && session.value.admin && route.value.query.get("section") === "members") {
+      const [memberPage, tokenPage] = await Promise.all([request(`/api/v1/projects/${encodeURIComponent(selected.value.id)}/members`), request("/api/v1/tokens")]);
+      if (generation !== projectGeneration || panel.value !== currentPanel || requestID !== panelRequest) return;
+      members.value = memberPage.members; tokens.value = tokenPage.tokens;
+      return;
+    }
+    if (currentPanel === "settings" && route.value.query.get("section") === "members") return;
     if (currentPanel === "settings" && selected.value) {
       const base = `/api/v1/projects/${encodeURIComponent(selected.value.id)}`;
       const [configuration, reports, page, tokenPage] = await Promise.all([request(base + "/onboarding"), request(base + "/client-onboarding"), request(base + "/tasks?limit=100"), session.value.admin ? request("/api/v1/tokens") : Promise.resolve({ tokens: [] })]);
@@ -56,7 +87,8 @@ async function loadPanel() {
       projectConfiguration.value = configuration; clients.value = reports.clients; tasks.value = page.items; tokens.value = tokenPage.tokens;
     }
     if (currentPanel === "service") {
-      if (!session.value.admin) throw new Error("当前账号没有服务管理权限。");
+      // The page shows its own no-permission state; nothing to fetch or retry.
+      if (!session.value.admin) return;
       const value = await request("/api/v1/admin/client-release" + (servicePlatform.value ? "?platform=" + encodeURIComponent(servicePlatform.value) : ""));
       if (generation !== projectGeneration || panel.value !== currentPanel || requestID !== panelRequest) return;
       serviceInfo.value = value;
@@ -373,6 +405,7 @@ async function preview(item: Artifact) {
   finally { busy.value = false; }
 }
 
+watch(() => session.value?.username, (name) => { currentUser.value = name || ""; }, { immediate: true });
 watch(() => route.value.key, () => {
   pickerOpen.value = false;
   closeAccount();
@@ -392,42 +425,86 @@ onUnmounted(() => { document.removeEventListener("click", closePicker); if (prev
 <template>
   <WorkspaceApp v-if="session && selected && workspaceMode" :key="selected.id + session.csrf">
     <template #workspace>
-      <div ref="pickerRoot" class="project-switcher" @keydown.esc.stop.prevent="pickerOpen = false; pickerRoot?.querySelector('button')?.focus()">
-        <button class="workspace project-switcher-button" aria-label="切换项目" :aria-expanded="pickerOpen" aria-controls="remote-project-options" @click.stop="openPicker">
-          <span class="workspace-avatar" aria-hidden="true">{{ selected.name.slice(0, 2).toUpperCase() }}</span>
-          <span class="workspace-info"><strong>{{ selected.name }}</strong><small>{{ roles[selected.role] || selected.role }}</small></span><span aria-hidden="true">⌄</span>
+      <div ref="pickerRoot" class="wb-project" @keydown.esc.stop.prevent="pickerOpen = false; pickerRoot?.querySelector('button')?.focus()">
+        <button class="wb-project-switch" aria-label="切换项目" :aria-expanded="pickerOpen" aria-controls="remote-project-options" @click.stop="openPicker">
+          <span class="wb-project-symbol"><AppIcon name="sparkles" /></span>
+          <span class="wb-project-text"><strong>{{ selected.name }}</strong><small>{{ selected.id }}</small></span><AppIcon name="chevron" />
         </button>
-        <div v-if="pickerOpen" id="remote-project-options" class="project-options" role="region" aria-label="选择项目">
-          <label class="search"><span class="visually-hidden">搜索项目</span><AppIcon name="search"/><input ref="pickerInput" v-model="projectSearch" type="search" placeholder="搜索项目名称或 ID" /></label>
-          <p v-if="!filteredProjects.length" class="secondary">没有匹配的项目。</p>
-          <div class="project-options-list"><button v-for="project in filteredProjects" :key="project.id" :aria-current="selected.id === project.id ? 'true' : undefined" @click="chooseProject(project.id)"><span><strong>{{ project.name }}</strong><small>{{ roles[project.role] || project.role }}</small></span><small v-if="selected.id === project.id">当前</small></button></div>
+        <div v-if="pickerOpen" id="remote-project-options" class="wb-popover project" role="region" aria-label="选择项目">
+          <div class="wb-popover-header"><strong>切换项目</strong><p>每个项目独立展示任务与资料</p></div>
+          <label v-if="projects.length > 6" class="wb-popover-search"><span class="visually-hidden">搜索项目</span><AppIcon name="search"/><input ref="pickerInput" v-model="projectSearch" type="search" placeholder="搜索项目名称或 ID" /></label>
+          <p v-if="!filteredProjects.length" class="wb-empty-line">没有匹配的项目。</p>
+          <div class="wb-popover-list"><button v-for="project in filteredProjects" :key="project.id" :class="{ selected: selected.id === project.id }" :aria-current="selected.id === project.id ? 'true' : undefined" @click="chooseProject(project.id)"><AppIcon name="folder" /><span>{{ project.name }}<small>{{ project.id }} · {{ roles[project.role] || project.role }}</small></span><span v-if="selected.id === project.id" class="spacer"></span><AppIcon v-if="selected.id === project.id" name="tick" /></button></div>
+          <template v-if="session.admin"><hr /><a :href="href('/service')" @click="pickerOpen = false"><AppIcon name="plus" />注册或管理项目</a></template>
         </div>
       </div>
     </template>
     <template #sidebar-controls>
-      <a :href="href('/settings')" :class="{ chosen: panel === 'settings' }"><AppIcon name="settings"/>项目设置</a>
-      <a v-if="session.admin" :href="href('/service')" :class="{ chosen: panel === 'service' }"><AppIcon name="layers"/>服务管理</a>
-      <div ref="accountMenu" class="account-menu" @keydown.esc.stop.prevent="closeAccount(true)" @focusout="(event) => { if(event.relatedTarget && !accountMenu?.contains(event.relatedTarget as Node)) closeAccount(); }">
-        <button ref="accountTrigger" class="account-trigger" aria-label="账户菜单" :aria-expanded="accountOpen" aria-controls="account-options" @click="toggleAccount"><AppIcon name="user"/><span>{{ session.username }}</span><span aria-hidden="true">⌄</span></button>
-        <div v-if="accountOpen" id="account-options" class="account-options" role="region" aria-label="账户操作"><a :href="href('/account')">身份与个人设置</a><button :disabled="busy" @click="logout">{{ busy ? '正在退出…' : '退出登录' }}</button></div>
+      <a class="wb-nav-item" :class="{ selected: panel === 'settings' }" :href="href('/settings')" :aria-current="panel === 'settings' ? 'page' : undefined"><AppIcon name="settings"/><span>项目设置</span></a>
+      <a v-if="session.admin" class="wb-nav-item" :class="{ selected: panel === 'service' }" :href="href('/service')" :aria-current="panel === 'service' ? 'page' : undefined"><AppIcon name="server"/><span>服务管理</span></a>
+    </template>
+    <template #account>
+      <div ref="accountMenu" class="wb-owner" @keydown.esc.stop.prevent="closeAccount(true)" @focusout="(event) => { if(event.relatedTarget && !accountMenu?.contains(event.relatedTarget as Node)) closeAccount(); }">
+        <button ref="accountTrigger" class="wb-owner-button" aria-label="账户菜单" :aria-expanded="accountOpen" aria-controls="account-options" @click.stop="toggleAccount">
+          <span class="avatar">{{ session.username.slice(0, 1).toUpperCase() }}</span><span><strong>{{ session.username }}</strong><small>{{ ownerRoles[selected.role] || selected.role }}</small></span><span class="spacer"></span><AppIcon name="more" />
+        </button>
+        <div v-if="accountOpen" id="account-options" class="wb-popover owner" role="menu" aria-label="账户操作">
+          <div class="wb-popover-header"><strong>{{ session.username }}</strong><p>{{ ownerRoles[selected.role] || selected.role }}{{ session.admin ? " · 服务管理员" : "" }}</p></div>
+          <a role="menuitem" :href="href('/account')" @click="closeAccount()"><AppIcon name="user" />个人设置</a>
+          <button role="menuitem" @click="copyConnection"><AppIcon name="copy" />复制项目连接信息</button>
+          <button role="menuitem" @click="switchTheme"><AppIcon name="sun" />{{ theme === "indigo" ? "切换为石墨外观" : "切换为靛蓝外观" }}</button>
+          <hr />
+          <button role="menuitem" class="danger" :disabled="busy" @click="logout"><AppIcon name="logout" />{{ busy ? "正在退出…" : "退出登录" }}</button>
+        </div>
       </div>
     </template>
-    <template #workspace-feedback><p v-if="error" role="alert" class="notice">{{ error }}</p><p v-if="notice" role="status" class="notice">{{ notice }}</p></template>
+    <template #page-actions="{ area }"><a v-if="area === 'materials'" class="button ghost" :href="href('/settings', { section: 'storage' })"><AppIcon name="database" />存储管理</a><a v-else-if="area === 'settings'" class="wb-header-project" :href="href('/settings')"><AppIcon name="folder" />{{ selected.id }}</a><span v-else-if="area === 'service' && session.admin" class="tag">管理员可见</span></template>
+    <template #workspace-feedback><p v-if="error" role="alert" class="wb-banner error">{{ error }}</p><p v-if="notice" role="status" class="wb-banner ok">{{ notice }}</p></template>
     <template #remote-page="{ area }">
       <p v-if="panelLoading" role="status" class="secondary">正在读取页面信息…</p>
-      <p v-if="panelError" role="alert" class="notice">{{ panelError }} <button @click="loadPanel">重试</button></p>
-      <template v-if="area === 'settings'">
-        <nav class="tabs project-settings-tabs" aria-label="项目设置分区">
-          <a :href="href('/settings')" :class="{ chosen: route.query.get('section') !== 'storage' }" :aria-current="route.query.get('section') !== 'storage' ? 'page' : undefined">项目接入</a>
-          <a :href="href('/settings', { section: 'storage' })" :class="{ chosen: route.query.get('section') === 'storage' }" :aria-current="route.query.get('section') === 'storage' ? 'page' : undefined">存储与附件</a>
+      <p v-if="panelError" role="alert" class="wb-banner error">{{ panelError }} <button class="small" @click="loadPanel">重试</button></p>
+      <MaterialsPage v-if="area === 'materials'" :key="'materials' + selected.id + session.csrf" />
+      <template v-else-if="area === 'settings'">
+        <nav class="wb-page-tabs" aria-label="项目设置分区">
+          <a :href="href('/settings')" :class="{ selected: settingsTab === 'connection' }" :aria-current="settingsTab === 'connection' ? 'page' : undefined">项目接入</a>
+          <a :href="href('/settings', { section: 'members' })" :class="{ selected: settingsTab === 'members' }" :aria-current="settingsTab === 'members' ? 'page' : undefined">成员与令牌</a>
+          <a :href="href('/settings', { section: 'storage' })" :class="{ selected: settingsTab === 'storage' }" :aria-current="settingsTab === 'storage' ? 'page' : undefined">存储管理</a>
         </nav>
-        <ProjectStoragePanel v-if="route.query.get('section') === 'storage'" :key="selected.id + session.csrf" :project-id="selected.id" :admin="session.admin" :request="request" />
+        <ProjectStoragePanel v-if="settingsTab === 'storage'" :key="selected.id + session.csrf" :project-id="selected.id" :admin="session.admin" :request="request" />
+        <template v-else-if="settingsTab === 'members'">
+          <section v-if="!session.admin" class="wb-empty"><AppIcon name="users" /><h3>成员与令牌由服务管理员管理</h3><p>你在本项目的角色是「{{ roles[selected.role] || selected.role }}」。需要调整权限或签发 Agent 令牌时，请联系服务管理员。</p></section>
+          <template v-else>
+            <section class="wb-card" aria-labelledby="members-title">
+              <div class="wb-card-head"><div><h2 id="members-title">项目成员 <span class="muted">{{ members.length }}</span></h2><p>权限只在本项目生效；执行与验收责任分别授权。服务管理员可访问全部项目，不在此列出。</p></div><button class="primary" @click="openMemberDialog()"><AppIcon name="plus" />添加成员</button></div>
+              <div v-if="!members.length && !panelLoading" class="wb-empty"><h3>还没有项目成员</h3><p>添加已有账户为执行者、验收者或只读者。</p></div>
+              <div v-for="m in members" :key="m.username" class="wb-setting-row"><span class="avatar">{{ m.username.slice(0, 1).toUpperCase() }}</span><div><strong>{{ m.username }}</strong><small>{{ projectTokens.filter((t) => t.username === m.username && !t.revoked).length }} 个有效令牌</small></div><span class="tag" :class="m.role === 'reviewer' ? 'blue' : ''">{{ roles[m.role] || m.role }}</span><button class="small ghost" @click="openMemberDialog(m.username, m.role)">调整角色</button></div>
+            </section>
+            <section class="wb-card" aria-labelledby="tokens-title">
+              <div class="wb-card-head"><div><h2 id="tokens-title">Agent 访问令牌</h2><p>令牌继承所属成员的项目角色，不额外授予权限；完整内容只在创建时显示一次。</p></div><button :disabled="!members.length" @click="openTokenDialog"><AppIcon name="key" />创建令牌</button></div>
+              <div v-if="!projectTokens.length" class="wb-empty"><h3>尚无令牌</h3><p>为成员创建令牌后，Agent 可用共享 CLI 连接本项目。</p></div>
+              <div v-for="item in projectTokens" :key="item.id" class="wb-setting-row"><span class="wb-setting-icon"><AppIcon name="key" /></span><div><strong>{{ item.label }}</strong><small>{{ item.username }} · 继承{{ roles[members.find((m) => m.username === item.username)?.role || ''] || '成员角色' }} · {{ item.revoked ? '已撤销' : '有效' }}</small></div><button v-if="!item.revoked" class="small danger" :disabled="busy" @click="confirmRevoke(item)">撤销</button><span v-else class="tag">已撤销</span></div>
+            </section>
+          </template>
+        </template>
         <template v-else>
-        <section class="standalone-card remote-connection" aria-label="项目接入"><div class="section-heading"><h2>项目接入</h2><button :disabled="panelLoading" @click="loadPanel">刷新接入信息</button></div><p><span class="status active">中心项目已连接</span> {{ selected.name }}</p><dl class="remote-facts"><div><dt>项目 ID</dt><dd>{{ selected.id }}</dd></div><div><dt>当前身份</dt><dd>{{ session.username }} · {{ roles[selected.role] || selected.role }}</dd></div><div><dt>规范资料</dt><dd>{{ specificationNames[projectConfiguration?.specification_state] || '正在核对' }}</dd></div><div><dt>工作准备</dt><dd>领取前核对候选、规范上下文和当前责任</dd></div></dl><details class="remote-diagnostics"><summary>连接新机器与配置来源</summary><p class="secondary">使用稳定项目 ID 连接同一中心项目。</p><pre>{{ `ael init --server ${locationOrigin} --remote-project ${selected.id}` }}</pre><p v-if="projectConfiguration" class="secondary">API {{ projectConfiguration.api_protocol }} · Skill {{ projectConfiguration.skill_protocol }} · 政策来源 {{ projectConfiguration.configuration_source }}</p><p v-if="projectConfiguration?.critical_knowledge?.length">关键依据 {{ projectConfiguration.critical_knowledge.join('、') }}</p><ul v-if="projectConfiguration?.checks?.length"><li v-for="check in projectConfiguration.checks" :key="check.id">{{ check.id }} · {{ check.kind }} · {{ check.method || '未声明方法' }}</li></ul></details></section>
-        <section class="standalone-card" aria-label="客户端最近上报"><div class="section-heading"><h2>客户端最近上报</h2></div><p class="secondary">版本和策略来自客户端最近一次接入或会话准备上报。宿主运行状态未知。</p><p v-if="!clients.length && !panelLoading" class="secondary">尚无接入上报。使用 ael init 接入后可在此查看。</p><div v-if="clients.length" class="client-report-list"><article v-for="client in clients" :key="client.client_id"><div><strong>{{ client.runner || client.actor }}</strong><small>{{ client.session_id ? '工具会话' : '初始化接入' }} · {{ stamp(client.reported_at) }}</small></div><div><span>CLI {{ client.cli_version }}</span><small>Skill {{ client.skill_version }}</small></div><div><span>{{ policyNames[client.update_policy] || client.update_policy }}</span><small>{{ client.compatible ? '版本兼容' : '客户端版本不兼容' }}</small></div><div><span>{{ specificationNames[client.specification_state] || '资料状态待核对' }}</span><small>{{ hookSummary(client) }}</small></div><details class="remote-diagnostics"><summary>诊断引用</summary><p>客户端 {{ client.client_id }}</p><p v-if="client.session_id">会话 {{ client.session_id }}</p><p v-if="client.cli_build">构建 {{ client.cli_build }}</p></details></article></div></section>
-        <div v-if="session.admin" class="standalone-grid"><section class="standalone-card"><h2>设置项目成员</h2><form class="standalone-form" @submit.prevent="addMember"><label>用户名<input v-model="memberUsername" required /></label><label>角色<select v-model="memberRole"><option value="executor">执行者</option><option value="reviewer">验收者</option><option value="reader">只读者</option></select></label><button :disabled="busy">保存成员</button></form></section><section class="standalone-card"><h2>创建 Agent 令牌</h2><p class="secondary">令牌只用于所选项目，权限取自当前成员角色。</p><form class="standalone-form" @submit.prevent="createToken"><label>成员用户名<input v-model="tokenUsername" required /></label><label>用途<input v-model="tokenLabel" required maxlength="100" /></label><button :disabled="busy">创建令牌</button></form><div v-if="tokenSecret" class="standalone-secret"><strong>令牌仅显示一次</strong><p class="secondary">请现在妥善保存。令牌 ID：{{ tokenID }}</p><textarea :value="tokenSecret" rows="3" readonly aria-label="新令牌" /></div></section></div>
-        <template v-if="session.admin"><section class="standalone-card"><h2>Agent 令牌</h2><p v-if="!projectTokens.length" class="secondary">尚无令牌。</p><ul v-else class="standalone-list"><li v-for="item in projectTokens" :key="item.id"><div><strong>{{ item.label }}</strong><small>{{ item.username }} · {{ item.project_id }} · {{ item.revoked ? "已撤销" : "有效" }}</small></div><button type="button" :disabled="busy || item.revoked" @click="revoke(item.id)">撤销令牌</button></li></ul></section></template>
-        <details class="remote-diagnostics"><summary>按任务检索执行依据与附件</summary>        <section v-if="selected" class="remote-evidence-search" aria-label="项目证据">
+          <section class="wb-card" aria-labelledby="connect-title">
+            <div class="wb-card-head"><div><h2 id="connect-title">在新设备接入项目</h2><p>使用共享的轻量 CLI，让已有 Agent 读取同一个项目的进度与规范。</p></div><button class="primary" @click="copyConnectionInfo"><AppIcon name="copy" />复制接入信息</button></div>
+            <dl class="wb-facts"><div><dt>中心服务</dt><dd>{{ locationOrigin }}</dd></div><div><dt>项目标识</dt><dd><code>{{ selected.id }}</code></dd></div><div><dt>当前权限</dt><dd>{{ ownerRoles[selected.role] || selected.role }} <small class="muted">项目范围{{ session.admin ? ' · 服务管理员' : '' }}</small></dd></div><div><dt>规范资料</dt><dd>{{ specificationNames[projectConfiguration?.specification_state] || (panelLoading ? '正在读取' : '待核对') }}</dd></div></dl>
+            <div class="wb-hint-row"><AppIcon name="terminal" /><span>在工程目录运行 <code>ael init --server {{ locationOrigin }} --remote-project {{ selected.id }}</code> 绑定已有项目。工程编译与验证仍由本机 Agent 执行。</span><a class="text-button" :href="href('/local-setup')">查看接入指引</a></div>
+            <details v-if="projectConfiguration" class="wb-disclosure"><summary>协议与检查配置</summary><div class="wb-disclosure-body"><p>API {{ projectConfiguration.api_protocol }} · Skill {{ projectConfiguration.skill_protocol }} · 政策来源 {{ projectConfiguration.configuration_source }}</p><p v-if="projectConfiguration.critical_knowledge?.length">关键依据：{{ projectConfiguration.critical_knowledge.join('、') }}</p><p v-for="check in projectConfiguration.checks || []" :key="check.id">{{ check.id }} · {{ check.kind }} · {{ check.method || '未声明方法' }}</p></div></details>
+          </section>
+          <section class="wb-card" aria-labelledby="clients-title">
+            <div class="wb-card-head"><div><h2 id="clients-title">最近接入的客户端</h2><p>展示最近一次接入或会话准备上报，不代表 Agent 或本机进程当前在线。</p></div><button class="ghost small" :disabled="panelLoading" @click="loadPanel"><AppIcon name="refresh" />刷新</button></div>
+            <div v-if="!clients.length && !panelLoading" class="wb-empty"><h3>尚无接入上报</h3><p>在设备上运行 ael init 接入后，最近一次上报会出现在这里。</p></div>
+            <div v-for="client in clients" :key="client.client_id" class="wb-setting-row wb-client-row">
+              <span class="wb-setting-icon"><AppIcon :name="client.session_id ? 'terminal' : 'monitor'" /></span>
+              <div><strong>{{ client.runner || client.actor }}</strong><small>CLI {{ client.cli_version }} · Skill {{ client.skill_version }} · {{ policyNames[client.update_policy] || client.update_policy }}</small></div>
+              <div class="wb-client-state"><small>{{ relativeShort(client.reported_at) }}上报</small><small :class="client.compatible ? 'ok' : 'warn'">{{ client.compatible ? '兼容当前服务' : '客户端版本不兼容' }}</small></div>
+              <details class="wb-client-more"><summary class="button small ghost">查看信息</summary><div class="wb-popover client"><p>{{ client.session_id ? '工具会话' : '初始化接入' }} · {{ stamp(client.reported_at) }}</p><p>{{ specificationNames[client.specification_state] || '资料状态待核对' }} · {{ hookSummary(client) }}</p><p>客户端 {{ client.client_id }}</p><p v-if="client.session_id">会话 {{ client.session_id }}</p><p v-if="client.cli_build">构建 {{ client.cli_build }}</p></div></details>
+            </div>
+          </section>
+          <section class="wb-card"><div class="wb-card-head"><div><h2>项目约定</h2><p>Agent 按当前任务读取关联的现行规范与决策依据。</p></div><a class="button ghost" :href="href('/knowledge')">查看规范</a></div></section>
+          <details class="wb-card wb-settings-disclosure"><summary>按任务检索执行依据快照与附件（排查用）</summary>        <section v-if="selected" class="remote-evidence-search" aria-label="项目证据">
           <h2>{{ selected.name }} · 任务与证据</h2>
           <form class="standalone-evidence-lookup" @submit.prevent="findTask"><label>按任务 ID 查找<input v-model="taskLookup" required /></label><button type="submit" :disabled="busy">查找任务</button></form>
           <p v-if="!tasks.length" class="secondary">此项目暂无任务。</p>
@@ -494,53 +571,90 @@ onUnmounted(() => { document.removeEventListener("click", closePicker); if (prev
         </section>
 </details>
         </template>
+        <dialog ref="memberDialog" class="wb-dialog" aria-labelledby="member-dialog-title" @cancel.prevent="memberDialog?.close()">
+          <form class="wb-dialog-frame" @submit.prevent="saveMember">
+            <div class="wb-dialog-heading"><h2 id="member-dialog-title">{{ memberEditing ? '调整成员角色' : '添加项目成员' }}</h2><button type="button" class="icon-button" aria-label="关闭" @click="memberDialog?.close()"><AppIcon name="x" /></button></div>
+            <div class="wb-dialog-body wb-form">
+              <p class="wb-dialog-text">成员必须是服务中已有的账户；角色只在「{{ selected.name }}」生效。</p>
+              <label>用户名<input v-model="memberUsername" required :readonly="memberEditing" autocomplete="off" /></label>
+              <label>项目角色<select v-model="memberRole"><option value="executor">执行者 · 领取与提交工作</option><option value="reviewer">验收者 · 记录人工验收</option><option value="reader">只读者 · 查看进度与资料</option></select></label>
+              <p v-if="error" class="wb-banner error" role="alert">{{ error }}</p>
+            </div>
+            <div class="wb-dialog-footer"><button type="button" @click="memberDialog?.close()">取消</button><button class="primary" :disabled="busy">{{ busy ? '正在保存…' : '保存成员' }}</button></div>
+          </form>
+        </dialog>
+        <dialog ref="tokenDialog" class="wb-dialog" aria-labelledby="token-dialog-title" @cancel.prevent="closeTokenDialog">
+          <form class="wb-dialog-frame" @submit.prevent="saveToken">
+            <div class="wb-dialog-heading"><h2 id="token-dialog-title">创建 Agent 令牌</h2><button type="button" class="icon-button" aria-label="关闭" @click="closeTokenDialog"><AppIcon name="x" /></button></div>
+            <div class="wb-dialog-body wb-form">
+              <template v-if="!tokenSecret">
+                <p class="wb-dialog-text">令牌只用于本项目，权限继承所选成员的当前角色。</p>
+                <label>所属成员<select v-model="tokenUsername" required><option v-for="m in members" :key="m.username" :value="m.username">{{ m.username }} · {{ roles[m.role] || m.role }}</option></select></label>
+                <label>用途<input v-model="tokenLabel" required maxlength="100" placeholder="例如：云电脑验收环境" /></label>
+              </template>
+              <template v-else>
+                <p class="wb-banner ok" role="status">令牌已创建。完整内容只显示这一次，关闭后无法再查看。</p>
+                <label>新令牌<textarea :value="tokenSecret" rows="3" readonly aria-label="新令牌" /></label>
+                <p class="wb-dialog-note">令牌 ID：{{ tokenID }}。在设备上运行 <code>ael server profile add --url {{ locationOrigin }} --token-stdin</code> 时粘贴。</p>
+              </template>
+              <p v-if="error" class="wb-banner error" role="alert">{{ error }}</p>
+            </div>
+            <div class="wb-dialog-footer"><template v-if="!tokenSecret"><button type="button" @click="closeTokenDialog">取消</button><button class="primary" :disabled="busy || !tokenUsername">{{ busy ? '正在创建…' : '创建令牌' }}</button></template><template v-else><button type="button" @click="copyToken"><AppIcon name="copy" />复制令牌</button><button type="button" class="primary" @click="closeTokenDialog">我已保存</button></template></div>
+          </form>
+        </dialog>
+        <dialog ref="revokeDialog" class="wb-dialog" aria-labelledby="revoke-title" @cancel.prevent="revokeDialog?.close()">
+          <div class="wb-dialog-frame">
+            <div class="wb-dialog-heading"><h2 id="revoke-title">撤销令牌？</h2></div>
+            <div class="wb-dialog-body"><p class="wb-dialog-text">撤销「{{ revokeTarget?.label }}」（{{ revokeTarget?.username }}）后，使用它的设备将无法继续访问本项目。已提交的记录保留。</p></div>
+            <div class="wb-dialog-footer"><button @click="revokeDialog?.close()">保留令牌</button><button class="danger" :disabled="busy" @click="doRevoke">确认撤销</button></div>
+          </div>
+        </dialog>
       </template>
-      <RemoteAccountPanel v-else-if="area === 'account'" :username="session.username" :admin="session.admin" :busy="busy" @logout="logout" />
-      <template v-else-if="area === 'service'"><p v-if="!session.admin" role="alert" class="notice">当前账号没有服务管理权限。</p><RemoteServicePanel v-else :key="session.csrf" :info="serviceInfo" :loading="panelLoading" :platform="servicePlatform" :request="request" @refresh="loadPanel" @platform="changeServicePlatform" @created="serviceProjectCreated" /></template>
+      <RemoteAccountPanel v-else-if="area === 'account'" :username="session.username" :admin="session.admin" :role="ownerRoles[selected.role] || selected.role" :project="selected.name" :busy="busy" @logout="logout" />
+      <template v-else-if="area === 'service'"><section v-if="!session.admin" class="wb-empty" role="alert"><AppIcon name="lock" /><h3>当前账号没有服务管理权限</h3><p>服务管理仅对服务管理员开放；项目角色不包含这项权限。</p><a class="button" :href="href('/tasks')">返回工作台</a></section><RemoteServicePanel :projects="projects" v-else :key="session.csrf" :info="serviceInfo" :loading="panelLoading" :platform="servicePlatform" :request="request" @refresh="loadPanel" @platform="changeServicePlatform" @created="serviceProjectCreated" /></template>
     </template>
   </WorkspaceApp>
   <div v-else class="standalone-shell">
-    <header class="standalone-header">
-      <div><strong class="standalone-brand">AEL</strong><span>工程工作台</span></div>
-      <nav v-if="session" class="standalone-account" aria-label="服务与账户"><a href="#/tasks">项目</a><a v-if="session.admin" href="#/service">服务管理</a><a href="#/account">账户设置</a><span>{{ session.username }}</span><button type="button" :disabled="busy" @click="logout">退出登录</button></nav>
-    </header>
-    <main id="main-content" class="standalone-main">
-      <p v-if="loading" role="status">正在连接服务…</p>
-      <template v-else-if="!session">
-        <section class="standalone-login">
-          <p class="standalone-eyebrow">AEL SERVER</p>
-          <h1>登录工作台</h1>
-          <p class="secondary">使用管理员创建的账号访问项目。</p>
-          <p v-if="error" class="standalone-error" role="alert">{{ error }}</p>
-          <form class="standalone-form" @submit.prevent="login">
-            <label>用户名<input v-model="username" autocomplete="username" required /></label>
-            <label>密码<input v-model="password" type="password" autocomplete="current-password" required /></label>
-            <button class="primary" type="submit" :disabled="busy">登录</button>
-          </form>
-        </section>
-      </template>
-      <template v-else-if="panel === 'account'">
-        <h1>账户</h1><RemoteAccountPanel :username="session.username" :admin="session.admin" :busy="busy" @logout="logout" />
-      </template>
-      <template v-else-if="panel === 'service'">
-        <h1>服务管理</h1><p v-if="!session.admin" role="alert" class="notice">当前账号没有服务管理权限。</p><p v-if="panelError" role="alert" class="notice">{{ panelError }}</p><RemoteServicePanel v-if="session.admin" :key="session.csrf" :info="serviceInfo" :loading="panelLoading" :platform="servicePlatform" :request="request" @refresh="loadPanel" @platform="changeServicePlatform" @created="serviceProjectCreated" />
-      </template>
+    <main id="main-content" class="wb-login-shell" :class="{ wide: session && !loading }">
+      <p v-if="loading" role="status" class="muted">正在连接服务…</p>
+      <section v-else-if="!session" class="wb-login-card" aria-labelledby="login-title">
+        <div class="wb-login-logo"><span>A</span>EL</div>
+        <p class="wb-login-tagline">工作有进展，也有来处</p>
+        <h1 id="login-title">登录 AEL 工作台</h1>
+        <p class="wb-login-lead">使用管理员为你创建的账号访问项目。</p>
+        <p v-if="error" class="wb-banner error" role="alert">{{ error }}</p>
+        <form class="wb-login-form" @submit.prevent="login">
+          <label>用户名<input v-model="username" autocomplete="username" required /></label>
+          <label>密码<input v-model="password" type="password" autocomplete="current-password" required /></label>
+          <button class="primary" type="submit" :disabled="busy">{{ busy ? "正在登录…" : "登录" }}</button>
+        </form>
+        <p class="wb-login-foot">登录状态只保存在当前浏览器会话</p>
+      </section>
       <template v-else>
-        <div class="standalone-title"><div><p class="standalone-eyebrow">PROJECTS</p><h1>项目</h1><p class="secondary">查看你有权访问的项目和身份。</p></div><button type="button" :disabled="busy" @click="action(refresh, '已刷新。')">刷新</button></div>
-        <p v-if="error" class="standalone-error" role="alert">{{ error }}</p>
-        <p v-if="notice" class="standalone-notice" role="status">{{ notice }}</p>
-        <section class="standalone-card" aria-label="项目列表">
-          <p v-if="!projects.length" class="secondary">当前账号还没有可访问的项目。</p>
-          <ul v-else class="standalone-list">
-            <li v-for="project in projects" :key="project.id">
-              <div><strong>{{ project.name }}</strong><small>{{ project.id }} · {{ roles[project.role] || project.role }}</small></div>
-              <button type="button" :disabled="busy" @click="view(project.id)">查看项目</button>
-            </li>
-          </ul>
-          <button v-if="selected" @click="view(selected.id)">返回项目工作台</button>
-          <p v-if="selected" class="standalone-selection">{{ selected.name }} · {{ roles[selected.role] || selected.role }}</p>
-        </section>
-        <a v-if="session.admin && !projects.length" class="button" href="#/service">创建项目与管理服务</a>
+        <header class="wb-login-top"><div class="wb-login-logo small"><span>A</span>EL</div><nav aria-label="服务与账户"><a :href="href('/tasks')">项目</a><a v-if="session.admin" href="#/service">服务管理</a><a href="#/account">个人设置</a><span class="muted">{{ session.username }}</span><button class="small" :disabled="busy" @click="logout">退出登录</button></nav></header>
+        <template v-if="panel === 'account'">
+          <h1>个人设置</h1><RemoteAccountPanel :username="session.username" :admin="session.admin" :busy="busy" @logout="logout" />
+        </template>
+        <template v-else-if="panel === 'service'">
+          <h1>服务管理</h1>
+          <section v-if="!session.admin" class="wb-empty" role="alert"><AppIcon name="lock" /><h3>当前账号没有服务管理权限</h3><p>服务管理仅对服务管理员开放。</p></section>
+          <p v-if="panelError" role="alert" class="wb-banner error">{{ panelError }}</p>
+          <RemoteServicePanel :projects="projects" v-if="session.admin" :key="session.csrf" :info="serviceInfo" :loading="panelLoading" :platform="servicePlatform" :request="request" @refresh="loadPanel" @platform="changeServicePlatform" @created="serviceProjectCreated" />
+        </template>
+        <template v-else>
+          <div class="wb-page-header"><div><h1>选择项目</h1><p class="wb-lead">查看你有权访问的项目和身份。</p></div><button type="button" :disabled="busy" @click="action(refresh, '已刷新。')"><AppIcon name="refresh" />刷新</button></div>
+          <p v-if="error" class="wb-banner error" role="alert">{{ error }}</p>
+          <p v-if="notice" class="wb-banner ok" role="status">{{ notice }}</p>
+          <section class="wb-card" aria-label="项目列表">
+            <div v-if="!projects.length" class="wb-empty"><AppIcon name="folder" /><h3>当前账号还没有可访问的项目</h3><p>请联系服务管理员把你加入项目。</p><a v-if="session.admin" class="button" href="#/service">创建项目与管理服务</a></div>
+            <ul v-else class="wb-project-list">
+              <li v-for="project in projects" :key="project.id">
+                <span class="wb-project-symbol"><AppIcon name="folder" /></span><div><strong>{{ project.name }}</strong><small>{{ project.id }} · {{ roles[project.role] || project.role }}</small></div>
+                <button type="button" :disabled="busy" @click="view(project.id)">进入项目</button>
+              </li>
+            </ul>
+          </section>
+        </template>
       </template>
     </main>
   </div>

@@ -24,6 +24,8 @@ export class ApiError extends Error {
 }
 export type RemoteProject = { id: string; name: string; role: string };
 export const remoteProject = ref<RemoteProject | null>(null);
+// Display name of the signed-in remote account; empty in local mode.
+export const currentUser = ref("");
 let remoteTransport: ((path: string, body?: unknown, raw?: boolean | "blob") => Promise<any>) | undefined;
 export function useRemoteTransport(project: RemoteProject | null, transport?: typeof remoteTransport) {
   remoteProject.value = project;

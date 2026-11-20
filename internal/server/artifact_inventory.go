@@ -214,7 +214,7 @@ FROM visible_uploads a LEFT JOIN task_titles t ON t.id=a.task_id LEFT JOIN artif
 			if len(date) >= 10 {
 				date = date[:10]
 			}
-			matched := (filter.Task == "" || item.TaskID == filter.Task) && (filter.MIME == "" || strings.HasPrefix(item.MIME, filter.MIME)) && (filter.Source == "" || artifactSourceCategory(item.Source) == filter.Source) && (filter.Since == "" || date >= filter.Since) && (filter.Until == "" || date <= filter.Until)
+			matched := (filter.Task == "" || item.TaskID == filter.Task) && (filter.MIME == "" || strings.HasPrefix(item.MIME, filter.MIME)) && (filter.Source == "" || artifactSourceCategory(item.Source) == filter.Source || filter.Source == "results" && artifactSourceCategory(item.Source) != "context snapshot") && (filter.Since == "" || date >= filter.Since) && (filter.Until == "" || date <= filter.Until)
 			if matched && item.Kind == kind && strings.Contains(strings.ToLower(item.Filename+" "+item.TaskID+" "+item.TaskTitle), query) {
 				result.Items = append(result.Items, item)
 			}

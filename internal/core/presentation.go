@@ -101,6 +101,10 @@ type TaskSummary struct {
 	Recovery             string                    `json:"recovery"`
 	Blocker              string                    `json:"blocker_reason"`
 	NeedsHistoryReview   bool                      `json:"needs_history_review"`
+	// Imported marks a record carried by an authority history import; its
+	// ledger lets an authorized executor reconcile the restore hold.
+	Imported bool `json:"imported,omitempty"`
+	Paused   bool `json:"paused,omitempty"`
 	RequiresTaskDecision bool                      `json:"requires_task_decision"`
 	Checks               CheckSummary              `json:"checks"`
 	ManualReviews        []PendingHumanReview      `json:"manual_reviews"`
@@ -137,6 +141,8 @@ func (s *Service) summarize(n Next, includeEpic bool) (TaskSummary, error) {
 		r.Epic = &tree.Summary
 	}
 	r.NeedsHistoryReview = t.Status == "open" && t.Confirmation != nil && t.Confirmation.Kind == "restore"
+	_, r.Imported = t.Legacy["authority_import"]
+	r.Paused = t.Status == "open" && t.Paused
 	r.RequiresTaskDecision = t.Status == "open" && t.Confirmation != nil && !r.NeedsHistoryReview
 	r.HumanReviewCount = len(t.HumanReviewNotes)
 	currentNotes := 0

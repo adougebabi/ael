@@ -150,3 +150,41 @@ func TestWorkbenchFamilyIncludesLegacyNonEpicAndNestedParents(t *testing.T) {
 		t.Fatal(actual, e)
 	}
 }
+
+func TestWorkbenchReviewViewAndChildReadingStates(t *testing.T) {
+	s := fixture(t)
+	parent := create(t, s, core.Definition{Title: "普通功能父事项", Type: "feature", Goal: "verified", Acceptance: []string{"整体交付"}})
+	leaf := atVerify(t, s, core.Definition{Title: "待观察子任务", Type: "bug", Goal: "verified", Acceptance: []string{"观察结果"}, Checks: []core.Check{{ID: "owner", Kind: "review", Method: "human", Covers: []string{"观察结果"}, Required: true}}})
+	waiting := create(t, s, core.Definition{Title: "等待接手子任务", Type: "bug", Goal: "verified", Acceptance: []string{"结果"}})
+	for _, child := range []string{leaf, waiting} {
+		if _, e := s.Store.DB.Exec(`UPDATE tasks SET body=json_set(body,'$.definition.parent',?) WHERE id=?`, parent, child); e != nil {
+			t.Fatal(e)
+		}
+	}
+	p, e := s.Workbench(core.Query{Board: "review"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if p.Total != 1 || p.Items[0].Task.ID != parent || p.Counts["review"] != 1 || p.MatchedChildren != 1 {
+		t.Fatalf("%+v", p)
+	}
+	row := p.Items[0]
+	if row.Children != 2 || row.Remaining != 2 || row.ReviewChildren != 1 || row.ActiveChildren != 0 || row.BlockedChildren != 0 {
+		t.Fatalf("%+v", row)
+	}
+	// The parent's own reading state is unchanged by its children.
+	if len(row.Task.ManualReviews) != 0 || row.Task.Type != "feature" {
+		t.Fatalf("%+v", row.Task)
+	}
+	family, e := s.Workbench(core.Query{Parent: parent})
+	if e != nil || family.Family.Descendants != 2 || family.Family.ReviewChildren != 1 || family.Family.Remaining != 2 {
+		t.Fatalf("%+v %v", family.Family, e)
+	}
+	if _, e = s.Pause(leaf, "缺少实际测试环境"); e != nil {
+		t.Fatal(e)
+	}
+	p, e = s.Workbench(core.Query{})
+	if e != nil || p.Items[0].BlockedChildren != 1 {
+		t.Fatalf("%+v %v", p, e)
+	}
+}

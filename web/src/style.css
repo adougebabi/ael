@@ -1357,7 +1357,7 @@ main { max-width: 1600px; margin: 0 auto; padding: 32px 38px 42px; }
 .stage-track li:not(:last-child)::after { content: ''; flex: 1; min-width: 18px; height: 1px; margin-left: 6px; background: #e3e5ef; }
 .stage-node { display: grid; place-items: center; flex: none; width: 22px; height: 22px; border: 1px solid #e0e3ef; border-radius: 50%; background: #f3f4f9; color: #8d96aa; font-size: 11px; }
 .stage-track li.current .stage-node { border-color: var(--brand); background: var(--brand); color: #fff; box-shadow: 0 0 0 3px var(--tint); }
-.stage-track li.done .stage-node { border-color: #d8d9f6; background: #efefff; color: #8185ca; }
+.stage-track li.done .stage-node { border-color: #d8d9f6; background: var(--accent-soft); color: #8185ca; }
 .overview-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
 .overview-card { min-width: 0; padding: 20px 22px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
 .overview-card .section-heading button { min-height: 30px; padding: 0; border: 0; background: transparent; color: var(--brand); font-size: 12px; }
@@ -1630,7 +1630,7 @@ main { max-width: 1600px; margin: 0 auto; padding: 32px 38px 42px; }
 .task-more { position: relative; z-index: 3; padding: 0; border: 0; }
 .task-more > summary { list-style: none; padding: 6px 10px; border-radius: 5px; color: var(--muted); font-size: 18px; line-height: 1; }
 .task-more > summary::-webkit-details-marker { display: none; }
-.task-more[open] > summary { margin: 0; background: #efefff; }
+.task-more[open] > summary { margin: 0; background: var(--accent-soft); }
 .task-more-menu { position: absolute; top: calc(100% + 7px); right: 0; width: 170px; padding: 5px; border: 1px solid var(--line); border-radius: 8px; background: #fff; box-shadow: 0 8px 24px #1b203c1c; }
 .task-more-menu button, .task-more-menu a { display: flex; width: 100%; min-height: 34px; align-items: center; justify-content: flex-start; padding: 7px 10px; border: 0; border-radius: 5px; color: inherit; background: transparent; font-size: 12px; text-decoration: none; }
 .task-more-menu button:hover, .task-more-menu a:hover { background: #f3f4fb; }

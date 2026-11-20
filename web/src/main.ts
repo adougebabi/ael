@@ -1,6 +1,8 @@
 import { createApp } from "vue";
 import App from "./App.vue";
 import "./style.css";
+import "./workbench.css";
+import { applyTheme } from "./theme";
 
 async function start() {
   let standalone = false;
@@ -14,4 +16,5 @@ async function start() {
   createApp(root).mount("#app");
 }
 
+applyTheme();
 void start();

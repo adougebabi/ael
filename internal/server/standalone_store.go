@@ -287,6 +287,30 @@ ON CONFLICT(project_id,user_id) DO UPDATE SET role=excluded.role`, role, project
 	return nil
 }
 
+type standaloneMember struct {
+	Username string `json:"username"`
+	Role     string `json:"role"`
+}
+
+// members lists existing project memberships for the admin settings page. It
+// reads only; roles are still assigned through addMember.
+func (s *Standalone) members(project string) ([]standaloneMember, error) {
+	rows, err := s.store.DB.Query(`SELECT u.username,m.role FROM server_members m JOIN server_users u ON u.id=m.user_id WHERE m.project_id=? ORDER BY u.username`, project)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []standaloneMember{}
+	for rows.Next() {
+		var m standaloneMember
+		if err = rows.Scan(&m.Username, &m.Role); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
 func (s *Standalone) issueToken(username, project, label string) (string, string, error) {
 	username, label = strings.ToLower(strings.TrimSpace(username)), strings.TrimSpace(label)
 	if label == "" || len(label) > 100 {
