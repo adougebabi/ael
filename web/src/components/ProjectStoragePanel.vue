@@ -246,7 +246,7 @@ async function cleanup() {
     busy.value = false;
   }
 }
-const materialFiles=computed<ResultFile[]>(()=> (data.value?.items || []).map(item=>({ref:item.artifact_id,task:item.task_id,name:item.filename,mime:item.mime,size:item.size,sizeLabel:bytes(item.size),taskTitle:item.task_title,at:item.created_at,state:item.source.startsWith('authority-import:')?'historical':'unknown',purpose:item.purpose?.trim() || '用途或关联检查未记录'})));
+const materialFiles=computed<ResultFile[]>(()=> (data.value?.items || []).map(item=>({ref:item.artifact_id,task:item.task_id,name:item.filename,mime:item.mime,size:item.size,sizeLabel:bytes(item.size),taskTitle:item.task_title,at:item.created_at,state:'unknown',purpose:item.purpose?.trim() || '用途或关联检查未记录'})));
 watch([kind, query, offset], load);
 watch([taskFilter,mimeFilter,sourceFilter,since,until,mode],()=>{offset.value=0;kind.value='files';void load();});
 onMounted(load);
@@ -398,7 +398,7 @@ onUnmounted(() => clearTimeout(debounce));
         </button>
       </div>
       <div v-if="mode==='materials'" class="toolbar material-filters"><label>所属任务<select v-model="taskFilter" aria-label="所属任务"><option value="">全部任务（含旧记录）</option><option v-for="task in data.tasks" :key="task.task_id" :value="task.task_id">{{ task.title }}</option></select></label><label>资料类型<select v-model="mimeFilter" aria-label="资料类型"><option value="">全部类型</option><option value="image/">图片</option><option value="text/">报告与文本</option></select></label><label>资料来源<select v-model="sourceFilter" aria-label="资料来源"><option value="">全部来源</option><option value="import history">历史导入</option><option value="execution evidence">执行材料</option><option value="context snapshot">规范快照</option><option value="other">其他 / 未分类</option></select></label><label>开始日期<input v-model="since" aria-label="开始日期" type="date" /></label><label>结束日期<input v-model="until" aria-label="结束日期" type="date" /></label></div>
-      <ResultsGallery v-if="mode==='materials'" :files="materialFiles" heading="资料" :limit="25" />
+      <ResultsGallery scope="all" v-if="mode==='materials'" :files="materialFiles" heading="资料" :limit="25" />
       <template v-else>
       <p class="table-scroll-hint">左右滑动可查看来源与操作。</p>
       <div class="storage-table-scroll">

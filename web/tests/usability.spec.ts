@@ -2067,7 +2067,7 @@ test("A44 已有候选的受阻 UI 检查可恢复并逐项人工验收", async 
   const row = page.locator('[data-task="'+id+'"]');
   await expect(row).toContainText("3 项通过 · 1 项未执行 · 1 项受阻");
   await row.locator(".task-title-link").click();
-  await page.getByRole("button", { name: "处理受阻的人工检查" }).click();
+  await page.getByRole("button", { name: "打开受阻人工检查" }).click();
   let dialog = page.getByRole("dialog", { name: /^(记录人工验收|记录人工意见)$/ });
   await expect(dialog).toContainText("恢复本身不会通过检查");
   await page.route("**/api/action", async (route) => {
@@ -2150,7 +2150,7 @@ test("A46 两个人工检查同理由受阻时定位最新阻塞", async ({ page
   await client.post("/api/action", { action: "review_resume", id, unit: "ui", ...expected });
   await client.post("/api/action", { ...blocked, unit: "ux", request_key: id + "-ux" });
   await goto(page, "single", "/tasks/" + id);
-  await page.getByRole("button", { name: "处理受阻的人工检查" }).click();
+  await page.getByRole("button", { name: "打开受阻人工检查" }).click();
   const dialog = page.getByRole("dialog", { name: /^(记录人工验收|记录人工意见)$/ });
   await expect(dialog).toContainText("本次操作：检查 ux");
   await dialog.getByRole("button", { name: "恢复并继续人工验收" }).click();
@@ -2501,7 +2501,7 @@ test('WB02 默认概览直接看图片、报告与键盘返回',async({page,requ
  const gallery=page.getByRole('region',{name:'当前成果',exact:true});
  await gallery.scrollIntoViewIfNeeded();
  await expect(gallery.locator('img')).toBeVisible();
- await expect(gallery).toContainText('当前成果 / 验收材料');
+ await expect(gallery).toContainText('适用当前版本');
  await expect(gallery).toContainText('WB02 实际报告结论');await expect(gallery).toContainText('图片可直接查看');
  const thumb=gallery.getByRole('button').filter({hasText:'wb02-result.png'});
  await thumb.click();const dialog=page.getByRole('dialog',{name:'成果预览'});
@@ -2587,4 +2587,99 @@ test('WB05 同一数据的历史前端与聚合首页对照',async({page})=>{
  await page.unroute('**/*');await page.reload();await expect(page.locator('.work-item')).toHaveCount(1);
  await page.getByRole('button',{name:/展开子任务/}).click();await expect(page.locator('.work-child')).toHaveCount(20);
  await page.locator('.workbench-controls').evaluate(el=>el.scrollIntoView({block:'start'}));await page.screenshot({path:path.join(output,'WB05-after-same-data.png'),fullPage:false,animations:'disabled'});
+});
+
+test('R1 用途与版本先选材，保留共享检查关联和真实预览',async({page,request})=>{
+ ensureIsolatedOutput();const c=await connect(request,'single'),id='r1-material-'+Date.now();
+ const base=path.join(projects.single.root,'app/r1');fs.mkdirSync(path.join(base,'input'),{recursive:true});fs.mkdirSync(path.join(base,'output'),{recursive:true});
+ fs.writeFileSync(path.join(base,'input/AGENTS.md'),'输入规范，不是交付物');fs.writeFileSync(path.join(base,'output/AGENTS.md'),'本次明确交付的规范');fs.writeFileSync(path.join(base,'report.json'),JSON.stringify({summary:'本次准确候选报告',observations:['当前报告优先于历史图片']}));
+ await goto(page,'single');await page.screenshot({path:path.join(base,'old.png')});
+ await c.post('/api/tasks',{id,title:'R1 材料用途隔离样本',type:'bug',goal:'verified',scope:['app'],acceptance:['对应正确材料'],checks:[...['A','B'].map(check=>({id:check,kind:'functional',method:'command',command:['true'],covers:['对应正确材料'],required:true,artifacts:['app/r1/report.json']})),{id:'C',kind:'review',method:'human',covers:['对应正确材料'],required:true}]});
+ await step(c,id,['app/r1/input/AGENTS.md']);await step(c,id,['app/r1/old.png']);
+ await c.post('/api/action',{action:'resume',id,unit:'execute',ack_stopped:true});
+ await step(c,id,['app/r1/report.json','app/r1/output/AGENTS.md'],()=>fs.writeFileSync(path.join(base,'new.txt'),'new candidate '+id));
+ for(const unit of ['A','B'])await c.post('/api/action',{action:'verify',id,unit});
+ await goto(page,'single','/tasks/'+id);const gallery=page.getByRole('region',{name:'当前成果',exact:true});await gallery.scrollIntoViewIfNeeded();
+ await expect(gallery).toContainText('本次准确候选报告');await expect(gallery.locator('.result-file').filter({hasText:'old.png'})).toHaveCount(0);
+ await expect(gallery.locator('.result-file').filter({hasText:'app/r1/input'})).toHaveCount(0);
+ await expect(gallery.locator('.result-file').filter({hasText:'AGENTS.md'})).toHaveCount(1);
+ await gallery.locator('.result-file').filter({hasText:'report.json'}).click();const preview=page.getByRole('dialog',{name:'成果预览'});
+ await expect(preview.locator('.result-associations')).toContainText('检查 A');await expect(preview.locator('.result-associations')).toContainText('检查 B');await expect(preview).toContainText('本次准确候选报告');await page.keyboard.press('Escape');
+ await gallery.getByRole('button',{name:/^历史成果/}).click();const old=gallery.locator('.result-file').filter({hasText:'old.png'});await old.scrollIntoViewIfNeeded();await expect(old.locator('img')).toBeVisible();await old.click();await expect.poll(()=>preview.locator('img').evaluate((e:HTMLImageElement)=>e.naturalWidth)).toBeGreaterThan(0);await page.keyboard.press('Escape');
+ await gallery.getByRole('button',{name:/^相关资料/}).click();await expect(gallery).toContainText('AGENTS.md');
+ await goto(page,'single','/tasks?q='+id);const check=page.locator('.attention-card').filter({hasText:id}).locator('[data-check="C"]');
+ await expect(check).toContainText('本项尚无明确关联');await expect(check.locator('.result-file')).toHaveCount(0);await expect(check.getByRole('button',{name:/其他任务资料/})).toBeVisible();
+ await check.getByLabel('记录人',{exact:true}).fill('r1-observer');await check.getByRole('button',{name:'验收通过',exact:true}).click();
+ await expect.poll(async()=> (await c.get('/api/task?id='+id)).task.status).toBe('completed');
+ await page.screenshot({path:path.join(output,'R1-material-scope.png'),fullPage:false});
+});
+
+test('R2 首页紧凑摘要、单筛选、完整分页及子命中',async({page,request})=>{
+ const c=await connect(request,'single'),uid=Date.now(),prefix='r2-'+uid,parentId='r2-parent-'+uid,childId='r2-leaf-'+uid,childTitle='R2 实际命中 '+uid,goal='完整目标只在展开后阅读。'.repeat(90);
+ await c.post('/api/tasks',{id:parentId,title:'R2 真实父事项',type:'epic',goal:'verified',acceptance:['整体结果']});await c.post('/api/tasks',{id:childId,parent:parentId,title:childTitle,type:'bug',goal:'verified',acceptance:['子结果']});
+ for(let i=0;i<24;i++)await c.post('/api/tasks',{id:prefix+'-'+i,title:'R2 排队事项 '+i,type:'bug',goal:'verified',original_request:goal,acceptance:['结果']});
+ await goto(page,'single','/tasks?q='+prefix);
+ await expect(page.locator('.work-item')).toHaveCount(20);await expect(page.getByRole('combobox',{name:'工作视图'})).toHaveCount(1);await expect(page.locator('.group-counts')).toHaveCount(0);
+ const row=page.locator('.work-item').first();await expect(row.locator('.work-focus')).toHaveText('等待执行者接手');await expect(row.locator('.work-meta')).toContainText('执行者');
+ expect((await row.boundingBox())!.height).toBeLessThan(240);await expect(row.getByText(goal,{exact:true})).toBeHidden();await expect(row.locator('.work-focus')).not.toContainText('无成果');
+ await page.getByRole('navigation',{name:'主要事项分页'}).getByRole('button',{name:'下一页'}).click();await expect(page.locator('.work-item')).toHaveCount(4);
+ const reason='日历接口凭据缺失；解除条件：由环境维护人提供已授权测试环境。'.repeat(16);
+ await c.post('/api/action',{action:'pause',id:prefix+'-0',reason});await page.getByRole('combobox',{name:'工作视图'}).selectOption('blocked');
+ await expect(page.locator('.work-item')).toHaveCount(1);const blocked=page.locator('.work-focus');await blocked.locator('summary').click();await expect(blocked.locator('p')).toContainText(reason);
+ await page.screenshot({path:path.join(output,'R2-compact-home.png'),fullPage:false});
+ await page.getByRole('searchbox',{name:'搜索任务'}).fill(childTitle);await page.getByRole('combobox',{name:'工作视图'}).selectOption('');
+ const parent=page.locator('[data-task="'+parentId+'"]');await expect(parent).toBeVisible();await parent.getByRole('button',{name:/展开子任务/}).click();await expect(parent.locator('.work-child')).toHaveCount(1);
+ await parent.locator('.work-child').getByRole('link',{name:childTitle,exact:true}).click();await expect(page).toHaveURL(new RegExp('/tasks/'+childId));await page.goBack();await expect(parent.locator('.work-child')).toHaveCount(1);
+});
+
+test('R3 普通功能父项先看剩余，唯一情况与下一步',async({page,request})=>{
+ ensureIsolatedOutput();const c=await connect(request,'single'),prefix='r3-'+Date.now(),parent=prefix+'-parent',child=prefix+'-child',leaf=prefix+'-leaf',done=prefix+'-done';
+ for(const [id,title,type] of [[parent,'MeroMero-first（隔离存量普通功能）','feature'],[child,'R3 待接手子项','feature'],[leaf,'R3 深层环境受阻','bug'],[done,'R3 已完成子项','bug']])await c.post('/api/tasks',{id,title,type,goal:'verified',original_request:'只读重现存量父子关系，不改任务类型或业务状态。',scope:['app'],acceptance:['结果'],checks:id===done?[{id:'result',kind:'functional',method:'command',command:['true'],covers:['结果'],required:true}]:[]});
+ await step(c,done);await step(c,done,['app/ui-output.txt']);await c.post('/api/action',{action:'verify',id:done,unit:'result'});await c.post('/api/action',{action:'pause',id:leaf,reason:'缺少日历测试服务，由环境维护人补齐后继续'});
+ // Explicit disposable legacy fixture: these pre-existing definition links are
+ // read relationships, with no Epic membership, authority or status mutation.
+ execFileSync('python3',['-c',"import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); pairs=[(sys.argv[2],sys.argv[3]),(sys.argv[3],sys.argv[4]),(sys.argv[2],sys.argv[5])]; [c.execute(\"UPDATE tasks SET body=json_set(body,'$.definition.parent',?) WHERE id=?\",p) for p in pairs]; c.commit()",path.join(projects.single.data_dir,'runtime.db'),parent,child,leaf,done]);
+ await goto(page,'single','/tasks/'+parent);const children=page.getByRole('region',{name:'剩余子任务'});await expect(children).toContainText('全部后代 2 项未完成');await expect(children).toContainText('R3 待接手子项');await expect(children).toContainText('缺少日历测试服务');
+ await expect(page.locator('.remaining-work')).toHaveCount(0);await expect(page.locator('.task-progress')).toHaveCount(0);await expect(page.locator('.next-action')).toHaveCount(1);
+ expect((await children.boundingBox())!.y).toBeLessThan(850);await expect(page.locator('#task-basis')).not.toHaveAttribute('open','');
+ await expect(children).not.toContainText('必需成员已满足');expect((await c.get('/api/task?id='+parent)).task.definition.type).toBe('feature');
+ const scoped=await c.get('/api/tasks?view=workbench&parent='+child);expect(scoped.total).toBe(1);expect(scoped.family.direct).toBe(1);
+ await children.getByRole('button',{name:'查看已完成与全部子项'}).click();await expect(children).toContainText('R3 已完成子项');
+ await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:path.join(output,'R3-parent-detail.png'),fullPage:false});
+ await goto(page,'single','/tasks/'+child);await expect(page.getByRole('region',{name:'剩余子任务'})).toContainText('R3 深层环境受阻');
+ const epic=prefix+'-epic',member=prefix+'-member';await c.post('/api/tasks',{id:epic,title:'R3 正式父项',type:'epic',goal:'verified',acceptance:['集成']});await c.post('/api/tasks',{id:member,parent:epic,title:'R3 必需叶子',type:'bug',goal:'verified',scope:['app'],acceptance:['结果'],checks:[{id:'result',kind:'functional',method:'command',command:['true'],covers:['结果'],required:true}]});await step(c,member);await step(c,member,['app/ui-output.txt']);await c.post('/api/action',{action:'verify',id:member,unit:'result'});
+ await goto(page,'single','/tasks/'+epic);await expect(page.locator('.parent-remaining')).toContainText('父级仍需集成');await expect(page.locator('.epic-overview')).toHaveCount(0);expect((await c.get('/api/task?id='+epic)).task.status).toBe('open');
+
+});
+
+test('R4 完整路径与多检查材料，三屏宽和状态回流',async({page,request})=>{
+ ensureIsolatedOutput();const c=await connect(request,'single'),uid=Date.now(),parent='r4-parent-'+uid,child='r4-child-'+uid;
+ const dir=path.join(projects.single.root,'app/r4-'+uid);fs.mkdirSync(dir,{recursive:true});await goto(page,'single');await page.screenshot({path:path.join(dir,'actual.png')});fs.writeFileSync(path.join(dir,'report.json'),JSON.stringify({summary:'隔离结果已实现，尚待普通人工观察',observations:['图片与实际候选一致']}));const refs=['app/r4-'+uid+'/actual.png','app/r4-'+uid+'/report.json'];
+ await c.post('/api/tasks',{id:parent,title:'R4 尚未整体验收的父事项 '+uid,type:'epic',goal:'verified',acceptance:['整体交付']});await c.post('/api/tasks',{id:child,parent,title:'R4 普通观察子项 '+uid,type:'bug',goal:'verified',scope:['app'],acceptance:['观察实际成果'],checks:[{id:'observe',kind:'review',method:'human',covers:['观察实际成果'],required:true}]});await step(c,child);await step(c,child,refs);
+ await goto(page,'single','/tasks?board=human&q='+encodeURIComponent('R4 普通观察子项 '+uid));const row=page.locator('[data-task="'+parent+'"]');await expect(row).toBeVisible();await row.getByRole('button',{name:/展开子任务/}).click();await row.locator('.work-child').getByRole('link',{name:'R4 普通观察子项 '+uid,exact:true}).click();
+ const gallery=page.getByRole('region',{name:'当前成果',exact:true});await gallery.scrollIntoViewIfNeeded();const img=gallery.locator('.result-file').filter({hasText:'actual.png'});await expect(img.locator('img')).toBeVisible();await img.click();const preview=page.getByRole('dialog',{name:'成果预览'});await expect.poll(()=>preview.locator('img').evaluate((e:HTMLImageElement)=>e.naturalWidth)).toBeGreaterThan(0);await preview.getByRole('slider').fill('150');await page.keyboard.press('Escape');await expect(img).toBeFocused();
+ await gallery.locator('.result-file').filter({hasText:'report.json'}).click();await expect(preview).toContainText('隔离结果已实现');await preview.getByText('查看报告原文',{exact:true}).click();await page.keyboard.press('Escape');
+ const review=page.getByRole('region',{name:'直接验收 observe'});await review.getByLabel('记录人',{exact:true}).fill('r4-reviewer');await review.getByRole('button',{name:'验收通过',exact:true}).click();await expect(page.locator('.review-receipt')).toContainText('通过');const accepted=await c.get('/api/task?id='+child);expect(accepted.task.status).toBe('completed');expect(accepted.current_checks.observe.artifacts || []).toHaveLength(0);
+ await page.getByRole('button',{name:'← 返回上一页',exact:true}).click();await expect(page.locator('[data-task="'+parent+'"]')).toHaveCount(0);await page.getByRole('combobox',{name:'工作视图'}).selectOption('');await page.getByRole('searchbox',{name:'搜索任务'}).fill('R4 尚未整体验收的父事项 '+uid);await expect(page.locator('[data-task="'+parent+'"]')).toBeVisible();expect((await c.get('/api/task?id='+parent)).task.status).toBe('open');
+ for(const width of [1440,1280,390]){await page.setViewportSize({width,height:900});if(width===390)await expect(page.locator('.sidebar')).toBeHidden();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();await page.screenshot({path:path.join(output,'R4-home-'+width+'.png'),fullPage:false});}
+ for(const width of [1280,390]){await page.setViewportSize({width,height:900});await goto(page,'single','/tasks/'+child);const results=page.getByRole('region',{name:'当前成果',exact:true});await results.scrollIntoViewIfNeeded();const picture=results.locator('.result-file').filter({hasText:'actual.png'});await picture.click();await expect(preview.locator('img')).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();expect((await preview.boundingBox())!.width).toBeLessThanOrEqual(width);await page.keyboard.press('Escape');await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:path.join(output,'R4-detail-'+width+'.png'),fullPage:false});}
+ const multi='r4-multi-'+uid;await c.post('/api/tasks',{id:multi,title:'R4 两个明确检查的材料隔离',type:'bug',goal:'verified',scope:['app'],acceptance:['对应本项'],checks:[{id:'A',kind:'review',method:'human',covers:['对应本项'],artifacts:[refs[0]],required:true},{id:'B',kind:'review',method:'human',covers:['对应本项'],artifacts:[refs[1]],required:true}]});await step(c,multi);await step(c,multi,refs);
+ await goto(page,'single','/tasks/'+multi);const a=page.locator('.overview-review-check[data-check="A"]'),b=page.locator('.overview-review-check[data-check="B"]');await expect(a.locator('.result-file')).toContainText('actual.png');await expect(a.locator('.result-file')).not.toContainText('report.json');await expect(b.locator('.result-file')).toContainText('report.json');await expect(b.locator('.result-file')).not.toContainText('actual.png');await expect(a.getByRole('button',{name:'打开专项验收'})).toBeVisible();await expect(a.getByRole('button',{name:'验收通过',exact:true})).toHaveCount(0);
+});
+
+test('R4 相同排队事项的默认摘要前后对照',async({page,request})=>{
+ const c=await connect(request,'single'),id='r4-compare-'+Date.now();await c.post('/api/tasks',{id,title:'R4 同一排队事项',type:'bug',goal:'verified',original_request:'这是一份完整目标，默认无需逐行阅读。'.repeat(40),acceptance:['结果']});
+ const oldRoot='/tmp/ael-readability-before/internal/server/ui';await page.route('**/*',async r=>{const u=new URL(r.request().url());if(u.pathname==='/' || u.pathname.startsWith('/assets/')){const file=path.join(oldRoot,u.pathname==='/'?'index.html':u.pathname.slice(1));if(fs.existsSync(file)){await r.fulfill({path:file});return;}}await r.continue();});
+ await goto(page,'single','/tasks?q='+id);const row=page.locator('[data-task="'+id+'"]');await expect(row).toBeVisible();const before=(await row.boundingBox())!.height;await row.screenshot({path:path.join(output,'R4-summary-before.png')});
+ await page.unroute('**/*');await page.reload();await expect(row.locator('.work-focus')).toHaveText('等待执行者接手');expect((await row.boundingBox())!.height).toBeLessThan(before);await row.screenshot({path:path.join(output,'R4-summary-after.png')});
+});
+
+test('R4 无当前成果的旧版本父项，历史图和缺失提示可查',async({page,request})=>{
+ const c=await connect(request,'single'),uid=Date.now(),id='r4-history-'+uid,child=id+'-child';ensureIsolatedOutput();const dir=path.join(projects.single.root,'app/r4-history-'+uid);fs.mkdirSync(dir,{recursive:true});const image=path.join(dir,'old.png');await goto(page,'single');await page.screenshot({path:image});
+ await c.post('/api/tasks',{id,title:'R4 只有旧成果的普通父事项',type:'feature',preset:'fast',goal:'verified',scope:['app'],acceptance:['原成果'],checks:[{id:'observe',kind:'review',method:'human',covers:['原成果'],required:true}]});await step(c,id);await step(c,id,['app/r4-history-'+uid+'/old.png']);const before=await c.get('/api/task?id='+id);await c.post('/api/action',{action:'edit',id,definition:{...before.task.definition,scope:['app','revised-scope']},reason:'隔离样本产生真实旧修订，不改变类型或完成状态'});
+ await c.post('/api/tasks',{id:child,title:'R4 原关联剩余子项',type:'bug',goal:'verified',acceptance:['结果']});execFileSync('python3',['-c',"import sqlite3,sys;c=sqlite3.connect(sys.argv[1]);c.execute(\"UPDATE tasks SET body=json_set(body,'$.definition.parent',?) WHERE id=?\",(sys.argv[2],sys.argv[3]));c.commit()",path.join(projects.single.data_dir,'runtime.db'),id,child]);
+ await goto(page,'single','/tasks/'+id);const children=page.getByRole('region',{name:'剩余子任务'}),gallery=page.getByRole('region',{name:'当前成果',exact:true});await expect(children).toContainText('R4 原关联剩余子项');await expect(gallery).toContainText('尚无确认适用');await expect(gallery.locator('.result-file')).toHaveCount(0);expect((await children.boundingBox())!.y).toBeLessThan((await gallery.boundingBox())!.y);
+ await gallery.getByRole('button',{name:/历史成果/}).click();const old=gallery.locator('.result-file').filter({hasText:'old.png'});await old.scrollIntoViewIfNeeded();await expect(old.locator('img')).toBeVisible();await old.click();const preview=page.getByRole('dialog',{name:'成果预览'});await expect.poll(()=>preview.locator('img').evaluate((e:HTMLImageElement)=>e.naturalWidth)).toBeGreaterThan(0);await page.keyboard.press('Escape');
+ fs.renameSync(image,image+'.saved');try{await old.click();await expect(preview.getByRole('alert')).toBeVisible();await expect(preview.locator('img')).toHaveCount(0);await page.keyboard.press('Escape');}finally{fs.renameSync(image+'.saved',image);}
+ const after=await c.get('/api/task?id='+id);expect(after.task.definition.type).toBe('feature');expect(after.task.status).toBe('open');
 });

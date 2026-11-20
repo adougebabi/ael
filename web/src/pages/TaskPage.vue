@@ -13,6 +13,8 @@ import { useResource } from "../resource";
 import { useObjectReader } from "../objectReader";
 import {
   workPresentation,
+  workFocus,
+  historyReviewText,
   label,
   stamp,
   relativeStamp,
@@ -33,6 +35,7 @@ import ScopeSummary from "../components/ScopeSummary.vue";
 import CopyButton from "../components/CopyButton.vue";
 import TaskRelations from "../components/TaskRelations.vue";
 import ResultsGallery from "../components/ResultsGallery.vue";
+import TaskChildren from "../components/TaskChildren.vue";
 import EpicOverview from "../components/EpicOverview.vue";
 import FindingPanel from "../components/FindingPanel.vue";
 import ImportedHistory from "../components/ImportedHistory.vue";
@@ -347,8 +350,11 @@ const primaryKind = computed(() => {
   if (t.value?.current_step === "verify" && t.value?.status === "open") return "checks";
   return "";
 });
-const primaryLabels: Record<string, string> = { blocked_review: "处理受阻的人工检查", history: "核对历史资料", restore: "确认核对并准备恢复", prepare_integration: "准备整体验收", root_review: "记录根因复核", review: "进行人工验收", resume: "恢复任务", basis: "查看待核实规范", claim: "接手当前工作", checks: "查看验收与运行检查", submit: "填写实施结果", execution: "查看当前执行", delivery: "查看交付结果" };
+const primaryLabels: Record<string, string> = { blocked_review: "打开受阻人工检查", history: "核对历史资料", restore: "确认核对并准备恢复", prepare_integration: "准备整体验收", root_review: "记录根因复核", review: "打开验收", resume: "恢复任务", basis: "查看待核实规范", claim: "接手当前工作", checks: "查看验收与运行检查", submit: "填写实施结果", execution: "查看当前执行", delivery: "查看交付结果" };
 const presentation = computed(() => workPresentation(n.value?.summary));
+const currentHumanChecks=computed(()=>(t.value?.definition.checks || []).filter((c:any)=>n.value?.check_access?.[c.id]?.effective_method==='human' && n.value?.current_checks?.[c.id]));
+const situationFact=computed(()=>n.value?.summary?.needs_history_review ? historyReviewText(t.value?.confirmation?.reason ? blockerText(t.value.confirmation.reason,false) : '') : workFocus(n.value?.summary));
+const epicDetailsOpen=ref(route.value.query.has('leaf_offset') || route.value.query.has('progress'));
 const bannerTitle = computed(() => presentation.value.title);
 const bannerSummary = computed(() => presentation.value.latest || (t.value?.historical ? '历史成果尚未在当前版本复验' : '最近有效成果尚未回报'));
 const bannerReasons = computed(() => (n.value?.blocking_reasons || []).filter((reason: string) =>
@@ -361,11 +367,12 @@ function primaryAction() {
   else if (primaryKind.value === "root_review") start("review_failure", "记录根因复核");
   else if (primaryKind.value === "blocked_review") manualCheck.value = blockedHumanCheck.value;
   else if (primaryKind.value === "review") {
+    if(section.value==="overview" && document.getElementById("overview-review")){document.getElementById("overview-review")?.scrollIntoView({block:"start"});return;}
     selectSection("checks");
     if (availableHumanChecks.value.length === 1) setQuery({ check: availableHumanChecks.value[0].id });
   }
   else if (primaryKind.value === "resume") start("resume", "恢复任务");
-  else if (primaryKind.value === "basis") document.getElementById("task-basis")?.focus();
+  else if (primaryKind.value === "basis") {const el=document.getElementById("task-basis") as HTMLDetailsElement|null;if(el){el.open=true;el.focus();}}
   else if (primaryKind.value === "claim") start("claim", "接手当前工作");
   else if (primaryKind.value === "checks") selectSection("checks");
   else if (primaryKind.value === "submit") void showWorkForm();
@@ -376,6 +383,10 @@ function openTaskReview() {
   if (busy.value) return;
   workFormOpen.value = false;
   manualCheck.value = pendingReviewCheck.value !== null ? pendingReviewCheck.value : availableHumanChecks.value.length === 1 ? availableHumanChecks.value[0].id : "";
+}
+function openReviewFromMenu() {
+ if(taskMenu.value){taskMenu.value.open=false;taskMenu.value.querySelector<HTMLElement>('summary')?.focus();}
+ openTaskReview();
 }
 function closeReview() { manualCheck.value = null; pendingReviewCheck.value = pendingReviewForTask(info.value.project || "", props.id); }
 function reviewSaved() { pendingReviewCheck.value = pendingReviewForTask(info.value.project || "", props.id); void load(true); }
@@ -835,7 +846,7 @@ function checkReason(c: any) {
           <p class="task-goal">{{ (t.definition.intent || t.definition.original_request || t.definition.acceptance?.join("；") || "原目标与需求未记录").slice(0, 180) }}<span v-if="(t.definition.intent || t.definition.original_request || t.definition.acceptance?.join('；') || '').length>180">… 完整目标见任务说明</span></p>
           <p class="inline"><span class="status" :class="n.board">{{ schedule(n.summary) }}</span></p>
         </div>
-        <div class="task-heading-actions"><details ref="taskMenu" class="task-more"><summary aria-label="更多任务操作" title="更多任务操作">···</summary><div class="task-more-menu"><CopyButton :value="t.definition.id" label="复制任务 ID" /><a :href="taskHref(id, 'technical')">查看技术详情</a><button v-if="t.status === 'open' && !t.paused && (!remoteProject || ['admin','executor'].includes(remoteProject.role))" :disabled="busy" @click="startFromMenu('pause', '暂缓任务')">暂缓</button><button v-if="t.status === 'open' && !remoteProject" :disabled="busy" @click="startFromMenu('edit', '修订任务定义')">编辑任务定义</button><button v-if="t.status === 'open' && (!remoteProject || ['admin','executor'].includes(remoteProject.role))" :disabled="busy" class="danger-text" @click="startFromMenu('cancel', '取消任务')">取消任务</button><a :href="href('/evolution', { q: t.definition.title })">查看相关演进</a></div></details></div>
+        <div class="task-heading-actions"><button v-if="primaryKind && !n.summary.requires_task_decision" class="primary" :disabled="busy" @click="primaryAction">{{ primaryLabels[primaryKind] }}</button><details ref="taskMenu" class="task-more"><summary aria-label="更多任务操作" title="更多任务操作">···</summary><div class="task-more-menu"><button v-if="showReviewEntry" :disabled="busy" @click="openReviewFromMenu">记录人工意见</button><CopyButton :value="t.definition.id" label="复制任务 ID" /><a :href="taskHref(id, 'technical')">查看技术详情</a><button v-if="t.status === 'open' && !t.paused && (!remoteProject || ['admin','executor'].includes(remoteProject.role))" :disabled="busy" @click="startFromMenu('pause', '暂缓任务')">暂缓</button><button v-if="t.status === 'open' && !remoteProject" :disabled="busy" @click="startFromMenu('edit', '修订任务定义')">编辑任务定义</button><button v-if="t.status === 'open' && (!remoteProject || ['admin','executor'].includes(remoteProject.role))" :disabled="busy" class="danger-text" @click="startFromMenu('cancel', '取消任务')">取消任务</button><a :href="href('/evolution', { q: t.definition.title })">查看相关演进</a></div></details></div>
       </header>
       <ol v-if="t.definition.type !== 'epic' && !t.historical" class="stage-track" aria-label="任务流程位置"><li v-for="(step, index) in t.plan.steps" :key="step" :class="{ current: t.status === 'open' && step === t.current_step, done: stageDone(step) && !(t.status === 'open' && step === t.current_step) }"><span class="stage-node">{{ stageDone(step) && !(t.status === 'open' && step === t.current_step) ? '✓' : Number(index) + 1 }}</span><span>{{ label(step) }}</span></li></ol>
       <nav class="tabs" aria-label="任务详情分区">
@@ -852,18 +863,14 @@ function checkReason(c: any) {
       <div class="task-detail-main">
 
       <section v-if="section === 'overview'" class="overview">
-        <div class="conclusion result-banner" :class="{ amber: currentBlocker || t.paused || t.confirmation, success: t.status === 'completed' }">
-          <span class="banner-icon"><AppIcon :name="currentBlocker || t.paused ? 'warning' : t.status === 'completed' ? 'check' : t.confirmation ? 'shield' : availableHumanChecks.length ? 'user' : 'play'" /></span><div>
-          <h2>{{ bannerTitle }}</h2>
-          <p v-if="n.summary.needs_history_review">{{ blockerText(t.confirmation.reason, false) }}</p>
-          <p v-else-if="t.status === 'open'">{{ label(n.current_step) }} · {{ n.summary.executors.length ? n.summary.executors.join('、') + ' 承担当前责任' : '当前无有效执行责任' }}</p>
+        <section class="content-section result-banner task-situation" :class="{ 'has-blocker':currentBlocker || t.paused || t.confirmation }"><h2>当前情况与剩余工作</h2><template v-if="!n.summary.requires_task_decision"><details v-if="situationFact.length>220"><summary>{{ situationFact.slice(0,220) }}… 完整情况</summary><p>{{ situationFact }}</p></details><p v-else>{{ situationFact }}</p></template>
         <section v-if="n.summary.requires_task_decision && t.confirmation" class="task-decision">
           <p>{{ blockerText(t.confirmation.reason, false) }}</p>
-          <p>
+          <details><summary>决定对象与版本</summary><p>
             仅针对定义修订 {{ t.confirmation.definition_revision }}、计划修订
             {{ t.confirmation.plan_revision
             }}<span v-if="t.confirmation.candidate">及候选 {{ t.confirmation.candidate.slice(0, 12) }}</span>。
-          </p>
+          </p></details>
           <p v-if="decisionEvidence?.reason"><strong>本次方案</strong> {{ blockerText(decisionEvidence.reason, false) }}</p>
           <div v-if="decisionEvidence?.outputs?.length" class="actions">
             <button v-for="ref in decisionEvidence.outputs" :key="ref" @click="openArtifact(ref)">查看方案产物 {{ ref }}</button>
@@ -882,52 +889,16 @@ function checkReason(c: any) {
             </button>
           </div>
         </section>
+          <p v-if="t.status==='open' && !n.summary.requires_task_decision" class="next-action"><strong>下一步</strong> {{ presentation.role }} · {{ n.summary.needs_history_review ? '核实上述缺口后，按原有恢复门禁继续；具体未记录项可从相关资料核对' : !mayJudge && availableHumanChecks.length ? '等待有验收权限的人员处理当前检查' : presentation.next }}</p>
+          <p v-if="currentBlocker">解除条件：{{ currentBlocker.recovery || '尚未记录' }}；恢复位置：{{ currentBlocker.resume_at || '尚未记录' }}</p>
           <p v-if="reviewState" class="review-note-status">{{ reviewState }}</p>
-          <p v-if="!n.summary.needs_history_review">{{ bannerSummary }}</p>
-          <p v-if="n.health?.no_progress && !n.summary.needs_history_review" class="blocked-reason">{{ n.health.healthy_long ? '超过设定时间没有新证据；已声明的长阶段仍在期限内，未自动停止。' : '超过设定时间没有新证据，请核对执行者、阶段和下一动作。' }}</p>
-          <p v-if="presentation.current && !presentation.reason">当前工作：{{ presentation.current }}</p>
-          <p v-if="n.health?.stage && n.summary.running">执行者上报：{{ label(n.health.stage) }}<template v-if="n.health.expected_until"> · 声明期限 {{ stamp(n.health.expected_until) }}</template></p>
-          <p v-if="t.status === 'open' && currentBlocker?.reason" class="blocked-reason">
-            {{ blockerText(currentBlocker.reason) }}
-          </p>
-          <details v-if="currentBlocker?.reason?.length > 180"><summary>查看完整阻塞信息</summary><pre>{{ currentBlocker.reason }}</pre></details>
-          <p
-            v-for="b in bannerReasons"
-            class="blocked-reason"
-          >
-            {{ blockerText(b) }}
-          </p>
-          <p v-if="t.status === 'open' && !n.summary.requires_task_decision && !n.summary.needs_history_review" class="next-action"><strong>下一步</strong> {{ presentation.role }} · {{ !mayJudge && availableHumanChecks.length ? '等待有验收权限的人员处理当前检查' : presentation.next }}</p>
-          <p v-if="t.status === 'open' && currentBlocker">
-            解除条件：{{
-              currentBlocker.recovery || "尚未记录，请核实阻塞原因"
-            }}；已尝试：{{ currentBlocker.tried || "未记录" }}
-          </p>
-          <p v-if="activeFailure">同单元失败 {{ activeFailure.count }} 次 · {{ activeFailure.state === 'review_required' ? '需要限定根因复核' : activeFailure.state === 'blocked' ? '复核后仍未收敛，已停止' : activeFailure.state === 'reviewed' ? '复核已记录，等待恢复' : activeFailure.state }}<template v-if="activeFailure.failure_class"> · 类别 {{ activeFailure.failure_class }}</template></p>
-          <small v-if="t.historical && t.status !== 'completed'">历史记录 · 当前未复验</small>
-          <div v-if="!n.summary.requires_task_decision" class="actions">
-            <button v-if="primaryKind && !(primaryKind === 'review' && availableHumanChecks.length === 1 && !n.check_access[availableHumanChecks[0].id].evidence_required)" class="primary" :disabled="busy" @click="primaryAction">{{ primaryLabels[primaryKind] }}</button>
-            <button v-if="n.summary.needs_history_review && primaryKind !== 'history'" @click="selectSection('execution')">核对历史资料</button>
-            <button v-if="showReviewEntry && !n.summary.requires_task_decision && !n.summary.needs_history_review && (!['review', 'blocked_review'].includes(primaryKind) || !!reviewState)" :disabled="busy" @click="openTaskReview">{{ reviewState || pendingReviewCheck !== null ? '查看人工意见与记录' : '记录人工意见' }}</button>
-          </div>
-          <div v-if="unownedRunning && !remoteProject" class="lost-claim-help"><p>当前标签页没有这次接手的凭据。若原执行确已停止，可以确认后恢复任务。</p><button @click="start('resume', '恢复无法继续的接手')">恢复无法继续的接手</button></div>
-          </div>
-        </div>
-        <section class="content-section remaining-work"><h2>还剩什么</h2><p v-if="t.status!=='open'">{{ label(t.status) }} · {{ goalLabel(t.definition.goal) }}</p><template v-else><p>{{ presentation.next }}</p><p v-if="t.definition.type!=='epic'">必要验收 {{ n.summary.checks.required_passed }} / {{ n.summary.checks.required }} 项通过；原定目标：{{ goalLabel(t.definition.goal) }}</p></template></section>
-        <ResultsGallery :key="id" :task-id="id" :snapshot="n" />
-        <section v-if="t.definition.type !== 'epic'" class="content-section task-progress">
-          <div class="section-heading"><h2>工作进度</h2><button class="inline-link" @click="selectSection('execution')">查看执行记录</button></div>
-          <article v-for="outcome in workOutcomes.slice(0, 3)" :key="outcome.id" class="timeline-item">
-            <div><h3>{{ outcome.title }}<template v-if="outcome.status"> · {{ outcome.status }}</template></h3>
-              <small v-if="outcome.prior">先前候选或修订结果，当前需复验</small>
-              <p v-if="outcome.summary">{{ blockerText(outcome.summary) }}</p>
-              <time>{{ stamp(outcome.at) }}</time>
-            </div>
-          </article>
-          <p v-if="!workOutcomes.length" class="secondary">{{ t.attempts?.length ? '已有协作记录，尚无已提交工程成果。' : '尚无已提交工程成果。' }}</p>
+          <div class="actions"><button v-if="n.summary.needs_history_review" @click="selectSection('execution')">查看相关历史资料</button><button v-if="showReviewEntry && (pendingReviewCheck!==null || reviewState)" :disabled="busy" @click="openTaskReview">{{ reviewState || pendingReviewCheck!==null?'查看人工意见与记录':'记录人工意见' }}</button></div>
+          <details v-if="unownedRunning && !remoteProject"><summary>当前接手无法继续？</summary><p>当前标签页没有原责任凭据。若原执行确已停止，可按原规则核实并恢复。</p><button @click="start('resume','恢复无法继续的接手')">核实并恢复接手</button></details>
+          <TaskChildren :key="id" :task-id="id" />
         </section>
-        <DirectHumanReview v-if="mayJudge && info.project && availableHumanChecks.length === 1 && !n.check_access[availableHumanChecks[0].id].evidence_required" :key="id + ':' + availableHumanChecks[0].id" :snapshot="n" :check="availableHumanChecks[0]" @saved="reviewSaved" @advanced="manualCheck = availableHumanChecks[0].id" />
-        <EpicOverview v-if="t.definition.type === 'epic'" :key="id" :id="id" @open-artifact="(ref, task) => openArtifact(ref, task)" />
+        <ResultsGallery :key="id" :task-id="id" :snapshot="n" :hide-empty="!t.historical" />
+        <section v-if="availableHumanChecks.length || currentHumanChecks.length" id="overview-review" class="overview-review" aria-label="当前人工验收"><h2>{{ availableHumanChecks.length?'需要处理的检查':'本次人工验收结果' }}</h2><article v-for="check in availableHumanChecks" :key="check.id" class="overview-review-check" :data-check="check.id"><h3>{{ check.covers?.join('；') || check.id }}</h3><ResultsGallery :task-id="id" :snapshot="n" scope="check" :check-id="check.id" heading="本项验收材料" :limit="3" /><DirectHumanReview v-if="mayJudge && info.project && !n.check_access[check.id].evidence_required" :snapshot="n" :check="check" @saved="reviewSaved" @advanced="manualCheck=check.id" /><button v-else-if="mayJudge" class="primary" @click="manualCheck=check.id">打开专项验收</button><p v-else class="secondary">等待有验收权限的人员处理。</p></article><article v-for="check in currentHumanChecks.filter((c:any)=>!n.check_access[c.id].can_review)" :key="'result-'+check.id" class="review-receipt" role="status"><h3>{{ check.covers?.join('；') || check.id }} · {{ label(n.current_checks[check.id].result) }}</h3><p>{{ n.current_checks[check.id].reason || '已记录具名人工结论' }}</p><a :href="taskHref(id,'checks',check.id)">查看原检查与完整回执</a></article></section>
+        <details v-if="t.definition.type==='epic'" class="content-section" :open="epicDetailsOpen" @toggle="epicDetailsOpen=($event.target as HTMLDetailsElement).open"><summary>父级计划与整体验收详情</summary><EpicOverview v-if="epicDetailsOpen" :key="id" :id="id" @open-artifact="(ref,task)=>openArtifact(ref,task)" /></details>
         <details class="content-section task-description">
           <summary>完整任务说明与验收条目</summary>
           <p v-if="t.definition.intent">{{ t.definition.intent }}</p>
@@ -958,8 +929,8 @@ function checkReason(c: any) {
             <li v-for="a in t.definition.acceptance">{{ a }}</li>
           </ul>
         </details>
-        <TaskRelations :key="id" :id="id" :task="t" />
-        <section id="task-basis" tabindex="-1" class="content-section">
+        <details class="content-section"><summary>关系与历史关联</summary><TaskRelations :key="id" :id="id" :task="t" /></details>
+        <details id="task-basis" tabindex="-1" class="content-section" :open="rawSection==='basis'"><summary>相关资料与规范</summary>
         <div class="section-heading"><h2>相关依据</h2><small v-if="basis">{{ basis.records.length }} 份可核对<template v-if="unresolvedBasisIDs.length"> · {{ unresolvedBasisIDs.length }} 项缺正文</template></small></div>
         <p v-if="!basis && !basisError" role="status" class="loading">
           正在读取任务关联依据…
@@ -1013,7 +984,7 @@ function checkReason(c: any) {
             </dl>
           </details>
         </section>
-        </section>
+        </details>
         <details v-if="claimed" id="work-result" class="work-form" :open="workFormOpen" @toggle="workFormOpen = ($event.target as HTMLDetailsElement).open">
           <summary>填写实施工作结果</summary>
           <h2>提交本次工作结果</h2>

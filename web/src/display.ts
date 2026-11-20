@@ -318,10 +318,34 @@ export function readableError(error: string) {
 export function workPresentation(s: any) {
   s=s || {};const h=s.health || {};
   const title=schedule(s);
-  const reason=s.blocker_reason ? blockerText(s.blocker_reason) : (s.blocking_reasons || []).map((x:string)=>blockerText(x)).join('；');
+  const reason=s.blocker_reason ? blockerText(s.blocker_reason,false) : (s.blocking_reasons || []).map((x:string)=>blockerText(x,false)).join('；');
   const role=s.recovery_action === 'resume' ? '执行者' : s.needs_history_review || s.requires_task_decision ? '负责人' : s.manual_reviews?.length ? '验收人' : s.next_action === 'wait_environment' ? '阻塞处理人' : s.running ? '当前执行者' : '执行者';
   const next=h.reported_next && s.running && !reason ? h.reported_next : nextAction(s);
   const latest=h.last_progress_summary ? ((h.last_progress_validity === 'prior' || (h.last_progress_candidate && h.last_progress_candidate!==h.candidate) ? '先前候选或修订结果，当前需复验：' : h.last_progress_validity === 'unknown' ? '适用版本待核对：' : '')+(['define','analysis'].includes(h.last_progress_unit) ? '分析产物：' : '')+h.last_progress_summary) : '';
   const current=reason || (s.running ? h.current_work || (h.stage ? '正在处理：'+label(h.stage) : '已领取当前工作，尚未回报具体工作内容') : s.next_action === 'completed' || s.next_action === 'cancelled' ? '' : next);
   return {title,reason,role,next,latest,current,at:h.last_progress_at,reportedAt:h.reported_at,action:s.recovery_action==='resume'?'恢复并继续':s.needs_history_review?'核对历史资料':s.requires_task_decision?'审阅方案':s.manual_reviews?.length?'进行人工验收':s.next_action==='completed'?'查看交付结果':s.next_action==='wait_environment'?'查看阻塞':s.running?'查看当前工作':'查看下一步'};
+}
+
+// A single status-aware reading fact; absence of an owner is not a blocker.
+export function workFocus(s:any) {
+ const p=workPresentation(s),h=s?.health || {};
+ if(s?.recovery_action==='resume')return '恢复已批准，等待执行者按当前授权继续';
+ if(s?.needs_history_review)return historyReviewText(p.reason);
+ if(s?.requires_task_decision)return p.reason || '具体方案或范围问题尚未记录，请查看当前决定对象';
+ if(s?.next_action==='wait_environment' || s?.next_action==='wait_dependency' || s?.blocker_reason)return p.reason || '阻塞条件尚未记录，需由处理人核实';
+ if(s?.next_action==='wait_children')return '等待子任务处理，剩余工作见下方';
+ if(s?.next_action==='wait_integration')return '子任务条件已满足，父级仍待集成与整体验收';
+ if(s?.next_action==='repair')return '待修复：'+(p.reason || p.latest || '具体失败点请查看原检查记录');
+ if(s?.manual_reviews?.length)return '需要判断：'+s.manual_reviews.flatMap((c:any)=>c.covers || []).join('；');
+ if(s?.running && h.no_progress)return (h.current_work || '已有执行责任')+'；最近上报后运行情况待核实';
+ if(s?.running)return h.current_work || p.latest || '已接手，尚未回报具体工作';
+ if(p.latest)return p.latest;
+ if(['completed','cancelled'].includes(s?.board))return s.last_result || (s.board==='completed'?'已按原规则完成':'已取消');
+ return '等待执行者接手';
+}
+
+export function historyReviewText(reason?:string) {
+ if(reason?.includes('historical import requires current context and fresh execution'))return '导入记录尚无本次上下文与新执行证据；负责人核对原工作范围后，执行者按原门禁恢复并重新执行。';
+ if(reason?.includes('runtime restored; reconcile checkpoints'))return '需核对恢复的检查点、候选与可能已发生的交付运行；具体异常项尚未记录。';
+ return reason || '具体核对项尚未记录；相关历史资料仍可查，请由负责人核实后按原门禁继续。';
 }

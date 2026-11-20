@@ -1912,7 +1912,6 @@ main { max-width: 1600px; margin: 0 auto; padding: 32px 38px 42px; }
 .attention-card .results-gallery { margin:4px 0; }
 .attention-card .results-gallery .section-heading h2 { font-size:12px; }
 .attention-card .results-gallery .section-heading small,
-.attention-card .result-scopes,
 .attention-card .result-entry>p,
 .attention-card .result-file small:last-child { display:none; }
 .attention-card .result-file img { height:80px; }
@@ -1923,3 +1922,15 @@ main { max-width: 1600px; margin: 0 auto; padding: 32px 38px 42px; }
 .attention-card .direct-human-review details { margin:4px 0;padding:0;border:0;background:transparent; }
 .attention-card .attention-bottom { margin-top:6px; }
 .result-report-excerpt { font-size:12px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;text-align:left; }
+.compact-work-summary .work-focus { margin:6px 0;line-height:1.6;font-size:13px;color:var(--text); }
+.compact-work-summary .work-meta,.compact-work-summary .work-path { margin:4px 0;font-size:12px;color:var(--muted); }
+.work-extra { margin-top:6px;padding:0;border:0;background:transparent;font-size:12px;color:var(--muted); }
+.work-extra[open] { padding:10px;background:var(--paper);border:1px solid var(--line); }
+.work-item.task-row { padding:14px 0; }
+.task-situation.result-banner { display:block;background:var(--paper);border:1px solid var(--line);padding:20px; }
+.task-situation.result-banner.has-blocker { border-color:#d8c9a2; }
+.task-children { margin-top:18px; }
+.task-child-row { padding:12px 0;border-bottom:1px solid var(--line); }
+.task-children .actions details { padding:0;border:0;background:transparent; }
+.overview-review-check { padding:16px 0;border-bottom:1px solid var(--line); }
+.task-heading-actions { flex-wrap:wrap; }

@@ -324,7 +324,50 @@ func (a *artifactStore) reviewEvidence(task string) ([]map[string]any, error) {
 			}
 		}
 	}
-	return result, rows.Err()
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	relations, err := a.service.Store.DB.Query(`SELECT artifact_id,purpose,candidate FROM artifact_references WHERE task_id=? ORDER BY artifact_id,created`, task)
+	if err != nil {
+		return nil, err
+	}
+	for relations.Next() {
+		var id, purpose, candidate string
+		if err = relations.Scan(&id, &purpose, &candidate); err != nil {
+			relations.Close()
+			return nil, err
+		}
+		if value := byID[id]; value != nil {
+			if value["references"] == nil {
+				value["references"] = []map[string]any{}
+			}
+			value["references"] = append(value["references"].([]map[string]any), map[string]any{"purpose": purpose, "candidate": candidate})
+		}
+	}
+	err = relations.Err()
+	relations.Close()
+	if err != nil {
+		return nil, err
+	}
+	inputs, err := a.service.Store.DB.Query(`SELECT s.artifact_id,s.path,c.candidate_id,c.id FROM portable_context_sources s JOIN portable_contexts c ON c.id=s.context_id WHERE c.task_id=? ORDER BY s.artifact_id,c.id,s.id`, task)
+	if err != nil {
+		return nil, err
+	}
+	defer inputs.Close()
+	for inputs.Next() {
+		var id, path, candidate, context string
+		if err = inputs.Scan(&id, &path, &candidate, &context); err != nil {
+			return nil, err
+		}
+		if value := byID[id]; value != nil {
+			if value["context_sources"] == nil {
+				value["context_sources"] = []map[string]any{}
+			}
+			value["context_sources"] = append(value["context_sources"].([]map[string]any), map[string]any{"path": path, "candidate": candidate, "context": context})
+		}
+	}
+	return result, inputs.Err()
 }
 
 // An input observation from before successful execution does not supersede its

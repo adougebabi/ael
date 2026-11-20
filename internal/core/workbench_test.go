@@ -120,3 +120,33 @@ func TestWorkbenchSeparatesOptionalAndRequiredMembers(t *testing.T) {
 		t.Fatal(row)
 	}
 }
+
+func TestWorkbenchFamilyIncludesLegacyNonEpicAndNestedParents(t *testing.T) {
+	s := fixture(t)
+	parent := create(t, s, core.Definition{Title: "普通功能父事项", Type: "feature", Goal: "verified", Acceptance: []string{"原需求"}})
+	child := create(t, s, core.Definition{Title: "普通子事项", Type: "feature", Goal: "verified", Acceptance: []string{"子需求"}})
+	leaf := create(t, s, core.Definition{Title: "深层子项", Type: "bug", Goal: "verified", Acceptance: []string{"深层需求"}})
+	for _, relation := range [][2]string{{child, parent}, {leaf, child}} {
+		if _, e := s.Store.DB.Exec(`UPDATE tasks SET body=json_set(body,'$.definition.parent',?) WHERE id=?`, relation[1], relation[0]); e != nil {
+			t.Fatal(e)
+		}
+	}
+	page, e := s.Workbench(core.Query{Parent: parent, Limit: 1})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if page.Total != 2 || page.Family.Direct != 1 || page.Family.Descendants != 2 || page.Family.Formal || page.Family.Required != 0 {
+		t.Fatalf("%+v", page)
+	}
+	nested, e := s.Workbench(core.Query{Parent: child, Limit: 8})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if nested.Total != 1 || nested.Items[0].Task.ID != leaf || nested.Family.Direct != 1 {
+		t.Fatalf("%+v", nested)
+	}
+	actual, e := s.Get(parent)
+	if e != nil || actual.Definition.Type != "feature" {
+		t.Fatal(actual, e)
+	}
+}

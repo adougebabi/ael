@@ -32,8 +32,8 @@ async function open(page: Page, task: string) {
 
 test("WB05 Remote 首页材料与真实验收回执",async({page})=>{
  await page.setViewportSize({width:1440,height:900});await login(page);const card=page.locator('.attention-card').filter({hasText:'Review direct-home'});
- await expect(card).toContainText('要检查什么');await card.scrollIntoViewIfNeeded();await expect(card.locator('.result-file img').first()).toBeVisible();
- await card.locator('.result-file').first().click();const preview=page.getByRole('dialog',{name:'成果预览'});await expect(preview.locator('img')).toBeVisible();await page.keyboard.press('Escape');
+ await expect(card).toContainText('要检查什么');await card.scrollIntoViewIfNeeded();await expect(card.locator('.result-file')).toHaveCount(0);await expect(card).toContainText('本项尚无明确关联');
+ await card.getByRole('button',{name:/其他任务资料/}).click();await card.getByRole('button',{name:/查看全部材料/}).click();const actual=card.locator('.result-file').filter({hasText:'actual.png'});await actual.scrollIntoViewIfNeeded();await expect(actual.locator('img')).toBeVisible();await actual.click();const preview=page.getByRole('dialog',{name:'成果预览'});await expect(preview.locator('img')).toBeVisible();await page.keyboard.press('Escape');await card.getByRole('button',{name:/本项验收材料/}).click();
  await page.evaluate(()=>window.scrollTo(0,0));expect((await page.locator('.work-list').boundingBox())!.y).toBeLessThan(900);await page.screenshot({path:path.join(fixture.out,'WB05-remote-home.png'),fullPage:false,animations:'disabled'});
  await page.route('**/api/v1/projects/shared/reviews',async route=>{const response=await route.fetch();expect(response.ok()).toBeTruthy();await route.abort();},{times:1});
  await card.getByRole('button',{name:'验收通过',exact:true}).click();
@@ -151,7 +151,7 @@ test("只读会话可读图片并受到人工裁定权限保护", async ({ page 
 test("人工 blocked 后可精确恢复且保留原阻塞证据", async ({ page }) => {
   await login(page);
   await page.goto(fixture.url + "/#/tasks/api-blocked?project=shared");
-  await page.getByRole("button", { name: "处理受阻的人工检查", exact: true }).click();
+  await page.getByRole("button", { name: "打开受阻人工检查", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: "恢复并继续人工验收", exact: true }).click();
   await expect(dialog.getByLabel("实际观察与理由", { exact: false })).toBeVisible();
@@ -214,6 +214,7 @@ test("无候选的任务级意见不用选附件或比较图片", async ({ page 
   page.on("request", request => {
     if (request.url().includes("dashboard/review-evidence")) listedEvidence = true;
   });
+  await page.locator(".task-more > summary").click();
   await page.getByRole("button", { name: "记录人工意见", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("尚未生成验收候选");
@@ -226,7 +227,9 @@ test("无候选的任务级意见不用选附件或比较图片", async ({ page 
   await dialog.getByLabel("实际观察与理由").fill("隔离样本的人工观察");
   await dialog.getByRole("button", { name: "保存人工意见" }).click();
   await expect(dialog).toContainText("人工验收意见已记录");
-  expect(listedEvidence).toBeFalsy();
+  // Task material browsing may read metadata independently. The opinion form
+  // still has no required attachment or comparison step.
+  await expect(dialog.getByText("对照基准与实际截图（可选）")).toHaveCount(0);
   const state = await (await page.request.get(fixture.url + "/api/v1/projects/shared/tasks/before-candidate")).json();
   expect(state.task.human_review_notes).toHaveLength(1);
   expect(state.task.evidence || []).toHaveLength(0);

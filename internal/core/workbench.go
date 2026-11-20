@@ -1,6 +1,7 @@
 package core
 
 import (
+	"slices"
 	"strings"
 	"time"
 )
@@ -24,17 +25,28 @@ type WorkbenchRow struct {
 	Cancelled         int         `json:"cancelled"`
 	Matches           int         `json:"matches"`
 }
+type WorkbenchFamily struct {
+	Direct      int  `json:"direct"`
+	Descendants int  `json:"descendants"`
+	Remaining   int  `json:"remaining"`
+	Completed   int  `json:"completed"`
+	Cancelled   int  `json:"cancelled"`
+	Required    int  `json:"required"`
+	Satisfied   int  `json:"satisfied"`
+	Formal      bool `json:"formal"`
+}
 type WorkbenchPage struct {
-	Items           []WorkbenchRow `json:"items"`
-	Total           int            `json:"total"`
-	ProjectTotal    int            `json:"project_total"`
-	ProjectChildren int            `json:"project_children"`
-	Unfinished      int            `json:"unfinished"`
-	MatchedChildren int            `json:"matched_children"`
-	Anomalies       int            `json:"anomalies"`
-	Limit           int            `json:"limit"`
-	Offset          int            `json:"offset"`
-	Counts          map[string]int `json:"counts"`
+	Family          *WorkbenchFamily `json:"family,omitempty"`
+	Items           []WorkbenchRow   `json:"items"`
+	Total           int              `json:"total"`
+	ProjectTotal    int              `json:"project_total"`
+	ProjectChildren int              `json:"project_children"`
+	Unfinished      int              `json:"unfinished"`
+	MatchedChildren int              `json:"matched_children"`
+	Anomalies       int              `json:"anomalies"`
+	Limit           int              `json:"limit"`
+	Offset          int              `json:"offset"`
+	Counts          map[string]int   `json:"counts"`
 }
 
 func workbenchMatch(n TaskSummary, view string) bool {
@@ -159,6 +171,34 @@ func (s *Service) Workbench(q Query) (WorkbenchPage, error) {
 		facts[id] = r
 		roots[id] = cur
 	}
+	if parent, ok := tasks[q.Parent]; ok {
+		family := &WorkbenchFamily{Formal: parent.Definition.Type == "epic"}
+		for _, id := range ids {
+			if parents[id] == q.Parent {
+				family.Direct++
+			}
+			if !slices.Contains(facts[id].Path, q.Parent) {
+				continue
+			}
+			family.Descendants++
+			switch facts[id].Task.Board {
+			case "completed":
+				family.Completed++
+			case "cancelled":
+				family.Cancelled++
+			default:
+				family.Remaining++
+			}
+			member := tasks[id]
+			if family.Formal && member.EpicMembership != nil && member.EpicMembership.Parent == q.Parent && member.EpicMembership.Required {
+				family.Required++
+				if acceptedEpicLeaf(parent, member) {
+					family.Satisfied++
+				}
+			}
+		}
+		p.Family = family
+	}
 	groups := map[string][]string{}
 	order := []string{}
 	for _, id := range ids {
@@ -233,11 +273,11 @@ func (s *Service) Workbench(q Query) (WorkbenchPage, error) {
 			p.Counts[view]++
 		}
 		if q.Parent != "" {
-			if root != q.Parent {
+			if root != roots[q.Parent] {
 				continue
 			}
 			for _, id := range matchIDs {
-				if id == root {
+				if id == q.Parent || !slices.Contains(facts[id].Path, q.Parent) {
 					continue
 				}
 				selected = append(selected, facts[id])
