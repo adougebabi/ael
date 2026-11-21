@@ -1,4 +1,0 @@
-=== RUN   TestRemoteRunnerHeartbeatReturnsServerLeaseInterval
---- PASS: TestRemoteRunnerHeartbeatReturnsServerLeaseInterval (0.31s)
-PASS
-ok  	ael/internal/server	0.669s

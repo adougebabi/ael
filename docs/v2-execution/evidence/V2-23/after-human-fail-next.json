@@ -1,1 +1,0 @@
-{"action": "ready", "authoritative": true, "checkpoint": {"at": "2026-11-13T07:48:32.067012269Z", "definition_revision": 1, "parent": "oracle-parent", "plan_revision": 1, "runner": "mac-pilot", "step": "execute", "task": "oracle-two", "unit": "execute"}, "mode": "remote", "observed_at": "2026-11-13T07:48:32.299472Z", "online": true}

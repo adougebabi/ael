@@ -1,8 +1,0 @@
-{
-  "fixture": "/private/tmp/ael-v212-codex-sandbox-_tps6nfq",
-  "sandbox_exit": 2,
-  "stderr": "WARNING: proceeding, even though we could not create PATH aliases: Refusing to create helper binaries under temporary dir \"/private/tmp/ael-v212-codex-sandbox-_tps6nfq\" (codex_home: AbsolutePathBuf(\"/private/tmp/ael-v212-codex-sandbox-_tps6nfq/codex-home\"))\nerror: the following required arguments were not provided:\n  --permission-profile <NAME>\n  --sandbox-state-json <JSON>\n\nUsage: codex sandbox --permission-profile <NAME> --sandbox-state-json <JSON> --cd <DIR> --config <key=value> --sandbox-state-disable-network <COMMAND>...\n\nFor more information, try '--help'.\n",
-  "stdout": "",
-  "fixture_tag_created": false,
-  "listener_received": []
-}

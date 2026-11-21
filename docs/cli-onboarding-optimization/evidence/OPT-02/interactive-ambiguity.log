@@ -1,8 +1,0 @@
-Server 地址或 profile 名称（留空使用 Local） > http://127.0.0.1:58642
-Server 用户名 > owner
-凭据（输入隐藏） >
-搜索项目（留空显示全部，或输入 create 项目名称） > Same project name
-1  Same project name  [project-7ff84f3ff0fe461c45e364b71cefd564]
-2  Same project name  [project-e2dd0cc86bd93be423a017929309d876]
-选择序号或稳定项目 ID，或输入 create 项目名称 > Same project name
-{"code":"INIT_PROJECT_AMBIGUOUS","error":"INIT_PROJECT_AMBIGUOUS: choose an accessible stable project ID, names are never merged"}

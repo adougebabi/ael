@@ -1,9 +1,0 @@
-{
-  "result": "PASS",
-  "real_history_preflight": true,
-  "tasks": 90,
-  "parent_relationships_checked": 60,
-  "files_declared": 1601,
-  "server": "isolated local Server",
-  "files_uploaded": false
-}

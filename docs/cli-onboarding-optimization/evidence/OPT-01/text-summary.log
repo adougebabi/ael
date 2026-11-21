@@ -1,8 +1,0 @@
-恢复 unverified · 在线核对 false
-Server http://127.0.0.1:62282 · 项目 shared
-会话 deterministic-a · 执行者 agent-a · 责任 none
-父任务 epic · 当前任务  · 步骤
-定义 1 · 计划 1 · CLI 0.1.22 · Skill
-已完成叶子 2 · 已通过检查 1 · 尚未完成检查 0
-下一动作 preserve the workspace and restore online authority before business writes or final submission
-检查点 /tmp/ael-opt-evidence/opt01-complete-remote/config-a/recovery/a87ecb714ad13639773a3ed01d581a092d76c274937b726f387e6bdabd0ba390.json

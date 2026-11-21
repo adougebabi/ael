@@ -1,8 +1,0 @@
-{
-  "result": "PASS",
-  "mode": "external deterministic protocol fixture with actual Chromium observations",
-  "task_unchanged": true,
-  "visual_finding": "finding_0hX7O8KrO7DcBXkN-cIKD4IJrsFfFDJUWCla4Lf2PLs",
-  "occurrences": 2,
-  "total_findings": 6
-}

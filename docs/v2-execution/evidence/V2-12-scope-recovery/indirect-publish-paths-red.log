@@ -1,8 +1,0 @@
---- FAIL: TestV212ApprovedCheckCannotLaunchIndirectPublish (0.11s)
-    --- FAIL: TestV212ApprovedCheckCannotLaunchIndirectPublish/path (0.06s)
-        zz_v212_indirect_publish_test.go:46: an authorized check launched the unapproved publish command; result=fail
-    --- FAIL: TestV212ApprovedCheckCannotLaunchIndirectPublish/absolute (0.05s)
-        zz_v212_indirect_publish_test.go:46: an authorized check launched the unapproved publish command; result=fail
-FAIL
-FAIL	ael/cmd/ael	0.527s
-FAIL

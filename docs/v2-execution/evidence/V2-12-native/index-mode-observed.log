@@ -1,5 +1,0 @@
-=== RUN   TestFixtureCandidateIndexModeObservation
-    v212_overlay_index_test.go:18: candidate ID unchanged although staged mode changed 100644 => 100755
---- PASS: TestFixtureCandidateIndexModeObservation (0.56s)
-PASS
-ok  	ael/internal/remote	1.061s

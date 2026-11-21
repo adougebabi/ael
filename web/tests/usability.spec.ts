@@ -2537,8 +2537,8 @@ test('WB03 首页真实人工待办验收并回流交付',async({page,request})=
 
 test('WB04 既有存量标题、原始需求与未知资料保持可读',async({page,request})=>{
  const c=await connect(request,'many'),id='wb04-legacy-'+Date.now();
- const field=JSON.parse(fs.readFileSync(path.resolve('..','docs/usability-closure/evidence/UC-05/field-analysis.json'),'utf8'));
- const title=field.largest_tasks[1].title;
+ // A long existing-stock title shape observed in the field (dense punctuation, quoted symbols).
+ const title='诊断与任务：统计卡全是「—」，和失败任务列表矛盾；报错直接暴露环境变量，还重复两遍';
  await c.post('/api/tasks',{id,title,type:'bug',goal:'verified',original_request:'隔离重现已有存量标题的阅读密度；不改变原生产记录。核对统计卡、失败列表与错误信息的真实关系。',acceptance:['原问题保持可读']});
  await goto(page,'many','/tasks?q='+encodeURIComponent(title));const row=page.locator('[data-task="'+id+'"]');
  await expect(row).toContainText(title);await expect(row).toContainText('核对统计卡');await expect(row).toContainText('执行者');

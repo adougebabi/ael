@@ -1,7 +1,0 @@
-DIAGNOSTIC ONLY: test overlay temporarily bypasses two safety gates; not a product build or acceptance result.
-Disposable fixture: /private/tmp/ael-v212-diagnostic-sevow5le
-Traceback (most recent call last):
-  File "/Users/vinson/Documents/project/个人/ael/scripts/remote_runner_acceptance.py", line 124, in <module>
-    raise RuntimeError("server exited; see server.log")
-RuntimeError: server exited; see server.log
-Diagnostic exit: 1

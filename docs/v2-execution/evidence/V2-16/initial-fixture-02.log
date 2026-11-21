@@ -1,7 +1,0 @@
-Traceback (most recent call last):
-  File "/Users/vinson/Documents/project/个人/ael/scripts/remote_review_acceptance.py", line 155, in <module>
-    for task in ('api-pass','api-fail','api-blocked','browser','stale','missing'):prepare(task)
-                                                                                  ^^^^^^^^^^^^^
-  File "/Users/vinson/Documents/project/个人/ael/scripts/remote_review_acceptance.py", line 143, in prepare
-    assert work['state']['current_step']=='execute'
-AssertionError
