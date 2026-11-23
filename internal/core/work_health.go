@@ -95,7 +95,7 @@ func checkConclusion(e Evidence) string {
 }
 
 func recordCheckProgress(t *Task, e Evidence, prior []Evidence, at time.Time) bool {
-	if len(e.Artifacts) == 0 && e.EvidenceMode != "direct_observation" {
+	if len(e.Artifacts) == 0 && e.EvidenceMode != "direct_observation" && e.EvidenceMode != "agent_reported" {
 		return false
 	}
 	p := progressState(t)
@@ -125,7 +125,7 @@ func recordSubmittedProgressWith(t *Task, a *Attempt, result StepResult, e *Evid
 	if e != nil {
 		return recordCheckProgress(t, *e, prior, at)
 	}
-	if result.Status != "pass" || len(result.Artifacts) == 0 {
+	if result.Status != "pass" {
 		return false
 	}
 	hashes := map[string]string{}
@@ -137,7 +137,22 @@ func recordSubmittedProgressWith(t *Task, a *Attempt, result StepResult, e *Evid
 			hashes[ref] = store.Hash(data)
 		}
 	}
-	return recordArtifactProgress(t, a.Unit, a.Candidate, result.Summary, hashes, at)
+	if recordArtifactProgress(t, a.Unit, a.Candidate, result.Summary, hashes, at) {
+		return true
+	}
+	if a.Unit != "execute" || t.Step != "verify" {
+		return false
+	}
+	for _, earlier := range t.Attempts {
+		if earlier.ID != a.ID && earlier.Unit == a.Unit && earlier.Status == "pass" && earlier.Candidate == a.Candidate &&
+			earlier.DefinitionRevision == a.DefinitionRevision && earlier.PlanRevision == a.PlanRevision {
+			return false
+		}
+	}
+	p := progressState(t)
+	p.Revision, p.PlanRevision = t.Definition.Revision, t.Plan.Revision
+	p.At, p.Kind, p.Unit, p.Candidate, p.Summary = &at, "implementation", a.Unit, a.Candidate, result.Summary
+	return true
 }
 
 // WorkHealthAt takes its clock explicitly so threshold behavior can be tested

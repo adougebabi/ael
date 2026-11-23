@@ -40,7 +40,7 @@ func (s *Service) RemoteWorkChoiceTx(tx *store.Tx, request WorkRequest) (WorkRes
 
 func (s *Service) SubmitRemote(sub Submission, requestHash string, env *RemoteSubmitEnvironment) (Next, error) {
 	if !s.RemoteAuthority || env == nil || env.CandidateID == "" || env.Fence < 1 || env.Prepare == nil || env.ReadArtifact == nil {
-		return Next{}, Error("REMOTE_OPERATION_REQUIRED", "validated candidate, lease and artifacts are required")
+		return Next{}, Error("REMOTE_OPERATION_REQUIRED", "validated candidate and lease are required")
 	}
 	return s.submitWithEnvironment(sub, nil, requestHash, env)
 }

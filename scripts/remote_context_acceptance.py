@@ -28,7 +28,7 @@ if not system or not arch:
     raise SystemExit("unsupported fixture platform")
 binary = bundle / f"ael-{system}-{arch}"
 env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
-env.update(AEL_DATA_DIR=str(out / "unused-runtime"), AEL_INSTALL_PREFIX=str(out / "unused-install"),
+env.update(AEL_DATA_DIR=str(out / "unused-runtime"), AEL_INSTALL_PREFIX=str(out / "unused-install"), AEL_CLIENT_CONFIG_DIR=str(out / "client-mappings"),
            GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull, GIT_TERMINAL_PROMPT="0")
 commands = []
 
@@ -138,9 +138,9 @@ try:
     first, second = capture("a", "task", revision, "candidate-a"), capture("b", "task", revision, "candidate-b")
     assert first["candidate_id"] == second["candidate_id"] and first["id"] != second["id"]
     assert first["checkout_id"] != second["checkout_id"] and first["workspace_id"] != second["workspace_id"]
-    published = client("a", "context", "publish", "--task", "task", "--observation", first["id"], "--expected-revision", revision, "--operation-id", "context", "--idempotency-key", "context")
+    published = client("a", "context", "publish", "--task", "task", "--observation", first["id"], "--expected-revision", revision, "--operation-id", "context", "--idempotency-key", "context", "--share-source", "spec/project.md")
     assert published["inventory_unverified"] is True and published["capture_stability_proven"] is False
-    replay = client("a", "context", "publish", "--task", "task", "--observation", first["id"], "--expected-revision", revision, "--operation-id", "context", "--idempotency-key", "context")
+    replay = client("a", "context", "publish", "--task", "task", "--observation", first["id"], "--expected-revision", revision, "--operation-id", "context", "--idempotency-key", "context", "--share-source", "spec/project.md")
     assert published["id"] == replay["id"]
     report_file = out / "check-report.txt"
     report_file.write_text(run(check_command, projects["a"]))
@@ -197,7 +197,7 @@ try:
     expanded = client("a", "task", "edit", "--task", "task", "--file", expanded_def, "--reason", "fixture scope expansion", "--expected-revision", revision, "--operation-id", "expand", "--idempotency-key", "expand")
     revision = expanded["revision"]
     expanded_obs = capture("a", "task", revision, "candidate-expanded")
-    expanded_context = client("a", "context", "publish", "--task", "task", "--observation", expanded_obs["id"], "--expected-revision", revision, "--operation-id", "expanded-context", "--idempotency-key", "expanded-context")
+    expanded_context = client("a", "context", "publish", "--task", "task", "--observation", expanded_obs["id"], "--expected-revision", revision, "--operation-id", "expanded-context", "--idempotency-key", "expanded-context", "--share-source", "spec/extra.md")
     assert {item["id"] for item in expanded_context["sources"]} == {"source:spec/project.md", "extra-rule"}
     client("b", "context", "record-check", "--context", expanded_context["id"], "--task", "task", "--check", "unit", "--artifact", report["id"], "--expected-revision", revision, "--operation-id", "wrong-version-check", "--idempotency-key", "wrong-version-check", expect_ok=False)
     # Scope expansion awaits an accurate-version decision; that earlier gate
@@ -222,7 +222,7 @@ try:
     client("a", "context", "publish", "--task", "missing", "--observation", missing_obs["id"], "--expected-revision", missing_task["revision"], "--operation-id", "missing-context", "--idempotency-key", "missing-context", expect_ok=False)
     assert "KNOWLEDGE_MISSING" in commands[-1]["stderr"]
     (projects["a"] / "spec" / "project.md").unlink()
-    replay_after_change = client("a", "context", "publish", "--task", "task", "--observation", first["id"], "--expected-revision", initial_revision, "--operation-id", "context", "--idempotency-key", "context")
+    replay_after_change = client("a", "context", "publish", "--task", "task", "--observation", first["id"], "--expected-revision", initial_revision, "--operation-id", "context", "--idempotency-key", "context", "--share-source", "spec/project.md")
     assert replay_after_change["id"] == published["id"] and replay_after_change["replayed"] is True and replay_after_change["usable_for_current_work"] is False
     deleted = capture("a", "task", revision, "candidate-deleted-spec")
     client("a", "context", "publish", "--task", "task", "--observation", deleted["id"], "--expected-revision", revision, "--operation-id", "deleted-context", "--idempotency-key", "deleted-context", expect_ok=False)
@@ -240,7 +240,7 @@ try:
     (projects["a"] / "spec" / "large.md").write_text(large)
     client("a", "knowledge", "index")
     large_obs = capture("a", "task", revision, "candidate-large")
-    large_context = client("a", "context", "publish", "--task", "task", "--observation", large_obs["id"], "--expected-revision", revision, "--operation-id", "large-context", "--idempotency-key", "large-context")
+    large_context = client("a", "context", "publish", "--task", "task", "--observation", large_obs["id"], "--expected-revision", revision, "--operation-id", "large-context", "--idempotency-key", "large-context", "--share-source", "spec/large.md")
     large_read = client("b", "context", "show", "--context", large_context["id"])
     large_source = next(item for item in large_read["sources"] if item["id"] == "source:spec/large.md")
     assert large_source["content"] == large and large_source["sha256"] == hashlib.sha256(large.encode()).hexdigest()

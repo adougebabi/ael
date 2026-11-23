@@ -28,7 +28,7 @@ out.chmod(0o700)
 (out / "ISOLATED-FULL-CHAIN").write_text("Same-machine external host driver, real HTTP and eight real source changes.\n")
 binary = bundle / "ael-darwin-arm64"
 projects = {name: out / ("client-" + name) for name in ("a", "b")}
-env = dict(os.environ, AEL_DATA_DIR=str(out / "unused-runtime"), GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull, GIT_TERMINAL_PROMPT="0")
+env = dict(os.environ, AEL_DATA_DIR=str(out / "unused-runtime"), AEL_INSTALL_PREFIX=str(out / "unused-install"), AEL_CLIENT_CONFIG_DIR=str(out / "client-mappings"), GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull, GIT_TERMINAL_PROMPT="0")
 serial = itertools.count(1)
 events = []
 human_results = []
@@ -130,6 +130,8 @@ try:
 
     def command_check(number, parent=False):
         result = {"id": ("module-" if parent else "unit-") + str(number), "kind": "functional", "method": "command", "command": ["python3", "checks.py", str(number)], "covers": ["module " + str(number)], "required": True, "artifacts": ["runtime:report.json"]}
+        if number == 4:
+            result["artifacts"] = []
         if parent:
             result["affected_tasks"] = [f"leaf-{number:02d}"]
         return result
@@ -181,6 +183,8 @@ try:
         context = cli(name, "context", "publish", "--task", task, "--observation", observed["id"], "--expected-revision", state["revision"], "--operation-id", key + "-pub", "--idempotency-key", key + "-pub")
         return state, context
 
+    claim_files = {}
+
     def responsibility(name, task):
         state, context = context_for(name, task)
         destination = out / ("claim-" + str(next(serial)) + ".json")
@@ -192,6 +196,7 @@ try:
         request = private(key, body)
         cli(name, "runner", "claim", "--runner", "agent-" + name, "--file", request, "--out", destination)
         attempt = json.loads(destination.read_text())["attempt"]
+        claim_files[attempt["id"]] = destination
         if task == "leaf-01" and state["current_step"] == "define":
             repeated = out / "replayed-first-claim.json"
             cli(name, "runner", "claim", "--runner", "agent-" + name, "--file", request, "--out", repeated)
@@ -210,11 +215,8 @@ try:
             key = "upload-" + str(next(serial))
             lease_file = private(key + "-lease", dict(lease, runner_id="agent-" + name, expected_revision=state["revision"], lease_until=attempt["lease_until"]))
             source = Path(file)
-            if source.suffix not in (".json", ".txt", ".log", ".md", ".png"):
-                opaque = out / (key + ".bin")
-                opaque.write_bytes(source.read_bytes())
-                source = opaque
-            uploaded = cli(name, "artifact", "upload", "--task", task, "--attempt", attempt["id"], "--candidate", candidate, "--file", source, "--lease-file", lease_file, "--expected-revision", state["revision"], "--operation-id", key, "--idempotency-key", key, *(["--mime", "application/octet-stream"] if source.suffix == ".bin" else []))
+            binary_attachment = source.suffix not in (".json", ".txt", ".log", ".md", ".png")
+            uploaded = cli(name, "artifact", "upload", "--task", task, "--attempt", attempt["id"], "--candidate", candidate, "--file", source, "--lease-file", lease_file, "--expected-revision", state["revision"], "--operation-id", key, "--idempotency-key", key, *(["--mime", "application/octet-stream"] if binary_attachment else []))
             bindings.append({"path": ref, "artifact_id": uploaded["id"]})
         result = {"status": status, "summary": "External host completed " + attempt["unit"], "artifacts": [item["artifact_id"] for item in bindings]}
         if state["current_step"] == "execute":
@@ -228,6 +230,9 @@ try:
         if expected_error:
             assert expected_error in response, response
         return response
+
+    def submit_text(name, attempt, summary, *flags):
+        return cli(name, "runner", "submit", "--lease-file", claim_files[attempt["id"]], "--repository", "fixture-repo", "--status", "pass", "--summary", summary, *flags)
 
     def human_review(name, task):
         run([sys.executable, "build.py"], projects[name])
@@ -292,7 +297,11 @@ try:
                 outputs = [(path, str(path.relative_to(projects[name])))]
                 if number == 8:
                     outputs.append((projects[name] / "screen.html", "screen.html"))
-                submit(name, task_id, state, attempt, lease, outputs)
+                if number == 4:
+                    executed = submit_text(name, attempt, "Module 4 now returns 4 from value(). The integration check is pending.")
+                    assert executed["next"]["current_step"] == "verify" and not executed["next"]["task"]["attempts"][-1]["outputs"]
+                else:
+                    submit(name, task_id, state, attempt, lease, outputs)
                 if number == 4:
                     receiver = "a"
                     sync(receiver, name)
@@ -314,7 +323,11 @@ try:
                     assert failed_candidate and failed_candidate != observed["candidate_id"]
                     stale_report = dict(report, candidate=failed_candidate)
                     submit(name, task_id, state, attempt, lease, [(private("stale-candidate-report", stale_report), "runtime:report.json")], method="command", exit_code=0, expected_error="ASSESSMENT_EVIDENCE_REQUIRED")
-                submit(name, task_id, state, attempt, lease, [(private("report-" + str(next(serial)), report), "runtime:report.json")], "pass" if result.returncode == 0 else "fail", "command", result.returncode)
+                if number == 4:
+                    assert result.returncode == 0
+                    submit_text(name, attempt, "The module 4 command read the integrated value and returned 4.", "--exit-code", 0, "--candidate", observed["candidate_id"])
+                else:
+                    submit(name, task_id, state, attempt, lease, [(private("report-" + str(next(serial)), report), "runtime:report.json")], "pass" if result.returncode == 0 else "fail", "command", result.returncode)
             else:
                 submit(name, task_id, state, attempt, lease)
         else:
@@ -337,6 +350,11 @@ try:
             assert ready and json.loads(process.stdout.readline())["url"] == base
             assert cli(name, "task", "show", "--task", task_id)["revision"] == cached["revision"]
     assert failed_once
+    assert not cli("a", "artifact", "list", "--task", "leaf-04")["items"]
+    module = (Path(__file__).resolve().parent.parent / "web/node_modules/@playwright/test/index.mjs").as_uri()
+    browser_script = Path(__file__).resolve().with_name("full_chain_browser.mjs")
+    text_config = private("text-result-browser", {"playwright": module, "url": base, "task": "leaf-04", "legacy": "leaf-01"})
+    run(["node", browser_script, "text-result", text_config])
     if latest != "a":
         sync("a", latest)
     retained = projects["a"] / "modules/module_04.py"
@@ -363,7 +381,10 @@ try:
         result = run([sys.executable, *check["command"][1:]], projects["a"])
         observed = mutation("a", "observe", dict(lease, expected_revision=state["revision"]), repository="fixture-repo")
         report = {"candidate": observed["candidate_id"], "check": check["id"], "definition_revision": state["definition_revision"], "plan_revision": state["plan_revision"], "method": "command", "source": "external-command:agent-a", "covers": check["covers"], "observations": result.stdout}
-        submit("a", "eight", state, attempt, lease, [(private("parent-report-" + str(next(serial)), report), "runtime:report.json")], method="command", exit_code=0)
+        if check["id"] == "module-4":
+            submit_text("a", attempt, "The module 4 command returned the expected value on the parent candidate.", "--exit-code", 0, "--candidate", observed["candidate_id"])
+        else:
+            submit("a", "eight", state, attempt, lease, [(private("parent-report-" + str(next(serial)), report), "runtime:report.json")], method="command", exit_code=0)
     assert cli("a", "task", "show", "--task", "eight")["task"]["status"] == "completed"
     completed_parent = cli("a", "task", "show", "--task", "eight")["task"]
     screen = projects["a"] / "screen.html"

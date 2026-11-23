@@ -51,7 +51,7 @@ ael artifact reference --artifact ARTIFACT_ID --task TASK_ID --purpose reference
   --expected-revision STATE_REVISION --operation-id ref-1 --idempotency-key ref-1 --json
 ```
 
-支持 PNG、JPEG、UTF-8 纯文本（`.txt/.md/.log/.json/.csv`）和 MP4，单文件上限 10 MiB；Server 校验后才 finalize。图片和文本可在 Server 页面按项目、任务预览，也可按任务 ID 查找；MP4 按附件下载。页面每两秒核对已打开预览的原件状态，清理、权限失效或无法确认时关闭预览，刷新列表可查看当前状态。`artifact download` 校验长度和 SHA-256，只创建新文件，不覆盖原文件。附件读取必须实时授权，断网不会返回旧缓存。引用 `--purpose evidence` 必须绑定与任务及附件相同的非空 `--candidate`；关联本身不等于某项检查通过，也不会自动改变现有验收门禁。
+支持 PNG、JPEG、UTF-8 纯文本（`.txt/.md/.log/.json/.csv`）和 MP4。已领取的执行者可以提交实际交付所需的下载文件，单文件上限 10 MiB；Server 校验后才 finalize。图片和文本可在 Server 页面按项目、任务预览，也可按任务 ID 查找；MP4 按附件下载。页面每两秒核对已打开预览的原件状态，清理、权限失效或无法确认时关闭预览，刷新列表可查看当前状态。`artifact download` 校验长度和 SHA-256，只创建新文件，不覆盖原文件。附件读取必须实时授权，断网不会返回旧缓存。引用 `--purpose evidence` 必须绑定与任务及附件相同的非空 `--candidate`；关联本身不等于某项检查通过，也不会自动改变现有验收门禁。
 
 上传中断时以完全相同文件、参数和 operation/幂等键重试原上传命令；无需更换键。若创建响应丢失或源文件已经不可用，用 `ael artifact upload-status --idempotency-key upload-1 --json` 按当前身份实时查询 upload ID 和状态。确需放弃时，可用 `ael artifact cancel --upload UPLOAD_ID --operation-id upload-1 --idempotency-key upload-1 --json` 取消未完成上传并释放预留配额；取消不能撤销已 finalize 的附件。服务端管理员可先对 `/api/v1/projects/PROJECT_ID/artifacts/prune` 提交 `{"before":"RFC3339时间"}` 预览，再使用预览返回的 `digest`、相同 `before`、`apply:true`、`operation_id` 和 `idempotency_key` 执行；需管理员浏览器会话及 CSRF。清理保留元数据和引用，活动任务及仍被活动父任务或依赖需要的原件不列为候选。执行中断后以同一请求和键重放；如果保护关系已变化则返回 `PRUNE_STALE`，应重新预览。页面将清理中、已清理或缺失的原件显示为不可预览。
 
@@ -81,11 +81,11 @@ ael candidate compare --before CANDIDATE_ID_A --after CANDIDATE_ID_B --json
 
 候选包含显式仓库 ID、完整 commit、暂存区对象及相对路径/内容哈希清单，不包含绝对路径、分支名、进程 ID 或 mtime。Git 跟踪、暂存、删除及未忽略的新文件均会核对；AEL 运行记录和客户端绑定不改变候选。未跟踪的常见凭据文件名会阻断采集，不上传原文；Git 忽略的其他输入不会上传，但会使 `inputs_known` 为 false。普通文件读取不能证明外部写者在最后一次读取后仍然停止，因此采集记录明确标记 `capture_stability_proven: false`；候选对齐是一次观测，不是持续稳定或检查复用的证明。不同 commit 不视为可复用；`candidate compare` 给出变化路径，单凭远程清单不证明检查环境或忽略输入相同，`exactly_equal` 保守为 false。
 
-`knowledge index` 只更新本机索引。发布前重新发现来源并核对任务修订、候选和索引；未知显式引用、缺失必需文件、范围内冲突或源码变化会阻断发布。客户端只上传范围内实际选中的规范正文；其他发现的来源只发送路径、哈希和状态等清单元数据，不发送其正文。未选中的旧文档若使用未识别状态，或已被删除，不会被强制升级为当前契约；快照会标记 `inventory_unverified`，不能声称依据完整。Server 复核已上传正文与候选哈希，保存只读快照；清单由客户端身份报告，Server 不隐式 checkout 或独立证明未上传正文的分类。当前、候选和历史状态分别显示。
+`knowledge index` 只更新本机索引。发布前重新发现来源并核对任务修订、候选和索引；未知显式引用、缺失必需文件、范围内冲突或源码变化会阻断发布。普通 context publish 登记规范路径、哈希和状态，未共享的正文只留在本机。获授权时使用 `--share-source PATH` 显式发布选定版本。本任务已共享的相同版本会复用原有附件。未选中的旧文档若使用未识别状态，或已被删除，不会被强制升级为当前契约；快照会标记 `inventory_unverified`，不能声称依据完整。Server 复核已上传正文与候选哈希，保存只读快照；清单由客户端身份报告，Server 不隐式 checkout 或独立证明未上传正文的分类。当前、候选和历史状态分别显示。
 
 `context show --context ID` 可读取历史快照，并返回 `validity`、`workspace_matches`、`usable_for_context` 和 `input_equivalence_proven`。`--task ID` 要求当前任务与本机候选仍匹配，否则返回 `CONTEXT_STALE` 和已知变化路径；未知的其他影响也会明确提示。检查复用前必须证明实际输入、配置和环境等价，忽略输入不明或仅有相同分支名时不能复用。Dashboard 读取同一快照原件，任务修订或后续候选改变后提示旧记录过期。
 
-如 Agent 已实际运行某个任务中声明的检查，可先用 `artifact upload` 上传经审阅的报告，再记录它所使用的上下文：
+正式检查使用对应责任的 `runner submit` 登记实际结果、观察与命令退出码。需要额外诊断材料时，可用 `artifact upload` 上传报告并关联其上下文。
 
 ```sh
 ael artifact upload --task TASK_ID --file /path/to/report.txt \

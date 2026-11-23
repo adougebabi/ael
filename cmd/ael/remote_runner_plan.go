@@ -112,9 +112,6 @@ func runnerBuildSubmissionPlan(cfg remoteRunnerConfig, lease remoteRunnerLease, 
 	if strings.TrimSpace(result.Summary) == "" || (result.Status != "pass" && result.Status != "fail" && result.Status != "blocked") {
 		result = core.StepResult{Status: "blocked", Summary: "local process did not produce a valid final result"}
 	}
-	if task.Step == "execute" && result.Status == "pass" && len(result.Artifacts) == 0 {
-		result = core.StepResult{Status: "blocked", Summary: "execution result omitted a required deliverable"}
-	}
 	plan = runnerSubmissionPlan{Schema: 1, RunnerID: cfg.RunnerID, TaskID: lease.TaskID, AttemptID: lease.AttemptID, Fence: lease.Fence, ClaimRevision: lease.ClaimRevision, OperationID: operationID, ObserveID: runnerPlanKey("output", operationID, ""), Candidate: output, Result: result, Method: processResult.Method, Inputs: append([]string{}, processResult.Inputs...), ExitCode: processResult.ExitCode, Artifacts: []runnerPlannedArtifact{}}
 	artifactCfg := cfg
 	if paths.Snapshot != "" {

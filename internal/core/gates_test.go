@@ -656,12 +656,17 @@ func TestPortableOutcomeHasNoRuntimeCredentialsOrAbsoluteWorkspace(t *testing.T)
 	}
 }
 
-func TestUIAndUXCannotPassWithoutRequiredRunningEvidence(t *testing.T) {
+func TestUIAndUXCannotPassWithoutExplicitlyRequiredFiles(t *testing.T) {
 	for _, kind := range []string{"ui", "ux"} {
 		t.Run(kind, func(t *testing.T) {
 			s := fixture(t)
 			d := bug()
 			d.Checks[0].Kind = kind
+			ref := "runtime:interaction-report.txt"
+			if kind == "ui" {
+				ref = "runtime:screen.png"
+			}
+			d.Checks[0].Artifacts = []string{ref}
 			d.Checks[0].Command = []string{"sh", "-c", "exit 0"}
 			id := atVerify(t, s, d)
 			n, e := s.Verify(id, "test", "checker")

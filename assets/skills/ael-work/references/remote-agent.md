@@ -24,33 +24,33 @@ init 默认共用机器级 CLI，支持 `--prefix DIR --from CLIENT_PACKAGE`。�
 
 ### 常规领取与提交
 
-`runner claim --runner RUNNER --file PRIVATE_CLAIM_JSON --out PRIVATE_CLAIM_RECEIPT` 返回的私有文件直接用于后续命令的 `--lease-file`。CLI 从该文件读取 task、attempt、token、fence 和冻结领取版本。`task show.revision` 与 `recovery.source_revision` 用于当前任务状态查询；attempt 写入由 CLI 使用 claim_revision。heartbeat 使用同一文件并更新其中租约期限。
+`runner claim --runner RUNNER --file PRIVATE_CLAIM_JSON --out PRIVATE_CLAIM_RECEIPT` 返回的私有文件可直接用于 `--lease-file`。CLI 从中读取任务、领取版本和租约；检查方式可从领取的检查定义取得。heartbeat 的私有请求只需 operation_id、idempotency_key，成功后更新同一租约文件。
+
+普通实施与分析在 summary 写明改了什么、如何处理、已验证和待验证事项。简单任务一两句即可。完整提交后读取 next_action，继续尚未满足的必需检查。
 
 ```sh
-./ael runner heartbeat --runner RUNNER --lease-file PRIVATE_CLAIM_RECEIPT --file PRIVATE_HEARTBEAT_JSON --session HOST_SESSION_ID --json
-./ael runner submit --runner RUNNER --lease-file PRIVATE_CLAIM_RECEIPT --repository REPO --file PRIVATE_RESULT_JSON --session HOST_SESSION_ID --json
+./ael runner submit --lease-file PRIVATE_CLAIM_RECEIPT --repository REPO \
+  --status pass --summary '修复空参数返回 500 的问题，在入口校验并返回明确提示。已检查正常与空参数，远端 CI 尚未运行。' \
+  --session HOST_SESSION_ID --json
+# 领取 command 检查后，用实际退出码和观察登记
+./ael runner submit --lease-file PRIVATE_CHECK_RECEIPT --repository REPO \
+  --status pass --exit-code 0 --summary '回归命令检查了正常和空参数，两项均返回预期状态。' \
+  --session HOST_SESSION_ID --json
 ```
 
-heartbeat 文件只需 operation_id、idempotency_key。submit 文件提供 operation_id、idempotency_key、result，以及当前检查实际需要的 method、exit_code、inputs。result.artifacts 填选定的原仓库相对文件路径，如 `apps/web/src/views/Page.tsx`。CLI 固定当前候选和选定字节，完成 observe、上传、finalize、绑定后提交。源码扩展名由 CLI 处理，Agent 使用实际交付文件路径。result.knowledge.artifacts 同样接受路径。原始字节、候选、租约与子操作保存在仓库外私有操作记录中。
+提交检查时用真实 pass、fail 或 blocked。未运行的检查保持未运行，确实受阻时说明原因。用 `--candidate HASH` 指定已有观察的受检版本，CLI 核对当前工作区；Server 再核对领取候选、检查配置及定义和计划修订。场景或模型检查可在说明中写出操作与观察，按需用 `--inputs PATH1,PATH2` 关联受检路径。Agent 上报与独立人工确认、CI 实际结果各有自己的来源。
 
-execute change/pass 示例请求如下，summary、路径和知识结论按实际工作填写。
+需要文件时，任务定义的 deliverables、检查的 artifacts 或专项证据约定给出要求。使用 `runner submit --lease-file PRIVATE_CLAIM_RECEIPT --repository REPO --file PRIVATE_RESULT_JSON`，result 含 status、summary、artifacts；artifacts 是选定的项目相对路径或 `runtime:` 路径。运行材料位于项目外私有目录，附加 `--artifacts-dir ABSOLUTE_DIRECTORY`。CLI 冻结候选与选定字节，登记 observe 并上传绑定文件。普通 JSON 请求可写 `"artifacts": []`，也可省略可选的 knowledge 和附件。私有请求文件是协议输入，无需登记为附件。`--dry-run` 仅核对本机候选和选定文件。
 
-```json
-{
-  "operation_id": "execute-result-unique",
-  "idempotency_key": "execute-result-unique",
-  "result": {
-    "status": "pass",
-    "summary": "已完成本次修复并提供实际源码",
-    "artifacts": ["apps/web/src/views/Page.tsx"],
-    "knowledge": {"status": "unchanged", "reason": "本次修复沿用现行规范", "artifacts": []}
-  }
-}
-```
+### 规范版本与共享
 
-选定的报告、日志和截图放在项目外目录，引用如 `runtime:report.json`、`runtime:desktop.png`，命令增加 `--artifacts-dir ABSOLUTE_DIRECTORY`。verify 的 report.json 由执行 Agent 根据真实检查产生，candidate/check/definition_revision/plan_revision/method/source/observations/covers 按下方协议填写。先用 `runner observe --lease-file PRIVATE_CLAIM_RECEIPT --repository REPO --file PRIVATE_OPERATION_JSON` 获取候选，再据此执行检查和形成报告，submit 会核对当前 checkout。`--dry-run` 只校验本地候选和选定字节并展示文件路径，不执行网络写入。
+先在本机读取适用的 AGENTS.md、CLAUDE.md 和项目规范，再索引并准备候选。普通 `context publish` 登记所用路径、哈希和依据，复用本任务已共享的相同版本。未共享的正文留在工作区。获授权共享精确原文时，在独立的规范操作中显式使用 `context publish ... --share-source 项目相对路径`。限制只上传验收材料时省略该参数。规范改动可以在实施说明中交代，正文的共享沿此入口处理。
 
-`runner submit --repository` 模式中省略 bindings 与服务器附件 ID。完整手写请求继续使用下方低层接口。通信失败沿返回 operation_file 执行 `runner retry --pending FILE`，重试使用已固定字节，已接受结果可在租约结束后查询原回执。请求内容变化使用新的操作键。提交后消费 next.next_action，下一单元重新领取并使用新的私有回执文件。到期或撤权继续使用显式恢复流程。
+### 恢复已有结果
+
+沿用原任务和已登记候选。原租约有效时，可直接提交准确的实施说明；租约结束时，先核对回执与工作区，再按 recovery check 指引交接并重新领取原责任。已有附件继续保留。此时记录的工作区可能包含未提交内容，候选中的 HEAD 仅指向已存在的 Git 提交。正式当前检查继续使用现有结果；已运行但尚未正式登记的检查，在领取对应检查后核对实际受检候选及配置，确认匹配后上报原观察。只上传材料或登记诊断上下文报告的记录仍需正式提交。输入或检查要求变化时重做受影响的检查。
+
+网络结果未知时，按 operation_file 执行 `runner retry --pending FILE` 或查询原回执；重试使用原操作和冻结字节。修改请求内容时使用新键。旧会话仍使用原 CLI 和 Skill，按已有机制核对在途责任并交接，结束原工具绑定后用更新过的客户端和项目入口开启新会话。通过 `session show` 核对实际 CLI 构建、Skill 路径和哈希，再 `recovery check` 继续原任务。
 
 ### 低层接口与证据约束
 
@@ -61,11 +61,9 @@ execute change/pass 示例请求如下，summary、路径和知识结论按实�
 5. 由 Agent 从私有 claim 文件取 attempt.id/token/fence，以私有 JSON 请求调用 `runner heartbeat` / `runner progress` / `runner interrupt`。共有 task_id、attempt_id、token、fence、operation_id、idempotency_key；progress 另含 summary/next/stage，interrupt 另含 reason。续租按当前租约期限进行，无常驻助手也可工作。撤权/过期停止提交有效结果；停工是 Agent 的责任，AEL 不杀宿主进程。失联展示最后上报/未知。
 6. 自行使用宿主工具完成本责任。只验收任务不得修改源码。结果产生后 `runner observe --runner ID --repository REPO --file PRIVATE_JSON` 读取本项目候选并提交已有 Attempt observe；文件含共有租约字段及领取时 expected_revision。也可在文件中提供 candidate，此时不传 repository。observe 不启动检查或复制工作区。
 7. `artifact upload --task ID --attempt AT --candidate HASH --file LOCAL --lease-file PRIVATE_JSON --expected-revision CLAIM_REV --operation-id OP --idempotency-key KEY`。lease-file 含 runner_id、task_id、attempt_id、token、fence、expected_revision、lease_until（RFC3339；续租后更新）。上传后原件固定。只选任务所需依据、报告、日志与截图；不默认上传所有源码、HOME、聊天或密钥。
-8. `runner submit --runner ID --file PRIVATE_JSON`：共有租约字段及 expected_revision（领取时版本）、candidate_id、result、bindings、method、exit_code、inputs。result 含 status(pass|fail|blocked)、summary、artifacts（已 finalized 的 ID）；execute pass 必须有候选中的真实交付文件及 knowledge:{status:unchanged|updated,reason,artifacts:[]}。bindings 为 [{path:"app.txt"或"runtime:report.json",artifact_id:"ID"}]。非 verify 阶段 method 留空，不传 exit_code/inputs；verify 使用声明的 method 和实际 inputs。command 的 exit_code 必须符合 pass/fail。
-9. verify 非 blocked 必须上传并绑定 `runtime:report.json`，内容为 {candidate,check,definition_revision,plan_revision,method,source,observations,covers}。source 为 `external-command:RUNNER` / `external-model:RUNNER` / `external-scenario:RUNNER`，observations 是实际观察，covers 完整覆盖本检查的验收项。UI 仍需真实图片。哈希只证明字节一致，不能证明命令真实运行；Agent 不得冒充独立人工审批。必需报告/产物、旧候选、旧验收或权限不符继续被拒绝。
+8. `runner submit --runner ID --file PRIVATE_JSON` 的低层请求含共有租约字段、expected_revision、candidate_id、result、bindings。result.artifacts 可为空；提交实际文件时列出已 finalized 的 ID，bindings 填各 ID 对应的路径。文件的任务、attempt、候选、租约和哈希仍会校验。非 verify 阶段省略 method、exit_code、inputs。
+9. verify 使用定义声明的 method 和实际 status，命令的 exit_code 必须与 pass/fail 相符。summary 记录观察。显式约定的附件仍需上传；沿用旧式 `runtime:report.json` 时仍校验 candidate、check、definition_revision、plan_revision、method、source、observations 和 covers。旧式 source 是 `external-METHOD:RUNNER`。
 10. 提交后消费 `next.next_action`：repair 留在同一叶子修复；continue 领取下一个当前责任；completed 后读取父范围后继，能力授权满足则继续。交接结束当前角色，由已有外部 Bot 自行领取。等待环境/人工时记录恢复条件，不循环伪进展。`runner receipt --runner ID --idempotency-key KEY` 查原提交回执；重复同一 submit 返回相同结果，不重复推进。旧回执不是新写授权。达到重复失败预算按既有复核规则停止，不改类别规避。
-
-execute 的 change 责任提交 pass 时，至少一个 result.artifacts 附件须绑定候选中的实际交付文件路径，附件 SHA-256 与候选哈希相同。上述 app.txt 是示例候选路径。常规提交入口自动生成这些绑定。单独 artifact upload 使用 --lease-file 时也自动处理源码扩展名，保留原始字节。每次重新领取后，附件需属于新的 attempt、候选与租约。
 
 已提交结果出现 CI 失败或其他反馈时，按 [FEEDBACK](workflow.md#10-feedback修正与独立新工作) 核对实际原因和范围。已完成任务的交付修正可在原任务下追加普通附件，沿用 [命令与恢复](commands.md#已完成任务的交付修正) 的修订与鉴权校验。需要远端 CI 成功的交付以最终提交或合并候选的实际结果为准。
 

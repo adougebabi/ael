@@ -601,11 +601,8 @@ test("A12a 创建、接手、暂缓、恢复、检查、取消与删除均写入
         path: path.join(projects.single.root, "app/ui-evidence.png"),
       });
       await page
-        .getByLabel("本次产物（逗号分隔）")
+        .getByLabel("附件（可选）")
         .fill("app/ui-output.txt,app/ui-evidence.png");
-      await page
-        .getByLabel("规范处理依据 / 阻塞解除条件")
-        .fill("无适用规范变化；真实输出仅存在于隔离目录");
     }
     await page.getByRole("button", { name: "提交并查看下一步" }).click();
     await expect(
@@ -1499,6 +1496,28 @@ test("A24 凭据丢失的接手只有确认所有旧执行停止后才能恢复"
   await expect(page.getByRole("button", { name: "接手当前工作", exact: true })).toBeVisible();
 });
 
+test("普通实施可直接提交文字并在概览读到检查结果", async ({ page, request }) => {
+  const client = await connect(request, "single"), id = "text-delivery-" + Date.now();
+  await client.post("/api/tasks", { id, title: "用文字登记实施", type: "bug", goal: "verified", acceptance: ["命令检查可运行"], checks: [
+    { id: "check", kind: "functional", method: "command", covers: ["命令检查可运行"], command: ["true"], required: true },
+  ] });
+  await step(client, id);
+  await goto(page, "single", "/tasks/" + id);
+  await page.getByRole("button", { name: "接手当前工作", exact: true }).click();
+  await confirmDialog(page);
+  const summary = "保留既有命令入口，已准备运行独立检查。";
+  await page.getByLabel("实际工作与结果").fill(summary);
+  await page.getByRole("button", { name: "提交并查看下一步" }).click();
+  await expect(page.getByRole("region", { name: "实施结果" })).toContainText(summary);
+  await expect(page.getByRole("region", { name: "附件", exact: true })).toHaveCount(0);
+  const awaiting = await client.get("/api/task?id=" + id);
+  expect(awaiting.current_step).toBe("verify");
+  expect(awaiting.current_checks.check).toBeFalsy();
+  await client.post("/api/action", { action: "verify", id, unit: "check" });
+  await page.reload();
+  await expect(page.getByRole("region", { name: "检查结果" })).toContainText("通过");
+});
+
 test("A25 产物不存在的明确拒绝允许修正后提交", async ({ page, request }) => {
   ensureIsolatedOutput();
   const client = await connect(request, "single"), id = "claim-invalid-artifact-" + Date.now();
@@ -1508,12 +1527,11 @@ test("A25 产物不存在的明确拒绝允许修正后提交", async ({ page, r
   await page.getByRole("button", { name: "接手当前工作", exact: true }).click();
   await confirmDialog(page);
   await page.getByLabel("实际工作与结果").fill("先校验缺失产物，再提交真实隔离产物");
-  await page.getByLabel("本次产物（逗号分隔）").fill("app/no-such-output.txt");
-  await page.getByLabel("规范处理依据 / 阻塞解除条件").fill("没有适用规范变化");
+  await page.getByLabel("附件（可选）").fill("app/no-such-output.txt");
   await page.getByRole("button", { name: "提交并查看下一步" }).click();
   await expect(page.getByRole("alert").first()).toBeVisible();
-  await expect(page.getByLabel("本次产物（逗号分隔）")).toBeEnabled();
-  await page.getByLabel("本次产物（逗号分隔）").fill("app/ui-output.txt");
+  await expect(page.getByLabel("附件（可选）")).toBeEnabled();
+  await page.getByLabel("附件（可选）").fill("app/ui-output.txt");
   await page.getByRole("button", { name: "提交并查看下一步" }).click();
   await expect(page.getByRole("heading", { name: "提交本次工作结果" })).toHaveCount(0);
   expect((await client.get("/api/task?id=" + id)).current_step).toBe("verify");
@@ -1745,7 +1763,7 @@ test("A34 实施中可直接记录人工意见，候选生成后由用户用于�
   let dialog = page.getByRole("dialog", { name: /^(记录人工验收|记录人工意见)$/ });
   await expect(dialog).toContainText("尚未生成验收候选");
   await expect(dialog.getByRole("radio", { name: "通过", exact: true })).not.toBeChecked();
-  await expect(dialog.getByLabel("本次产物（逗号分隔）")).toHaveCount(0);
+  await expect(dialog.getByLabel("附件（可选）")).toHaveCount(0);
   await dialog.getByRole("radio", { name: "通过", exact: true }).check();
   await dialog.getByLabel("实际观察与理由").fill("我检查了当前页面，候选生成后再确认。");
   await dialog.getByLabel("记录人").fill("isolated reviewer");
@@ -1772,8 +1790,7 @@ test("A34 实施中可直接记录人工意见，候选生成后由用户用于�
   await dialog.getByRole("button", { name: "关闭", exact: true }).click();
   await page.locator(".result-banner").getByRole("button", { name: "填写实施结果" }).click();
   await page.getByLabel("实际工作与结果").fill("隔离实施产物已准备");
-  await page.getByLabel("本次产物（逗号分隔）").fill("app/ui-output.txt");
-  await page.getByLabel("规范处理依据 / 阻塞解除条件").fill("没有适用规范变化");
+  await page.getByLabel("附件（可选）").fill("app/ui-output.txt");
   await page.getByRole("button", { name: "提交并查看下一步" }).click();
   current = await client.get("/api/task?id=" + id);
   expect(current.current_step).toBe("verify");
@@ -1867,7 +1884,6 @@ test("A37 旧接手释放后保留未提交文字，可由用户带入人工观�
   await page.locator(".result-banner").getByRole("button", { name: "接手当前工作", exact: true }).click();
   await confirmDialog(page);
   await page.getByLabel("实际工作与结果").fill("先前在实施表单填写的人工观察");
-  await page.getByLabel("规范处理依据 / 阻塞解除条件").fill("另一条尚未提交的说明");
   await client.post("/api/action", { action: "resume", id, ack_stopped: true });
   await page.reload();
   await expect(page.getByRole("heading", { name: "提交本次工作结果" })).toHaveCount(0);
@@ -1895,7 +1911,6 @@ test("A38 未知的实施提交在旧接手释放后可核对并保留原文字"
   await page.locator(".result-banner").getByRole("button", { name: "接手当前工作", exact: true }).click();
   await confirmDialog(page);
   await page.getByLabel("实际工作与结果").fill("尚未发送成功的人工观察");
-  await page.getByLabel("规范处理依据 / 阻塞解除条件").fill("此前填写的说明");
   await page.route("**/api/action", (route) => route.request().postDataJSON()?.action === "submit" ? route.abort() : route.continue());
   await page.getByRole("button", { name: "提交并查看下一步" }).click();
   await expect(page.getByRole("button", { name: "原样重试提交" })).toBeVisible();
@@ -2393,7 +2408,7 @@ test("TD-03 报告任务正确呈现同候选的通过、失败和未执行", as
   await goto(page, "single", `/tasks/${id}?section=checks&check=failed`);
   await expect(page.locator(".check-list-header")).toContainText("1 项通过 · 1 项失败 · 1 项未执行");
   const failed = page.locator("#task-check-failed");
-  await expect(failed.locator(".evidence")).toContainText("当前版本的有效证据 · 失败");
+  await expect(failed.locator(".evidence")).toContainText("当前检查结果 · 失败");
   await failed.getByRole("button", { name: /查看证据/ }).first().click();
   await expect(page.locator(".artifact-panel pre")).toBeVisible();
   await page.getByRole("button", { name: "关闭证据" }).click();
@@ -2498,7 +2513,7 @@ test('WB02 默认概览直接看图片、报告与键盘返回',async({page,requ
  await c.post('/api/tasks',{id,title:'WB02 图片与报告成果',type:'bug',goal:'verified',acceptance:['成果可读'],checks:[{id:'result',kind:'functional',method:'command',command:['true'],required:true,covers:['成果可读'],artifacts:['app/wb02-result.png','app/wb02-report.json']}]});
  await step(c,id);await step(c,id,['app/wb02-result.png','app/wb02-report.json']);await c.post('/api/action',{action:'verify',id,unit:'result'});
  await goto(page,'single','/tasks/'+id);
- const gallery=page.getByRole('region',{name:'当前成果',exact:true});
+ const gallery=page.getByRole('region',{name:'附件',exact:true});
  await gallery.scrollIntoViewIfNeeded();
  await expect(gallery.locator('img')).toBeVisible();
  await expect(gallery).toContainText('适用当前版本');
@@ -2541,7 +2556,7 @@ test('WB04 既有存量标题、原始需求与未知资料保持可读',async({
  await goto(page,'many','/tasks?q='+encodeURIComponent(title));const row=page.locator('[data-task="'+id+'"]');
  await expect(row).toContainText(title);await expect(row).toContainText('核对统计卡');await expect(row).toContainText('执行者');
  await row.getByRole('link',{name:title,exact:true}).click();await expect(page.getByRole('heading',{name:title,exact:true,level:1})).toBeVisible();
- await expect(page.getByRole('region',{name:'当前成果',exact:true})).toContainText('尚无已关联');
+ await expect(page.getByRole('region',{name:'附件',exact:true})).toHaveCount(0);
  await page.screenshot({path:path.join(output,'WB04-legacy-reading.png'),fullPage:true});
 });
 
@@ -2568,7 +2583,7 @@ test('WB05 材料版本变化关闭旧预览，历史图片仍可直接找到',a
  await goto(page,'single');await page.screenshot({path:path.join(projects.single.root,'app/wb05-version.png')});
  await c.post('/api/tasks',{id,title:'WB05 当前与历史材料',type:'bug',goal:'verified',scope:['app'],acceptance:['观察页面'],checks:[{id:'observe',kind:'review',method:'human',covers:['观察页面'],required:true}]});
  await step(c,id);await step(c,id,['app/wb05-version.png']);
- await goto(page,'single','/tasks/'+id);const gallery=page.getByRole('region',{name:'当前成果',exact:true});await gallery.scrollIntoViewIfNeeded();
+ await goto(page,'single','/tasks/'+id);const gallery=page.getByRole('region',{name:'附件',exact:true});await gallery.scrollIntoViewIfNeeded();
  const thumb=gallery.locator('.result-file').filter({hasText:'wb05-version.png'});await expect(thumb.locator('img')).toBeVisible();await thumb.click();
  const dialog=page.getByRole('dialog',{name:'成果预览'});await expect(dialog).toBeVisible();
  const n=await c.get('/api/task?id='+id);await c.post('/api/action',{action:'edit',id,definition:{...n.task.definition,scope:['app','new-scope']},reason:'隔离范围变更以验证旧预览失效'});
@@ -2599,7 +2614,7 @@ test('R1 用途与版本先选材，保留共享检查关联和真实预览',asy
  await c.post('/api/action',{action:'resume',id,unit:'execute',ack_stopped:true});
  await step(c,id,['app/r1/report.json','app/r1/output/AGENTS.md'],()=>fs.writeFileSync(path.join(base,'new.txt'),'new candidate '+id));
  for(const unit of ['A','B'])await c.post('/api/action',{action:'verify',id,unit});
- await goto(page,'single','/tasks/'+id);const gallery=page.getByRole('region',{name:'当前成果',exact:true});await gallery.scrollIntoViewIfNeeded();
+ await goto(page,'single','/tasks/'+id);const gallery=page.getByRole('region',{name:'附件',exact:true});await gallery.scrollIntoViewIfNeeded();
  await expect(gallery).toContainText('本次准确候选报告');await expect(gallery.locator('.result-file').filter({hasText:'old.png'})).toHaveCount(0);
  await expect(gallery.locator('.result-file').filter({hasText:'app/r1/input'})).toHaveCount(0);
  await expect(gallery.locator('.result-file').filter({hasText:'AGENTS.md'})).toHaveCount(1);
@@ -2657,12 +2672,12 @@ test('R4 完整路径与多检查材料，三屏宽和状态回流',async({page,
  const dir=path.join(projects.single.root,'app/r4-'+uid);fs.mkdirSync(dir,{recursive:true});await goto(page,'single');await page.screenshot({path:path.join(dir,'actual.png')});fs.writeFileSync(path.join(dir,'report.json'),JSON.stringify({summary:'隔离结果已实现，尚待普通人工观察',observations:['图片与实际候选一致']}));const refs=['app/r4-'+uid+'/actual.png','app/r4-'+uid+'/report.json'];
  await c.post('/api/tasks',{id:parent,title:'R4 尚未整体验收的父事项 '+uid,type:'epic',goal:'verified',acceptance:['整体交付']});await c.post('/api/tasks',{id:child,parent,title:'R4 普通观察子项 '+uid,type:'bug',goal:'verified',scope:['app'],acceptance:['观察实际成果'],checks:[{id:'observe',kind:'review',method:'human',covers:['观察实际成果'],required:true}]});await step(c,child);await step(c,child,refs);
  await goto(page,'single','/tasks?board=human&q='+encodeURIComponent('R4 普通观察子项 '+uid));const row=page.locator('[data-task="'+parent+'"]');await expect(row).toBeVisible();await row.getByRole('button',{name:/展开子任务/}).click();await row.locator('.work-child').getByRole('link',{name:'R4 普通观察子项 '+uid,exact:true}).click();
- const gallery=page.getByRole('region',{name:'当前成果',exact:true});await gallery.scrollIntoViewIfNeeded();const img=gallery.locator('.result-file').filter({hasText:'actual.png'});await expect(img.locator('img')).toBeVisible();await img.click();const preview=page.getByRole('dialog',{name:'成果预览'});await expect.poll(()=>preview.locator('img').evaluate((e:HTMLImageElement)=>e.naturalWidth)).toBeGreaterThan(0);await preview.getByRole('slider').fill('150');await page.keyboard.press('Escape');await expect(img).toBeFocused();
+ const gallery=page.getByRole('region',{name:'附件',exact:true});await gallery.scrollIntoViewIfNeeded();const img=gallery.locator('.result-file').filter({hasText:'actual.png'});await expect(img.locator('img')).toBeVisible();await img.click();const preview=page.getByRole('dialog',{name:'成果预览'});await expect.poll(()=>preview.locator('img').evaluate((e:HTMLImageElement)=>e.naturalWidth)).toBeGreaterThan(0);await preview.getByRole('slider').fill('150');await page.keyboard.press('Escape');await expect(img).toBeFocused();
  await gallery.locator('.result-file').filter({hasText:'report.json'}).click();await expect(preview).toContainText('隔离结果已实现');await preview.getByText('查看报告原文',{exact:true}).click();await page.keyboard.press('Escape');
  const review=page.getByRole('region',{name:'直接验收 observe'});await review.getByLabel('记录人',{exact:true}).fill('r4-reviewer');await review.getByRole('button',{name:'验收通过',exact:true}).click();await expect(page.locator('.review-receipt')).toContainText('通过');const accepted=await c.get('/api/task?id='+child);expect(accepted.task.status).toBe('completed');expect(accepted.current_checks.observe.artifacts || []).toHaveLength(0);
  await page.getByRole('button',{name:'← 返回上一页',exact:true}).click();await expect(page.locator('[data-task="'+parent+'"]')).toHaveCount(0);await page.getByRole('combobox',{name:'工作视图'}).selectOption('');await page.getByRole('searchbox',{name:'搜索任务'}).fill('R4 尚未整体验收的父事项 '+uid);await expect(page.locator('[data-task="'+parent+'"]')).toBeVisible();expect((await c.get('/api/task?id='+parent)).task.status).toBe('open');
  for(const width of [1440,1280,390]){await page.setViewportSize({width,height:900});if(width===390)await expect(page.locator('.sidebar')).toBeHidden();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();await page.screenshot({path:path.join(output,'R4-home-'+width+'.png'),fullPage:false});}
- for(const width of [1280,390]){await page.setViewportSize({width,height:900});await goto(page,'single','/tasks/'+child);const results=page.getByRole('region',{name:'当前成果',exact:true});await results.scrollIntoViewIfNeeded();const picture=results.locator('.result-file').filter({hasText:'actual.png'});await picture.click();await expect(preview.locator('img')).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();expect((await preview.boundingBox())!.width).toBeLessThanOrEqual(width);await page.keyboard.press('Escape');await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:path.join(output,'R4-detail-'+width+'.png'),fullPage:false});}
+ for(const width of [1280,390]){await page.setViewportSize({width,height:900});await goto(page,'single','/tasks/'+child);const results=page.getByRole('region',{name:'附件',exact:true});await results.scrollIntoViewIfNeeded();const picture=results.locator('.result-file').filter({hasText:'actual.png'});await picture.click();await expect(preview.locator('img')).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();expect((await preview.boundingBox())!.width).toBeLessThanOrEqual(width);await page.keyboard.press('Escape');await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:path.join(output,'R4-detail-'+width+'.png'),fullPage:false});}
  const multi='r4-multi-'+uid;await c.post('/api/tasks',{id:multi,title:'R4 两个明确检查的材料隔离',type:'bug',goal:'verified',scope:['app'],acceptance:['对应本项'],checks:[{id:'A',kind:'review',method:'human',covers:['对应本项'],artifacts:[refs[0]],required:true},{id:'B',kind:'review',method:'human',covers:['对应本项'],artifacts:[refs[1]],required:true}]});await step(c,multi);await step(c,multi,refs);
  await goto(page,'single','/tasks/'+multi);const a=page.locator('.overview-review-check[data-check="A"]'),b=page.locator('.overview-review-check[data-check="B"]');await expect(a.locator('.result-file')).toContainText('actual.png');await expect(a.locator('.result-file')).not.toContainText('report.json');await expect(b.locator('.result-file')).toContainText('report.json');await expect(b.locator('.result-file')).not.toContainText('actual.png');await expect(a.getByRole('button',{name:'打开专项验收'})).toBeVisible();await expect(a.getByRole('button',{name:'验收通过',exact:true})).toHaveCount(0);
 });
@@ -2678,7 +2693,7 @@ test('R4 无当前成果的旧版本父项，历史图和缺失提示可查',asy
  const c=await connect(request,'single'),uid=Date.now(),id='r4-history-'+uid,child=id+'-child';ensureIsolatedOutput();const dir=path.join(projects.single.root,'app/r4-history-'+uid);fs.mkdirSync(dir,{recursive:true});const image=path.join(dir,'old.png');await goto(page,'single');await page.screenshot({path:image});
  await c.post('/api/tasks',{id,title:'R4 只有旧成果的普通父事项',type:'feature',preset:'fast',goal:'verified',scope:['app'],acceptance:['原成果'],checks:[{id:'observe',kind:'review',method:'human',covers:['原成果'],required:true}]});await step(c,id);await step(c,id,['app/r4-history-'+uid+'/old.png']);const before=await c.get('/api/task?id='+id);await c.post('/api/action',{action:'edit',id,definition:{...before.task.definition,scope:['app','revised-scope']},reason:'隔离样本产生真实旧修订，不改变类型或完成状态'});
  await c.post('/api/tasks',{id:child,title:'R4 原关联剩余子项',type:'bug',goal:'verified',acceptance:['结果']});execFileSync('python3',['-c',"import sqlite3,sys;c=sqlite3.connect(sys.argv[1]);c.execute(\"UPDATE tasks SET body=json_set(body,'$.definition.parent',?) WHERE id=?\",(sys.argv[2],sys.argv[3]));c.commit()",path.join(projects.single.data_dir,'runtime.db'),id,child]);
- await goto(page,'single','/tasks/'+id);const children=page.getByRole('region',{name:'剩余子任务'}),gallery=page.getByRole('region',{name:'当前成果',exact:true});await expect(children).toContainText('R4 原关联剩余子项');await expect(gallery).toContainText('尚无确认适用');await expect(gallery.locator('.result-file')).toHaveCount(0);expect((await children.boundingBox())!.y).toBeLessThan((await gallery.boundingBox())!.y);
+ await goto(page,'single','/tasks/'+id);const children=page.getByRole('region',{name:'剩余子任务'}),gallery=page.getByRole('region',{name:'附件',exact:true});await expect(children).toContainText('R4 原关联剩余子项');await expect(gallery).toContainText('当前版本暂无关联附件');await expect(gallery.locator('.result-file')).toHaveCount(0);expect((await children.boundingBox())!.y).toBeLessThan((await gallery.boundingBox())!.y);
  await gallery.getByRole('button',{name:/历史成果/}).click();const old=gallery.locator('.result-file').filter({hasText:'old.png'});await old.scrollIntoViewIfNeeded();await expect(old.locator('img')).toBeVisible();await old.click();const preview=page.getByRole('dialog',{name:'成果预览'});await expect.poll(()=>preview.locator('img').evaluate((e:HTMLImageElement)=>e.naturalWidth)).toBeGreaterThan(0);await page.keyboard.press('Escape');
  fs.renameSync(image,image+'.saved');try{await old.click();await expect(preview.getByRole('alert')).toBeVisible();await expect(preview.locator('img')).toHaveCount(0);await page.keyboard.press('Escape');}finally{fs.renameSync(image+'.saved',image);}
  const after=await c.get('/api/task?id='+id);expect(after.task.definition.type).toBe('feature');expect(after.task.status).toBe('open');

@@ -1000,7 +1000,7 @@ func (s *Service) submitTx(tx *store.Tx, sub Submission, evidence *Evidence, has
 			return Error("STALE_EXECUTION_UNIT", "attempt is not for the current responsibility and revisions")
 		}
 
-		if sub.Result.Summary == "" {
+		if strings.TrimSpace(sub.Result.Summary) == "" {
 			return Error("RESULT_REQUIRED", "summary")
 		}
 		if !slices.Contains([]string{"pass", "fail", "blocked"}, sub.Result.Status) {
@@ -1122,6 +1122,15 @@ func (s *Service) submitTx(tx *store.Tx, sub Submission, evidence *Evidence, has
 			return Error("INSPECTION_WRITE_DETECTED", "inspection may write reports only into runtime; source candidate must remain unchanged")
 		}
 		if sub.Result.Status == "pass" && t.Step == "execute" {
+			switch strings.ToLower(strings.Trim(strings.TrimSpace(sub.Result.Summary), ".。!！")) {
+			case "已完成", "完成", "详见附件", "见附件", "done", "completed", "see attachment", "see attachments":
+				return Error("RESULT_REQUIRED", "describe the actual work and how it was done")
+			}
+			if len(t.Definition.Deliverables) > 0 && remote == nil {
+				if e = RequireArtifactPaths(t.Definition.Deliverables, sub.Result.Artifacts); e != nil {
+					return e
+				}
+			}
 			if remote != nil {
 				e = validateContextWith(&t, a, sub.Result, remote.Basis, readArtifact)
 			} else {
@@ -1266,9 +1275,6 @@ func (s *Service) submitTx(tx *store.Tx, sub Submission, evidence *Evidence, has
 					}
 				}
 			case "execute":
-				if len(sub.Result.Artifacts) == 0 {
-					return Error("ARTIFACT_REQUIRED", "execute result must reference actual deliverable")
-				}
 				for _, p := range sub.Result.Artifacts {
 					if _, e = readArtifact(p); e != nil {
 						return e

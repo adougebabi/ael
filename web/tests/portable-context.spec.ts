@@ -15,8 +15,9 @@ test("Dashboard 与客户端读取同一候选的不可变规范", async ({ page
   await page.getByLabel("用户名", { exact: true }).fill("reader");
   await page.getByLabel("密码", { exact: true }).fill("fixture-reader-password");
   await page.getByRole("button", { name: "登录", exact: true }).click();
-  await page.getByLabel("项目列表").getByRole("listitem").filter({ hasText: "Shared Context" }).getByRole("button", { name: "查看项目" }).click();
-  await page.getByRole("button", { name: "执行依据与附件", exact: true }).click();
+  await expect(page.getByRole("button", { name: "切换项目", exact: true })).toContainText("Shared Context");
+  await page.getByRole("link", { name: "项目设置", exact: true }).click();
+  await page.getByText("按任务检索执行依据与附件", { exact: true }).click();
   const panel = page.getByLabel("项目证据");
   await panel.getByLabel("按任务 ID 查找").fill("task");
   await panel.getByRole("button", { name: "查找任务" }).click();

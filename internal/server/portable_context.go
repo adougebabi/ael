@@ -27,6 +27,7 @@ type portableContextInput struct {
 	ExpectedRevision string                       `json:"expected_revision"`
 	ObservationID    string                       `json:"observation_id"`
 	Sources          []portableContextSourceInput `json:"sources"`
+	ShareSource      string                       `json:"share_source,omitempty"`
 	Inventory        []portableInventoryEntry     `json:"inventory"`
 	OperationID      string                       `json:"operation_id"`
 	IdempotencyKey   string                       `json:"idempotency_key"`
@@ -129,13 +130,42 @@ func (p *portableStore) context(principal standalonePrincipal, input portableCon
 		seenIDs, seenPaths := map[string]bool{}, map[string]bool{}
 		parsedSources := map[string]knowledge.Record{}
 		sources := make([]portableContextSource, 0, len(input.Sources))
+		localSources := []core.BasisReference{}
 		for _, source := range input.Sources {
 			file, ok := files[source.Path]
-			if !ok || file.Deleted || seenIDs[source.ID] || seenPaths[source.Path] || strings.TrimSpace(source.ID) == "" || len(source.ID) > 512 || strings.TrimSpace(source.Reason) == "" || len(source.Reason) > 500 || !standaloneID.MatchString(source.ArtifactID) {
+			entry, inventoried := inventory[source.Path]
+			if !ok || !inventoried || file.Deleted || entry.ID != source.ID || seenIDs[source.ID] || seenPaths[source.Path] || strings.TrimSpace(source.Reason) == "" || len(source.Reason) > 500 || slices.Contains([]string{"ignored", "retired", "opaque"}, entry.Action) {
 				return nil, errors.New("CONTEXT_SOURCE_MISMATCH")
 			}
-			item, err := scanArtifact(tx.Row("SELECT "+artifactColumns+" FROM artifact_objects WHERE id=?", source.ArtifactID))
-			if err != nil || item.Status != "finalized" || item.TaskID != taskID || item.SHA256 != file.SHA256 {
+			if entry.Status == "conflict" {
+				return nil, fmt.Errorf("KNOWLEDGE_CONFLICT: %s", entry.ID)
+			}
+			seenIDs[source.ID], seenPaths[source.Path] = true, true
+			artifactID := source.ArtifactID
+			reused := false
+			if artifactID == "" {
+				if source.Path == input.ShareSource {
+					return nil, errors.New("CONTEXT_SOURCE_MISMATCH")
+				}
+				// A new observation can reference a previously shared exact version.
+				err := tx.Row(`SELECT s.artifact_id FROM portable_context_sources s
+					JOIN artifact_objects a ON a.id=s.artifact_id
+					WHERE s.id=? AND s.path=? AND s.sha256=? AND a.status='finalized' AND a.task_id=?
+					ORDER BY s.rowid DESC LIMIT 1`, source.ID, source.Path, file.SHA256, taskID).Scan(&artifactID)
+				if err != nil && err != sql.ErrNoRows {
+					return nil, err
+				}
+				reused = artifactID != ""
+			}
+			if artifactID == "" {
+				localSources = append(localSources, core.BasisReference{ID: entry.ID, Source: entry.Path, Version: entry.SHA256, Status: entry.Status, Reason: source.Reason, LocalOnly: true})
+				continue
+			}
+			if !standaloneID.MatchString(artifactID) {
+				return nil, errors.New("CONTEXT_SOURCE_MISMATCH")
+			}
+			item, err := scanArtifact(tx.Row("SELECT "+artifactColumns+" FROM artifact_objects WHERE id=?", artifactID))
+			if err != nil || item.Status != "finalized" || (!reused && item.TaskID != taskID) || item.SHA256 != file.SHA256 {
 				return nil, errors.New("CONTEXT_SOURCE_MISMATCH")
 			}
 			raw, err := artifacts.read(item)
@@ -143,19 +173,14 @@ func (p *portableStore) context(principal standalonePrincipal, input portableCon
 				return nil, errors.New("CONTEXT_SOURCE_UNAVAILABLE")
 			}
 			record, err := knowledge.ParseSnapshot(source.Path, raw)
-			if err != nil || record.ID != source.ID || record.Hash != file.SHA256 {
+			if err != nil || record.ID != source.ID || record.Hash != file.SHA256 || entry.Status != record.Status || entry.Kind != record.Kind || !slices.Equal(entry.Paths, record.Paths) || !slices.Equal(entry.Tasks, record.Tasks) || (record.Critical && !entry.Critical) {
 				return nil, errors.New("CONTEXT_SOURCE_MISMATCH")
 			}
-			entry, ok := inventory[source.Path]
-			if !ok || entry.ID != record.ID || entry.Status != record.Status || entry.Kind != record.Kind || !slices.Equal(entry.Paths, record.Paths) || !slices.Equal(entry.Tasks, record.Tasks) || (record.Critical && !entry.Critical) || entry.Action == "retired" || entry.Action == "ignored" {
-				return nil, errors.New("CONTEXT_SOURCE_MISMATCH")
-			}
-			if record.Status == "conflict" {
-				return nil, fmt.Errorf("KNOWLEDGE_CONFLICT: %s", record.ID)
-			}
-			seenIDs[source.ID], seenPaths[source.Path] = true, true
 			parsedSources[source.Path] = record
-			sources = append(sources, portableContextSource{ID: record.ID, Path: record.Path, ArtifactID: source.ArtifactID, SHA256: record.Hash, Status: record.Status, Kind: record.Kind, Origin: record.Source, Reason: source.Reason})
+			sources = append(sources, portableContextSource{ID: record.ID, Path: record.Path, ArtifactID: artifactID, SHA256: record.Hash, Status: record.Status, Kind: record.Kind, Origin: record.Source, Reason: source.Reason})
+		}
+		if input.ShareSource != "" && !seenPaths[input.ShareSource] {
+			return nil, errors.New("CONTEXT_SOURCE_MISMATCH")
 		}
 		for _, id := range task.Definition.Knowledge {
 			if !seenIDs[id] {
@@ -190,21 +215,13 @@ func (p *portableStore) context(principal standalonePrincipal, input portableCon
 				return nil, fmt.Errorf("KNOWLEDGE_MISSING: %s", entry.ID)
 			}
 		}
-		for _, path := range []string{"AGENTS.md", "CLAUDE.md"} {
-			if file, ok := files[path]; ok && !file.Deleted && !seenPaths[path] {
-				entry := inventory[path]
-				if entry.Action != "retired" || !seenPaths[entry.Target] {
-					return nil, fmt.Errorf("KNOWLEDGE_MISSING: %s", path)
-				}
-			}
-		}
 		id, err := standaloneRandom("context_")
 		if err != nil {
 			return nil, err
 		}
 		created := time.Now().UTC().Format(time.RFC3339Nano)
 		inventoryBytes, _ := json.Marshal(input.Inventory)
-		result := map[string]any{"id": id, "task_id": taskID, "task_revision": taskRevision, "definition_revision": task.Definition.Revision, "task_definition": task.Definition, "plan_revision": task.Plan.Revision, "policy_hash": task.PolicyHash, "candidate_id": candidateID, "repository": candidate.Repository, "commit": candidate.Commit, "observation_id": input.ObservationID, "checkout_id": checkoutID, "workspace_id": workspaceID, "runner_id": runnerID, "inputs_known": inputsKnown, "capture_stability_proven": false, "actor": principal.Username, "created_at": created, "sources": sources, "inventory_count": len(input.Inventory), "inventory_hash": store.Hash(inventoryBytes), "inventory_origin": "client_attested", "inventory_unverified": inventoryUnverified, "check_status": "not_recorded", "operation_id": input.OperationID}
+		result := map[string]any{"id": id, "task_id": taskID, "task_revision": taskRevision, "definition_revision": task.Definition.Revision, "task_definition": task.Definition, "plan_revision": task.Plan.Revision, "policy_hash": task.PolicyHash, "candidate_id": candidateID, "repository": candidate.Repository, "commit": candidate.Commit, "observation_id": input.ObservationID, "checkout_id": checkoutID, "workspace_id": workspaceID, "runner_id": runnerID, "inputs_known": inputsKnown, "capture_stability_proven": false, "actor": principal.Username, "created_at": created, "sources": sources, "local_sources": localSources, "share_source": input.ShareSource, "inventory_count": len(input.Inventory), "inventory_hash": store.Hash(inventoryBytes), "inventory_origin": "client_attested", "inventory_unverified": inventoryUnverified, "check_status": "not_recorded", "operation_id": input.OperationID}
 		body, err := json.Marshal(result)
 		if err != nil {
 			return nil, err
@@ -388,7 +405,17 @@ func portableContextBasis(tx *store.Tx, contextID string, artifacts *artifactSto
 	if err != nil {
 		return nil, err
 	}
-	basis := make([]core.BasisReference, 0, len(sources))
+	var body string
+	if err := tx.Row("SELECT body FROM portable_contexts WHERE id=?", contextID).Scan(&body); err != nil {
+		return nil, err
+	}
+	var context struct {
+		LocalSources []core.BasisReference `json:"local_sources"`
+	}
+	if err := json.Unmarshal([]byte(body), &context); err != nil {
+		return nil, err
+	}
+	basis := slices.Clone(context.LocalSources)
 	for _, source := range sources {
 		item, err := scanArtifact(tx.Row("SELECT "+artifactColumns+" FROM artifact_objects WHERE id=?", source.artifact))
 		if err != nil || item.Status != "finalized" || item.SHA256 != source.hash {

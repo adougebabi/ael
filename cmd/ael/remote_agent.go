@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -94,8 +95,20 @@ func remoteAgentCommand(cmd string, a args, config, project string, binding remo
 			return nil, core.Error("AGENT_REQUEST_INVALID", "claim requires --out NEW_PRIVATE_FILE for the lease; response output omits credentials")
 		}
 		var body map[string]any
-		if err := readAgentRequest(a.get("file", ""), &body); err != nil {
-			return nil, err
+		_, inline := a.Flags["summary"]
+		if action == "submit" && inline {
+			if leaseReceipt == nil || a.get("repository", "") == "" || a.get("file", "") != "" {
+				return nil, core.Error("AGENT_REQUEST_INVALID", "inline submit requires --lease-file and --repository; use --file for a JSON request")
+			}
+			var err error
+			body, err = inlineRunnerResult(a, lease, leaseReceipt)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			if err := readAgentRequest(a.get("file", ""), &body); err != nil {
+				return nil, err
+			}
 		}
 		if body == nil {
 			return nil, core.Error("AGENT_REQUEST_INVALID", "request must be an object")
@@ -154,6 +167,53 @@ func remoteAgentCommand(cmd string, a args, config, project string, binding remo
 		err = updateAgentLease(a.get("lease-file", ""), leaseReceipt, response)
 	}
 	return finishAgentOutput(response, err, output, a.get("out", ""))
+}
+
+func inlineRunnerResult(a args, lease agentUploadLease, receipt map[string]any) (map[string]any, error) {
+	status, summary := a.get("status", ""), strings.TrimSpace(a.get("summary", ""))
+	if summary == "" || (status != "pass" && status != "fail" && status != "blocked") {
+		return nil, core.Error("RESULT_REQUIRED", "provide --status pass|fail|blocked and a concrete --summary")
+	}
+	body := map[string]any{"result": map[string]any{"status": status, "summary": summary, "artifacts": []any{}}}
+	method := a.get("method", "")
+	if method == "" {
+		attempt, _ := receipt["attempt"].(map[string]any)
+		unit, _ := attempt["unit"].(string)
+		if checkID, ok := strings.CutPrefix(unit, "check:"); ok {
+			task, _ := receipt["task"].(map[string]any)
+			definition, _ := task["definition"].(map[string]any)
+			raw, _ := json.Marshal(definition["checks"])
+			var checks []core.Check
+			if json.Unmarshal(raw, &checks) == nil {
+				for _, check := range checks {
+					if check.ID == checkID {
+						method = core.EffectiveCheckMethod(check)
+						break
+					}
+				}
+			}
+		}
+	}
+	if method != "" {
+		body["method"] = method
+	}
+	if value := a.get("exit-code", ""); value != "" {
+		code, err := strconv.Atoi(value)
+		if err != nil {
+			return nil, core.Error("CHECK_RESULT_INVALID", "--exit-code must be an integer")
+		}
+		body["exit_code"] = code
+	}
+	if inputs := csvValues(a.get("inputs", "")); len(inputs) > 0 {
+		body["inputs"] = inputs
+	}
+	if candidate := a.get("candidate", ""); candidate != "" {
+		body["candidate_id"] = candidate
+	}
+	raw, _ := json.Marshal(body)
+	key := a.get("idempotency-key", runnerPlanKey("submit", lease.AttemptID, string(raw)))
+	body["operation_id"], body["idempotency_key"] = a.get("operation-id", key), key
+	return body, nil
 }
 
 func redactAgentSecrets(value any) {

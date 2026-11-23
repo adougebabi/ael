@@ -128,19 +128,23 @@ func validateContextWith(t *Task, a *Attempt, result StepResult, refs []BasisRef
 		if !slices.Contains([]string{"updated", "unchanged"}, k.Status) || strings.TrimSpace(k.Reason) == "" {
 			return Error("KNOWLEDGE_OUTCOME_REQUIRED", "updated/unchanged and a concrete reason")
 		}
-		if k.Status == "updated" && len(k.Artifacts) == 0 {
-			return Error("KNOWLEDGE_ARTIFACT_REQUIRED", "reference changed spec/decision")
-		}
 		for _, ref := range k.Artifacts {
 			if _, e := read(ref); e != nil {
 				return e
 			}
 		}
 		t.KnowledgeOutcome = k
-	} else if len(refs) > 0 {
-		return Error("KNOWLEDGE_OUTCOME_REQUIRED", "assess spec/decision changes before verification; include result.knowledge")
 	} else {
-		t.KnowledgeOutcome = &KnowledgeOutcome{Status: "unchanged", Reason: "No applicable specification or decision is configured; no inferred contract was invented."}
+		t.KnowledgeOutcome = nil
+	}
+	return nil
+}
+
+func RequireArtifactPaths(required, attached []string) error {
+	for _, ref := range required {
+		if !slices.Contains(attached, ref) {
+			return Error("ARTIFACT_REQUIRED", "missing required file: "+ref)
+		}
 	}
 	return nil
 }

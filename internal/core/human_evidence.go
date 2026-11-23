@@ -6,9 +6,9 @@ import (
 	"strings"
 )
 
-// HumanEvidenceRequirements applies equally to existing and new definitions.
+// CheckEvidenceRequirements applies equally to existing and new definitions.
 // kind=ui alone is not an explicit agreement to upload a screenshot.
-func HumanEvidenceRequirements(t Task, c Check) (attachment, screenshot bool) {
+func CheckEvidenceRequirements(t Task, c Check) (attachment, screenshot bool) {
 	text := strings.ToLower(strings.Join(c.Covers, "\n") + "\n" + t.Definition.OriginalRequest)
 	for _, phrase := range []string{"无需截图", "不需要截图", "不要求截图", "no screenshot required"} {
 		text = strings.ReplaceAll(text, phrase, "")
@@ -26,6 +26,10 @@ func HumanEvidenceRequirements(t Task, c Check) (attachment, screenshot bool) {
 		screenshot = screenshot || ext == ".png" || ext == ".jpg" || ext == ".jpeg"
 	}
 	return
+}
+
+func HumanEvidenceRequirements(t Task, c Check) (attachment, screenshot bool) {
+	return CheckEvidenceRequirements(t, c)
 }
 
 func humanObservation(reason, recovery, result string, refs []string) (string, string, string) {

@@ -11,6 +11,10 @@ import (
 )
 
 func artifactError(w http.ResponseWriter, err error) {
+	if err.Error() == "EXPLICIT_KNOWLEDGE_SHARE_REQUIRED" {
+		standaloneFail(w, http.StatusBadRequest, "EXPLICIT_KNOWLEDGE_SHARE_REQUIRED")
+		return
+	}
 	var quota *artifactQuotaError
 	switch {
 	case errors.As(err, &quota):

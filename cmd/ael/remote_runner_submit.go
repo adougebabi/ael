@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
 )
 
 func runnerOutputFile(cfg remoteRunnerConfig, dir, ref string, candidate remote.PortableCandidate, secrets ...string) ([]byte, string, string, error) {
@@ -68,7 +69,26 @@ func runnerOutputFile(cfg remoteRunnerConfig, dir, ref string, candidate remote.
 	case strings.HasPrefix(detected, "text/plain"):
 		mimeType, extension = "text/plain", ".txt"
 	}
-	return data, "runner-" + store.Hash([]byte(ref))[:16] + extension, mimeType, nil
+	filename := filepath.Base(rel)
+	ext := strings.ToLower(filepath.Ext(filename))
+	switch mimeType {
+	case "text/plain":
+		if ext != ".txt" && ext != ".md" && ext != ".log" && ext != ".json" && ext != ".csv" {
+			mimeType = "application/octet-stream"
+		}
+	case "image/jpeg":
+		if ext != ".jpg" && ext != ".jpeg" {
+			filename += extension
+		}
+	case "image/png", "video/mp4":
+		if ext != extension {
+			filename += extension
+		}
+	}
+	if len(filename) > 180 || strings.TrimSpace(filename) != filename || strings.HasPrefix(filename, ".") || strings.Contains(filename, "..") || strings.ContainsFunc(filename, unicode.IsControl) {
+		filename = "runner-" + store.Hash([]byte(ref))[:16] + extension
+	}
+	return data, filename, mimeType, nil
 }
 
 func sanitizeRunnerResult(result core.StepResult, secrets ...string) core.StepResult {

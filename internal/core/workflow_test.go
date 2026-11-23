@@ -121,17 +121,13 @@ func TestWorkflowContextAndKnowledgeConvergence(t *testing.T) {
 		t.Fatal(e)
 	}
 	os.WriteFile(filepath.Join(root, "result.txt"), []byte("actual output"), 0644)
-	sub := core.Submission{Task: id, Attempt: n.Attempt.ID, Token: n.Attempt.Token, Key: "work", Result: core.StepResult{Status: "pass", Summary: "actual work", Artifacts: []string{"result.txt"}}}
+	sub := core.Submission{Task: id, Attempt: n.Attempt.ID, Token: n.Attempt.Token, Key: "work", Result: core.StepResult{Status: "pass", Summary: "Wrote the API output to result.txt"}}
 	if _, e = s.Submit(sub); e == nil || !strings.Contains(e.Error(), "TASK_CONTEXT_REQUIRED") {
 		t.Fatal(e)
 	}
 	if _, e = knowledge.Context(s, id, "", 100); e != nil {
 		t.Fatal(e)
 	}
-	if _, e = s.Submit(sub); e == nil || !strings.Contains(e.Error(), "KNOWLEDGE_OUTCOME_REQUIRED") {
-		t.Fatal(e)
-	}
-	sub.Result.Knowledge = &core.KnowledgeOutcome{Status: "unchanged", Reason: "bug fix restores existing API; contract unchanged"}
 	n, e = s.Submit(sub)
 	if e != nil || len(n.Task.Basis) != 1 || n.Task.Basis[0].ID != "api" {
 		t.Fatal(n, e)
@@ -148,13 +144,12 @@ func TestWorkflowModelAssessmentAndCapabilityBlock(t *testing.T) {
 	d.Checks = []core.Check{{ID: "semantic", Kind: "review", Method: "model", Required: true, Covers: d.Acceptance}}
 	id := atVerify(t, s, d)
 	n, _ := s.Next(id)
-	r := core.Assessment{Task: id, Check: "semantic", Candidate: n.Task.Candidate, Method: "model", Executor: "model-test-fixture", Result: "pass", Reason: "fixture semantic judgement; not a real model"}
+	r := core.Assessment{Task: id, Check: "semantic", Candidate: n.Task.Candidate, Method: "model", Executor: "model-test-fixture", Result: "pass", Reason: ""}
 	if _, e := s.Assess(r); e == nil {
-		t.Fatal("self assertion accepted")
+		t.Fatal("missing observation accepted")
 	}
-	os.WriteFile(filepath.Join(s.Store.Dir, "review.md"), []byte("fixture model review: read result.txt, output exists"), 0600)
+	r.Reason = "Read result.txt and found the expected fixture output."
 	r.Inputs = []string{"result.txt"}
-	r.Artifacts = []string{"runtime:review.md"}
 	n, e := s.Assess(r)
 	if e != nil || n.Action != "completed" || n.Task.Evidence[0].Source != "model:model-test-fixture" {
 		t.Fatal(n, e)

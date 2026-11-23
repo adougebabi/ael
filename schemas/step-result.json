@@ -20,10 +20,12 @@
       ]
     },
     "summary": {
+      "description": "Actual work, approach, and any verification or remaining gaps. This can be the entire deliverable.",
       "type": "string",
       "minLength": 1
     },
     "artifacts": {
+      "description": "Actual files selected for delivery or explicitly required by the task or check. An empty array is valid for ordinary work.",
       "type": "array",
       "items": {
         "type": "string"

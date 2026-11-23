@@ -22,7 +22,7 @@ type TaskItem = { task: { definition: { id: string; title: string }; status: str
 type Artifact = { id: string; filename: string; mime: string; size: number; sha256: string; status: string };
 type ContextSource = { id: string; path: string; origin?: string; artifact_id: string; sha256: string; status: string; kind: string; reason: string; content?: string; error?: string; loading?: boolean };
 type ContextCheck = { id: string; check_id: string; artifact_id: string; artifact_status: string; artifact_sha256: string; config_sha256: string; candidate_id: string; actor: string };
-type TaskContext = { status?: string; validity?: string; validity_reasons?: string[]; changed_paths?: string[]; impact_unknown?: boolean; inputs_known?: boolean; inventory_unverified?: boolean; id?: string; candidate_id?: string; repository?: string; commit?: string; checkout_id?: string; workspace_id?: string; runner_id?: string; actor?: string; sources: ContextSource[]; checks?: ContextCheck[] };
+type TaskContext = { status?: string; validity?: string; validity_reasons?: string[]; changed_paths?: string[]; impact_unknown?: boolean; inputs_known?: boolean; inventory_unverified?: boolean; id?: string; candidate_id?: string; repository?: string; commit?: string; checkout_id?: string; workspace_id?: string; runner_id?: string; actor?: string; sources: ContextSource[]; local_sources?: { id: string; source: string; version: string }[]; checks?: ContextCheck[] };
 
 type ClientReport = { client_id: string; actor: string; session_id?: string; runner?: string; cli_version: string; cli_build?: string; skill_version: string; update_policy: string; specification_state: string; hooks?: Record<string, string>; reported_at: string; compatible: boolean };
 const pickerOpen = ref(false), projectSearch = ref("");
@@ -454,7 +454,13 @@ onUnmounted(() => { document.removeEventListener("click", closePicker); if (prev
                 <p v-if="taskContext.impact_unknown" class="secondary">其他受影响范围尚不能确定，需要重新核对。</p>
                 <p v-if="taskContext.validity !== 'stale'" class="secondary">服务端记录与当前任务版本一致；使用前仍需核对本机工作区。</p>
                 <p v-if="!taskContext.inputs_known" class="secondary">存在未纳入清单的忽略输入，不能据此证明检查输入等价。</p>
-                <p v-if="!taskContext.sources.length" class="secondary">该范围没有选中的规范依据。</p>
+                <p v-if="!taskContext.sources.length && !taskContext.local_sources?.length" class="secondary">该范围没有选中的规范依据。</p>
+                <details v-if="taskContext.local_sources?.length">
+                  <summary>工作区中的规范依据（{{ taskContext.local_sources.length }} 项）</summary>
+                  <ul class="secondary">
+                    <li v-for="source in taskContext.local_sources" :key="source.id">{{ source.source }} · 正文保存在执行工作区 · {{ source.version }}</li>
+                  </ul>
+                </details>
                 <details v-for="source in taskContext.sources" :key="source.id" class="standalone-source" @toggle="loadContextSource(source, $event)">
                   <summary>{{ source.id }} · 记录状态：{{ source.status }}</summary>
                   <p class="secondary">来源 {{ source.path }} · SHA-256 {{ source.sha256 }}</p>

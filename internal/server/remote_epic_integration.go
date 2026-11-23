@@ -136,6 +136,7 @@ func (p *portableStore) prepareEpicIntegration(principal standalonePrincipal, ta
 		}
 		leafRepositories := map[string]string{}
 		leafOutputs := map[string]map[string]core.RemoteIntegrationOutput{}
+		leafChanges := map[string]core.RemoteIntegrationFiles{}
 		rows, err := tx.Conn.QueryContext(context.Background(), "SELECT body FROM tasks WHERE json_extract(body,'$.epic_membership.parent')=?", taskID)
 		if err != nil {
 			return nil, err
@@ -160,7 +161,7 @@ func (p *portableStore) prepareEpicIntegration(principal standalonePrincipal, ta
 			return nil, err
 		}
 		for _, leaf := range leaves {
-			if leaf.Candidate == "" {
+			if leaf.Candidate == "" || leaf.EpicMembership == nil || !leaf.EpicMembership.Required {
 				continue
 			}
 			manifest, leafFiles, err := integrationCandidate(tx, leaf.Candidate)
@@ -169,10 +170,12 @@ func (p *portableStore) prepareEpicIntegration(principal standalonePrincipal, ta
 			}
 			leafRepositories[leaf.Definition.ID] = manifest.Repository
 			leafOutputs[leaf.Definition.ID] = map[string]core.RemoteIntegrationOutput{}
+			var execution *core.Attempt
 			for _, attempt := range leaf.Attempts {
 				if attempt.Unit != "execute" || attempt.Status != "pass" || attempt.Candidate != leaf.Candidate {
 					continue
 				}
+				execution = &attempt
 				for _, id := range attempt.Outputs {
 					item, err := scanArtifact(tx.Row("SELECT "+artifactColumns+" FROM artifact_objects WHERE id=?", id))
 					if err != nil || item.Status != "finalized" || item.TaskID != leaf.Definition.ID || item.Candidate != leaf.Candidate {
@@ -190,6 +193,21 @@ func (p *portableStore) prepareEpicIntegration(principal standalonePrincipal, ta
 					if len(output.Files) > 0 {
 						leafOutputs[leaf.Definition.ID][id] = output
 					}
+				}
+			}
+			if execution != nil && len(leafOutputs[leaf.Definition.ID]) == 0 {
+				// The first claim in this execution revision retains the original
+				// input across failed checks and an expired lease's recovery.
+				for _, attempt := range leaf.Attempts {
+					if attempt.Unit != "execute" || attempt.DefinitionRevision != execution.DefinitionRevision || attempt.PlanRevision != execution.PlanRevision {
+						continue
+					}
+					baseline, before, err := integrationCandidate(tx, attempt.Input)
+					if err != nil || baseline.Repository != manifest.Repository {
+						return nil, core.Error("EPIC_REPOSITORY_UNVERIFIED", leaf.Definition.ID)
+					}
+					leafChanges[leaf.Definition.ID] = core.RemoteIntegrationFiles{Before: before, After: leafFiles}
+					break
 				}
 			}
 		}
@@ -210,7 +228,7 @@ func (p *portableStore) prepareEpicIntegration(principal standalonePrincipal, ta
 		if err != nil {
 			return nil, err
 		}
-		prepared, err := p.service.PrepareRemoteEpicIntegrationTx(tx, taskID, input.ExpectedRevision, core.RemoteIntegrationSnapshot{InputsKnown: snapshotContext["inputs_known"] == true, Candidate: candidateID, Repository: repository, Project: p.project, Head: candidate.Commit, Workspace: "remote:" + runnerID + "/" + workspace, Files: files, LeafRepositories: leafRepositories, LeafOutputs: leafOutputs, Basis: basis, ImpactEvidence: impactPath, ImpactHash: impactHash})
+		prepared, err := p.service.PrepareRemoteEpicIntegrationTx(tx, taskID, input.ExpectedRevision, core.RemoteIntegrationSnapshot{InputsKnown: snapshotContext["inputs_known"] == true, Candidate: candidateID, Repository: repository, Project: p.project, Head: candidate.Commit, Workspace: "remote:" + runnerID + "/" + workspace, Files: files, LeafRepositories: leafRepositories, LeafOutputs: leafOutputs, LeafFiles: leafChanges, Basis: basis, ImpactEvidence: impactPath, ImpactHash: impactHash})
 		if err != nil {
 			return nil, err
 		}

@@ -41,7 +41,7 @@ else:
         raise SystemExit("unsupported fixture platform")
     binary = Path(args.bundle).resolve() / f"ael-{system}-{arch}"
 env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
-env.update(AEL_DATA_DIR=str(out / "unused-runtime"), AEL_INSTALL_PREFIX=str(out / "unused-install"),
+env.update(AEL_DATA_DIR=str(out / "unused-runtime"), AEL_INSTALL_PREFIX=str(out / "unused-install"), AEL_CLIENT_CONFIG_DIR=str(out / "client-mappings"),
            GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull, GIT_TERMINAL_PROMPT="0",
            RUNNER_SENTINEL_SECRET="must-not-reach-child")
 commands = []
@@ -54,7 +54,9 @@ def run(argv, cwd, run_env=env, input_text=None, expect_ok=True):
                      "stdout": process.stdout, "stderr": process.stderr})
     if (process.returncode == 0) != expect_ok:
         raise RuntimeError(f"unexpected command result: {argv}; {process.stderr}")
-    return json.loads(process.stdout) if expect_ok and str(argv[0]) == str(binary) else process.stdout
+    if not expect_ok:
+        return process.stderr
+    return json.loads(process.stdout) if str(argv[0]) == str(binary) else process.stdout
 
 
 def git(cwd, *argv):
@@ -68,10 +70,12 @@ git(origin, "config", "user.name", "Fixture")
 git(origin, "config", "user.email", "fixture@example.invalid")
 (origin / "spec").mkdir()
 (origin / "spec" / "rules.md").write_text("# Fixture rules\nDo not publish.\n")
+(origin / "AGENTS.md").write_text("# Local Agent instructions\nRead the fixture before editing.\n")
+(origin / "CLAUDE.md").write_text("# Local host notes\nKeep this context in the checkout.\n")
 (origin / "app.txt").write_text("original\n")
 (origin / "Page.tsx").write_text("export const Page = () => null\n")
 (origin / ".gitignore").write_text(".ael/\n")
-git(origin, "add", "--", ".gitignore", "app.txt", "Page.tsx", "spec/rules.md")
+git(origin, "add", "--", ".gitignore", "app.txt", "Page.tsx", "spec/rules.md", "AGENTS.md", "CLAUDE.md")
 git(origin, "commit", "-m", "fixture baseline")
 projects = {name: out / f"checkout-{name}" for name in ("a", "b")}
 for directory in projects.values():
@@ -204,7 +208,7 @@ try:
         return client("a", *argv, expect_ok=ok)
 
     register = out / "agent.json"
-    register.write_text(json.dumps({"id":"agent-a", "workspace_id":"workspace-a", "checkout_id":"checkout-a", "repository":"fixture-repo", "version":"external-driver", "capabilities":["development"], "expected_revision":"absent"}))
+    register.write_text(json.dumps({"id":"agent-a", "workspace_id":"workspace-a", "checkout_id":"checkout-a", "repository":"fixture-repo", "version":"external-driver", "capabilities":["development", "scenario"], "expected_revision":"absent"}))
     register.chmod(0o600)
     client("a", "runner", "register", "--file", register, "--operation-id", "register", "--idempotency-key", "register")
     for action in ("run", "resume-result", "recover-claim"):
@@ -366,6 +370,108 @@ try:
     assert client("a", "task", "show", "--task", "second")["task"]["status"] == "completed"
     assert client("a", "task", "show", "--task", "epic")["task"]["status"] != "completed"
     assert choice["action"] != "completed", choice
+    def new_task(definition):
+        task_id = definition["id"]
+        path = out / (task_id + ".json")
+        path.write_text(json.dumps(definition))
+        client("a", "task", "create", "--file", path, "--operation-id", task_id, "--idempotency-key", task_id)
+
+    def claim_unit(task_id, share_path=None):
+        global serial
+        revision = client("a", "task", "show", "--task", task_id)["revision"]
+        serial += 1
+        key = f"text-context-{serial}"
+        observation = client("a", "candidate", "capture", "--task", task_id, "--repository", "fixture-repo", "--checkout", "checkout-a", "--workspace", "workspace-a", "--runner", "agent-a", "--expected-revision", revision, "--operation-id", key, "--idempotency-key", key)
+        context = client("a", "context", "publish", "--task", task_id, "--observation", observation["id"], "--expected-revision", revision, "--operation-id", key+"-pub", "--idempotency-key", key+"-pub", *([] if share_path is None else ["--share-source", share_path]))
+        destination = out / (key + "-claim.json")
+        request("claim", {"task_id": task_id, "context_id": context["id"], "expected_revision": revision}, out=destination)
+        return destination, json.loads(destination.read_text()), context
+
+    def inline_submit(lease_path, summary, *flags, status="pass", ok=True):
+        return client("a", "runner", "submit", "--lease-file", lease_path, "--repository", "fixture-repo", "--status", status, "--summary", summary, *flags, expect_ok=ok)
+
+    check = dict(definition["checks"][0], artifacts=[])
+    new_task({"id": "text-change", "title": "Text-first implementation", "type": "bug", "goal": "verified", "acceptance": ["fixed"], "checks": [check], "knowledge": ["source:AGENTS.md", "source:CLAUDE.md", "source:spec/rules.md"]})
+    initial_revision = client("a", "task", "show", "--task", "text-change")["revision"]
+    automatic = client("a", "artifact", "upload", "--task", "text-change", "--source", "knowledge snapshot", "--file", projects["a"] / "AGENTS.md", "--expected-revision", initial_revision, "--operation-id", "automatic-knowledge", "--idempotency-key", "automatic-knowledge", expect_ok=False)
+    assert "EXPLICIT_KNOWLEDGE_SHARE_REQUIRED" in automatic, automatic
+    lease_path, _, context = claim_unit("text-change")
+    assert not context["sources"] and {basis["source"] for basis in context["local_sources"]} == {"AGENTS.md", "CLAUDE.md", "spec/rules.md"}
+    inline_submit(lease_path, "The existing unit command exercises the app output.")
+    lease_path, _, _ = claim_unit("text-change")
+    (projects["a"] / "app.txt").write_text("broken\n")
+    observed = request("observe", {}, **{"lease-file": lease_path, "repository": "fixture-repo"})
+    original_head = git(projects["a"], "rev-parse", "HEAD").strip()
+    candidate_body = client("a", "candidate", "show", "--candidate", observed["candidate_id"])
+    assert candidate_body["commit"] == original_head
+    rejected = inline_submit(lease_path, "已完成", ok=False)
+    assert "RESULT_REQUIRED" in rejected, rejected
+    initial = inline_submit(lease_path, "Changed app output to exercise repair; regression has not run.", "--candidate", observed["candidate_id"])
+    assert initial["next"]["current_step"] == "verify" and not initial["next"]["task"]["evidence"]
+    assert initial["next"]["task"]["candidate"] == observed["candidate_id"]
+    assert not client("a", "artifact", "list", "--task", "text-change")["items"]
+    assert inline_submit(lease_path, "Changed app output to exercise repair; regression has not run.", "--candidate", observed["candidate_id"])["next"] == initial["next"]
+    lease_path, _, _ = claim_unit("text-change")
+    execution = subprocess.run(check_command, cwd=projects["a"], capture_output=True, text=True)
+    assert execution.returncode != 0
+    assert "CHECK_RESULT_INVALID" in inline_submit(lease_path, "The command failed.", "--exit-code", execution.returncode, ok=False)
+    failed = inline_submit(lease_path, "The unit command found broken app output.", "--exit-code", execution.returncode, status="fail")
+    assert failed["next"]["next_action"] == "repair"
+    assert failed["next"]["task"]["evidence"][-1]["result"] == "fail"
+
+    # Original execute responsibility already has an observed candidate and a
+    # finalized acceptance log when the text-only implementation is registered.
+    lease_path, active, _ = claim_unit("text-change")
+    (projects["a"] / "app.txt").write_text("fixed\n")
+    before_submit = request("observe", {}, **{"lease-file": lease_path, "repository": "fixture-repo"})
+    execution = subprocess.run(check_command, cwd=projects["a"], capture_output=True, text=True)
+    assert execution.returncode == 0
+    diagnostic = out / "existing-check.log"
+    diagnostic.write_text(execution.stdout)
+    existing = client("a", "artifact", "upload", "--lease-file", lease_path, "--candidate", before_submit["candidate_id"], "--file", diagnostic, "--operation-id", "existing-material", "--idempotency-key", "existing-material")
+    before = client("a", "task", "show", "--task", "text-change")
+    assert before["current_step"] == "execute"
+    repaired = inline_submit(lease_path, "Restored the expected app output. Unit command passed; formal registration is pending.", "--candidate", before_submit["candidate_id"])
+    assert repaired["next"]["task"]["candidate"] == before_submit["candidate_id"]
+    assert repaired["next"]["task"]["attempts"][-1]["id"] == active["attempt_id"]
+    assert not repaired["next"]["task"]["attempts"][-1]["outputs"]
+    lease_path, _, _ = claim_unit("text-change")
+    assert "CANDIDATE_CHANGED" in inline_submit(lease_path, "Historical command ran on the old output.", "--exit-code", 0, "--candidate", observed["candidate_id"], ok=False)
+    passed = inline_submit(lease_path, execution.stdout.strip(), "--exit-code", execution.returncode, "--candidate", before_submit["candidate_id"])
+    evidence = passed["next"]["task"]["evidence"][-1]
+    assert passed["next"]["next_action"] == "completed" and evidence["exit_code"] == 0
+    assert evidence["source"] == "remote-command:agent-a" and not evidence["artifacts"]
+    assert [item["id"] for item in client("a", "artifact", "list", "--task", "text-change")["items"]] == [existing["id"]]
+
+    new_task({"id": "text-analysis", "title": "Read-only text analysis", "type": "research", "intent": "inspect", "goal": "analysis", "acceptance": ["inspect fixture"], "checks": [{"id": "observe", "kind": "ui", "method": "scenario", "covers": ["inspect fixture"], "required": True}]})
+    lease_path, _, _ = claim_unit("text-analysis")
+    inline_submit(lease_path, "Inspect the fixture output without editing it.")
+    lease_path, _, _ = claim_unit("text-analysis")
+    actual = (projects["a"] / "app.txt").read_text().strip()
+    inline_submit(lease_path, "The fixture output is " + actual + " after the existing unit check.")
+    lease_path, _, _ = claim_unit("text-analysis")
+    assert inline_submit(lease_path, "Read app.txt and observed output " + actual + ".")["next"]["next_action"] == "completed"
+    assert not client("a", "artifact", "list", "--task", "text-analysis")["items"]
+
+    new_task({"id": "file-delivery", "title": "Declared file and check evidence", "type": "bug", "goal": "verified", "acceptance": ["fixed"], "deliverables": ["runtime:demo.html"], "checks": [definition["checks"][0]]})
+    lease_path, _, shared = claim_unit("file-delivery", "spec/rules.md")
+    assert len(shared["sources"]) == 1
+    inline_submit(lease_path, "Plan to deliver the HTML demo required by the definition.")
+    lease_path, _, reused = claim_unit("file-delivery")
+    assert reused["sources"][0]["artifact_id"] == shared["sources"][0]["artifact_id"]
+    missing = inline_submit(lease_path, "Prepared the required HTML demo.", ok=False)
+    assert "ARTIFACT_REQUIRED" in missing and "runtime:demo.html" in missing
+    assert client("a", "task", "show", "--task", "file-delivery")["current_step"] == "execute"
+    (out / "demo.html").write_text("<!doctype html><title>Fixture demo</title>")
+    delivered = request("submit", {"result": {"status": "pass", "summary": "Packaged the fixture as an HTML demo.", "artifacts": ["runtime:demo.html"]}}, **{"lease-file": lease_path, "repository": "fixture-repo", "artifacts-dir": out})
+    assert delivered["next"]["current_step"] == "verify"
+    demo = client("a", "artifact", "show", "--artifact", delivered["next"]["task"]["attempts"][-1]["outputs"][0])
+    assert demo["filename"] == "demo.html"
+    lease_path, _, _ = claim_unit("file-delivery")
+    missing = inline_submit(lease_path, "Command ran and printed the expected app output.", "--exit-code", 0, ok=False)
+    assert "ARTIFACT_REQUIRED" in missing and "runtime:report.json" in missing
+    blocked = inline_submit(lease_path, "Specialized report is not available for this check.", status="blocked")
+    assert blocked["next"]["task"]["evidence"][-1]["result"] == "blocked" and blocked["next"]["task"]["status"] == "open"
     # Revoking write capability does not turn an old receipt into new authority.
     api("POST", "/api/v1/projects/shared/members", {"username":"writer", "role":"reader"}, expected=201)
     client("a", "runner", "submit", "--runner", "agent-a", "--file", replay_file, *[part for name,value in submit_flags.items() for part in ("--"+name,str(value))])

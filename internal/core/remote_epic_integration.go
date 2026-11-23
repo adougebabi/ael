@@ -17,6 +17,7 @@ type RemoteIntegrationSnapshot struct {
 	Files            map[string]CandidateFile
 	LeafRepositories map[string]string
 	LeafOutputs      map[string]map[string]RemoteIntegrationOutput
+	LeafFiles        map[string]RemoteIntegrationFiles
 	Basis            []BasisReference
 	ImpactEvidence   string
 	ImpactHash       string
@@ -24,6 +25,10 @@ type RemoteIntegrationSnapshot struct {
 
 type RemoteIntegrationOutput struct {
 	Files map[string]CandidateFile
+}
+
+type RemoteIntegrationFiles struct {
+	Before, After map[string]CandidateFile
 }
 
 func (s *Service) validateIntegration(tx *store.Tx, parent *Task) error {
@@ -137,6 +142,14 @@ func (s *Service) PrepareRemoteEpicIntegrationTx(tx *store.Tx, id, revision stri
 			}
 			if !included {
 				return parent, Error("EPIC_LEAF_NOT_INCLUDED", leaf.Definition.ID+" "+artifact)
+			}
+		}
+		if files, ok := snapshot.LeafFiles[leaf.Definition.ID]; ok {
+			for _, change := range candidateChanges(files.Before, files.After) {
+				actual, exists := snapshot.Files[change.Path]
+				if (change.After == nil && exists) || (change.After != nil && (!exists || actual != *change.After)) {
+					return parent, Error("EPIC_LEAF_NOT_INCLUDED", leaf.Definition.ID+" "+change.Path)
+				}
 			}
 		}
 		rechecks, err := epicRechecks(parent, leaf)

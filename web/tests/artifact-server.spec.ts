@@ -14,7 +14,7 @@ test("WB04 资料默认浏览、组合筛选、原图与报告",async({page})=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto(fixture.url+'/#/tasks?project=shared');
  await page.getByLabel('用户名',{exact:true}).fill('reader');await page.getByLabel('密码',{exact:true}).fill('fixture-reader-password');await page.getByRole('button',{name:'登录',exact:true}).click();
- await page.goto(fixture.url+'/#/tasks/task?project=shared');const current=page.getByRole('region',{name:'当前成果',exact:true});await expect(current).toContainText('尚无确认适用');await expect(current.locator('.result-file')).toHaveCount(0);await current.getByRole('button',{name:/相关资料/}).click();await expect(current).toContainText('report.txt');
+ await page.goto(fixture.url+'/#/tasks/task?project=shared');const current=page.getByRole('region',{name:'附件',exact:true});await expect(current).toContainText('当前版本暂无关联附件');await expect(current.locator('.result-file')).toHaveCount(0);await current.getByRole('button',{name:/相关资料/}).click();await expect(current).toContainText('report.txt');
  await page.getByRole('link',{name:'项目设置',exact:true}).click();await page.getByRole('link',{name:'存储与附件',exact:true}).click();
  const storage=page.getByRole('region',{name:'存储与附件',exact:true});
  await expect(storage.getByLabel('不限制附件容量')).toHaveCount(0);

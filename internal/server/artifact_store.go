@@ -157,7 +157,7 @@ func artifactNameValid(name, mimeType string) bool {
 	case "video/mp4":
 		return ext == ".mp4"
 	case "application/octet-stream":
-		return ext == ".bin"
+		return true
 	default:
 		return false
 	}
@@ -268,6 +268,9 @@ func (a *artifactStore) verifyUploadLease(tx *store.Tx, principal standalonePrin
 
 func (a *artifactStore) begin(principal standalonePrincipal, in artifactStartInput) (artifactStartResult, error) {
 	var result artifactStartResult
+	if in.Source == "knowledge snapshot" {
+		return result, errors.New("EXPLICIT_KNOWLEDGE_SHARE_REQUIRED")
+	}
 	if !standaloneID.MatchString(in.OperationID) || !standaloneID.MatchString(in.IdempotencyKey) || in.ExpectedRevision == "" || in.TaskID == "" || !artifactNameValid(in.Filename, in.MIME) || in.Size <= 0 || in.Size > artifactFileLimit || !artifactDigest.MatchString(in.SHA256) || strings.TrimSpace(in.Source) == "" || len(in.Source) > 200 {
 		return result, errors.New("ARTIFACT_INVALID")
 	}

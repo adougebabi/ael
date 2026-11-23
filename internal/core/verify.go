@@ -161,7 +161,8 @@ func (s *Service) verifyClaimed(id, check, executor string, n Next) (Next, error
 				ev.ArtifactHashes[p] = store.Hash(data)
 			}
 		}
-		if c.Kind == "ui" {
+		attachment, needsScreenshot := CheckEvidenceRequirements(Task{}, c)
+		if needsScreenshot {
 			image := false
 			for _, r := range c.Artifacts {
 				if data, err := s.artifactAt(a.Workspace, r); err == nil {
@@ -173,12 +174,12 @@ func (s *Service) verifyClaimed(id, check, executor string, n Next) (Next, error
 			}
 			if !image {
 				result.Status = "blocked"
-				result.Summary = "UI checker requires a real screenshot artifact"
+				result.Summary = "check requires a real screenshot artifact"
 			}
 		}
-		if c.Kind == "ux" && len(c.Artifacts) == 0 {
+		if attachment && !needsScreenshot && len(c.Artifacts) == 0 {
 			result.Status = "blocked"
-			result.Summary = "UX checker requires an interaction report or trace artifact"
+			result.Summary = "declare the required attachment path in check.artifacts"
 		}
 		data, _ := s.artifact(ref)
 		ev.ArtifactHashes[ref] = store.Hash(data)

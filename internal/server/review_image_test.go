@@ -39,8 +39,9 @@ func TestReviewImageIsValidatedAndStoredOutsideCandidate(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		result := core.StepResult{Status: "pass", Summary: "completed"}
+		result := core.StepResult{Status: "pass", Summary: "Defined the visual review of the fixture output."}
 		if step == 1 {
+			result.Summary = "Wrote the fixture output to result.txt for visual review."
 			result.Artifacts = []string{"result.txt"}
 		}
 		n, err = s.Submit(core.Submission{Task: n.Task.Definition.ID, Attempt: claim.Attempt.ID, Token: claim.Attempt.Token, Key: core.ID("test-"), Result: result})

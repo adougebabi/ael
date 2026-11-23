@@ -67,9 +67,6 @@ func (s *Service) assess(r Assessment, a *Attempt) (Next, error) {
 	if c.ID == "" || len(c.Command) > 0 || (c.Method != "" && c.Method != r.Method) {
 		return Next{}, Error("CHECK_METHOD_MISMATCH", r.Check)
 	}
-	if r.Result != "blocked" && (len(r.Inputs) == 0 || len(r.Artifacts) == 0) {
-		return Next{}, Error("ASSESSMENT_EVIDENCE_REQUIRED", "specific inspected inputs and a findings report/trace are required")
-	}
 	workspace := t.CandidateWorkspace
 	if workspace == "" {
 		workspace = s.Root
@@ -94,12 +91,21 @@ func (s *Service) assess(r Assessment, a *Attempt) (Next, error) {
 		}
 		hashes[ref] = store.Hash(b)
 		mime := http.DetectContentType(b)
-		if mime == "image/png" || mime == "image/jpeg" {
+		if slices.Contains(r.Artifacts, ref) && (mime == "image/png" || mime == "image/jpeg") {
 			screenshot = true
 		}
 	}
-	if c.Kind == "ui" && r.Result != "blocked" && !screenshot && !changedClaimedEpic {
-		return Next{}, Error("SCREENSHOT_REQUIRED", r.Check)
+	if r.Result != "blocked" && !changedClaimedEpic {
+		if err := RequireArtifactPaths(c.Artifacts, r.Artifacts); err != nil {
+			return Next{}, err
+		}
+		attachment, needsScreenshot := CheckEvidenceRequirements(Task{}, c)
+		if needsScreenshot && !screenshot {
+			return Next{}, Error("SCREENSHOT_REQUIRED", r.Check)
+		}
+		if attachment && len(r.Artifacts) == 0 {
+			return Next{}, Error("ARTIFACT_REQUIRED", "missing required attachment for check "+r.Check)
+		}
 	}
 	if a == nil {
 		n, e := s.Claim(r.Task, r.Check, r.Executor, "", "")
@@ -113,6 +119,6 @@ func (s *Service) assess(r Assessment, a *Attempt) (Next, error) {
 	}
 	config, _ := json.Marshal(c)
 	source := r.Method + ":" + r.Executor
-	ev := Evidence{Check: c.ID, Candidate: t.Candidate, Revision: t.Definition.Revision, PlanRevision: t.Plan.Revision, Config: store.Hash(config), Result: r.Result, Source: source, Executor: r.Executor, Inputs: r.Inputs, Environment: runtime.GOOS + "/" + runtime.GOARCH, Artifacts: r.Artifacts, ArtifactHashes: hashes, ArtifactStatus: status, Reason: r.Reason, At: time.Now().UTC()}
+	ev := Evidence{EvidenceMode: "direct_observation", Check: c.ID, Candidate: t.Candidate, Revision: t.Definition.Revision, PlanRevision: t.Plan.Revision, Config: store.Hash(config), Result: r.Result, Source: source, Executor: r.Executor, Inputs: r.Inputs, Environment: runtime.GOOS + "/" + runtime.GOARCH, Artifacts: r.Artifacts, ArtifactHashes: hashes, ArtifactStatus: status, Reason: r.Reason, At: time.Now().UTC()}
 	return s.submit(Submission{Task: r.Task, Attempt: a.ID, Token: a.Token, Key: a.ID + "-assessment", Result: StepResult{Status: r.Result, Summary: r.Reason, Artifacts: r.Artifacts, ReturnTo: r.ReturnTo, FailureClass: r.FailureClass}}, &ev)
 }

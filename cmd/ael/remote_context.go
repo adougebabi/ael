@@ -140,6 +140,7 @@ func remoteContextCommandAtWorkspace(cmd string, a args, config, project, worksp
 	case "context publish":
 		taskID, observation := a.get("task", ""), a.get("observation", "")
 		revision, op, key := a.get("expected-revision", ""), a.get("operation-id", ""), a.get("idempotency-key", "")
+		sharePath := a.get("share-source", "")
 		if taskID == "" || observation == "" || revision == "" || op == "" || key == "" {
 			return nil, core.Error("REMOTE_OPERATION_REQUIRED", "provide --task, --observation, --expected-revision and operation keys")
 		}
@@ -149,7 +150,8 @@ func remoteContextCommandAtWorkspace(cmd string, a args, config, project, worksp
 		}
 		if prior["found"] == true {
 			result, ok := prior["result"].(map[string]any)
-			if !ok || result["task_id"] != taskID || result["observation_id"] != observation || result["task_revision"] != revision || result["operation_id"] != op {
+			sharedPath, _ := result["share_source"].(string)
+			if !ok || sharedPath != sharePath || result["task_id"] != taskID || result["observation_id"] != observation || result["task_revision"] != revision || result["operation_id"] != op {
 				return nil, core.Error("IDEMPOTENCY_CONFLICT", "key belongs to another operation")
 			}
 			result["replayed"] = true
@@ -261,57 +263,63 @@ func remoteContextCommandAtWorkspace(cmd string, a args, config, project, worksp
 			}
 			inventory = append(inventory, map[string]any{"id": record.ID, "path": file.Path, "sha256": file.SHA256, "status": record.Status, "kind": record.Kind, "paths": record.Paths, "tasks": record.Tasks, "critical": record.Critical, "action": action, "target": target})
 		}
-		type selectedSource struct {
-			reference core.BasisReference
-			data      []byte
-		}
-		uploadReferences := slices.Clone(basis)
-		for _, path := range []string{"AGENTS.md", "CLAUDE.md"} {
-			record, ok := byPath[path]
-			if !ok || slices.ContainsFunc(uploadReferences, func(reference core.BasisReference) bool { return reference.Source == path }) {
-				continue
-			}
-			if file, ok := files[path]; ok && !file.Deleted {
-				uploadReferences = append(uploadReferences, core.BasisReference{ID: record.ID, Source: path, Version: record.Hash, Status: record.Status, Reason: "project entry snapshot classification"})
-			}
-		}
-		selected := make([]selectedSource, 0, len(uploadReferences))
-		for _, reference := range uploadReferences {
-			record, ok := byID[reference.ID]
-			file, found := files[reference.Source]
-			if !ok || !found || file.Deleted || file.SHA256 != reference.Version || record.Hash != reference.Version {
-				return nil, core.Error("KNOWLEDGE_NOT_IN_CANDIDATE", reference.ID+": source is missing, ignored or changed")
-			}
-			path, err := store.SafePath(workspace, filepath.FromSlash(reference.Source))
-			if err != nil {
-				return nil, core.Error("KNOWLEDGE_SOURCE_UNAVAILABLE", reference.ID)
-			}
-			info, err := os.Stat(path)
-			if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > remoteArtifactLimit {
-				return nil, core.Error("KNOWLEDGE_SOURCE_UNAVAILABLE", reference.ID)
-			}
-			raw, err := os.ReadFile(path)
-			if err != nil || store.Hash(raw) != reference.Version {
-				return nil, core.Error("KNOWLEDGE_SOURCE_CHANGED", reference.ID)
-			}
-			selected = append(selected, selectedSource{reference: reference, data: raw})
-		}
-		sources := make([]map[string]any, 0, len(selected))
-		for _, source := range selected {
-			uploadKey := "context_" + store.Hash([]byte(key + "\n" + source.reference.ID))[:40]
-			uploadArgs := args{Flags: map[string]string{"task": taskID, "source": "knowledge snapshot", "candidate": task.Candidate, "expected-revision": revision, "operation-id": uploadKey, "idempotency-key": uploadKey}}
-			result, err := remoteUploadBytes(uploadArgs, config, project, binding, filepath.Base(source.reference.Source), source.data, nil)
-			if err != nil {
-				return nil, fmt.Errorf("%w; context source %s", err, source.reference.ID)
-			}
-			if result["sha256"] != source.reference.Version {
-				return nil, core.Error("KNOWLEDGE_SOURCE_CHANGED", source.reference.ID)
-			}
-			artifactID, ok := result["id"].(string)
+		references := slices.Clone(basis)
+		if sharePath != "" && !slices.ContainsFunc(references, func(ref core.BasisReference) bool { return ref.Source == sharePath }) {
+			record, ok := byPath[sharePath]
 			if !ok {
-				return nil, core.Error("REMOTE_RESPONSE_INVALID", "missing source artifact ID")
+				return nil, core.Error("KNOWLEDGE_SOURCE_UNAVAILABLE", sharePath)
 			}
-			sources = append(sources, map[string]any{"id": source.reference.ID, "path": source.reference.Source, "artifact_id": artifactID, "reason": source.reference.Reason})
+			references = append(references, core.BasisReference{ID: record.ID, Source: record.Path, Version: record.Hash, Status: record.Status, Reason: "explicit knowledge sharing"})
+		}
+		sources := make([]map[string]any, 0, len(references))
+		for _, ref := range references {
+			record, ok := byID[ref.ID]
+			file, found := files[ref.Source]
+			if !ok || !found || file.Deleted || file.SHA256 != ref.Version || record.Hash != ref.Version {
+				return nil, core.Error("KNOWLEDGE_NOT_IN_CANDIDATE", ref.ID+": source is missing, ignored or changed")
+			}
+			source := map[string]any{"id": ref.ID, "path": ref.Source, "reason": ref.Reason}
+			if ref.Source == sharePath {
+				// Reuse an exact shared version from the task's last context.
+				prior, err := call(http.MethodGet, "/contexts?task="+url.QueryEscape(taskID), nil)
+				if err != nil {
+					return nil, err
+				}
+				if entries, ok := prior["sources"].([]any); ok {
+					for _, entry := range entries {
+						if prior, ok := entry.(map[string]any); ok && prior["id"] == ref.ID && prior["path"] == ref.Source && prior["sha256"] == ref.Version {
+							source["artifact_id"] = prior["artifact_id"]
+							break
+						}
+					}
+				}
+				if source["artifact_id"] == nil {
+					path, err := store.SafePath(workspace, filepath.FromSlash(ref.Source))
+					if err != nil {
+						return nil, core.Error("KNOWLEDGE_SOURCE_UNAVAILABLE", ref.ID)
+					}
+					info, err := os.Stat(path)
+					if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > remoteArtifactLimit {
+						return nil, core.Error("KNOWLEDGE_SOURCE_UNAVAILABLE", ref.ID)
+					}
+					raw, err := os.ReadFile(path)
+					if err != nil || store.Hash(raw) != ref.Version {
+						return nil, core.Error("KNOWLEDGE_SOURCE_CHANGED", ref.ID)
+					}
+					uploadKey := "context_" + store.Hash([]byte(key + "\n" + ref.ID))[:40]
+					uploadArgs := args{Flags: map[string]string{"task": taskID, "source": "knowledge share", "candidate": task.Candidate, "expected-revision": revision, "operation-id": uploadKey, "idempotency-key": uploadKey}}
+					result, err := remoteUploadBytes(uploadArgs, config, project, binding, filepath.Base(ref.Source), raw, nil)
+					if err != nil {
+						return nil, fmt.Errorf("%w; context source %s", err, ref.ID)
+					}
+					id, ok := result["id"].(string)
+					if !ok || result["sha256"] != ref.Version {
+						return nil, core.Error("KNOWLEDGE_SOURCE_CHANGED", ref.ID)
+					}
+					source["artifact_id"] = id
+				}
+			}
+			sources = append(sources, source)
 		}
 		after, err := remote.CapturePortableCandidate(workspace, repository)
 		if err != nil {
@@ -326,7 +334,7 @@ func remoteContextCommandAtWorkspace(cmd string, a args, config, project, worksp
 		if err = knowledge.CheckFresh(workspace); err != nil {
 			return nil, err
 		}
-		payload := map[string]any{"task_id": taskID, "expected_revision": revision, "observation_id": observation, "sources": sources, "inventory": inventory, "operation_id": op, "idempotency_key": key}
+		payload := map[string]any{"task_id": taskID, "expected_revision": revision, "observation_id": observation, "sources": sources, "inventory": inventory, "share_source": sharePath, "operation_id": op, "idempotency_key": key}
 		result, err := call(http.MethodPost, "/contexts", payload)
 		return remoteOutput(result), err
 	case "context record-check":

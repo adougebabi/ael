@@ -353,6 +353,26 @@ const primaryKind = computed(() => {
 const primaryLabels: Record<string, string> = { blocked_review: "打开受阻人工检查", history: "核对历史资料", restore: "确认核对并准备恢复", prepare_integration: "准备整体验收", root_review: "记录根因复核", review: "打开验收", resume: "恢复任务", basis: "查看待核实规范", claim: "接手当前工作", checks: "查看验收与运行检查", submit: "填写实施结果", execution: "查看当前执行", delivery: "查看交付结果" };
 const presentation = computed(() => workPresentation(n.value?.summary));
 const currentHumanChecks=computed(()=>(t.value?.definition.checks || []).filter((c:any)=>n.value?.check_access?.[c.id]?.effective_method==='human' && n.value?.current_checks?.[c.id]));
+const implementation = computed(() => {
+  const attempts = (t.value?.attempts || []).filter((a: any) => a.unit === 'execute' && a.status === 'pass');
+  const current = attempts.findLast((a: any) => a.candidate_version && a.candidate_version === t.value.candidate &&
+    (!a.definition_revision || a.definition_revision === n.value.definition_revision) &&
+    (!a.plan_revision || a.plan_revision === n.value.plan_revision));
+  const attempt = current || attempts.at(-1) || t.value?.history?.attempts?.findLast((a: any) => a.unit === 'execute' && a.status === 'pass');
+  if (!attempt) return null;
+  const summary: string = attempt.reason?.trim() || '';
+  const generic = /^(已完成|完成|详见附件|见附件|done|completed|see attachments?)[.。!！]*$/i.test(summary);
+  return { summary: generic ? '' : summary, current: !!current && !t.value.historical };
+});
+const recordedChecks = computed(() => (t.value?.definition.checks || [])
+  .filter((check: any) => n.value?.current_checks?.[check.id] && n.value?.check_access?.[check.id]?.effective_method !== 'human'));
+function evidenceSource(evidence: any) {
+  const source = evidence.source || '';
+  if (source.startsWith('human:')) return '人工确认';
+  if (source.startsWith('ci:')) return 'CI';
+  if (evidence.evidence_mode === 'agent_reported' || source.startsWith('remote-command:')) return 'Agent 上报';
+  return label(source.split(':')[0]);
+}
 const situationFact=computed(()=>n.value?.summary?.needs_history_review ? historyReviewText(t.value?.confirmation?.reason ? blockerText(t.value.confirmation.reason,false) : '') : workFocus(n.value?.summary));
 const epicDetailsOpen=ref(route.value.query.has('leaf_offset') || route.value.query.has('progress'));
 const bannerTitle = computed(() => presentation.value.title);
@@ -476,9 +496,10 @@ watch(
     basisReader.clear();
   },
 );
+const localBasis = computed(() => (t.value?.applicable_knowledge || []).filter((ref: any) => ref.local_only));
 const unresolvedBasisIDs = computed<string[]>(() => !basis.value ? [] :
   [...new Set<string>(t.value?.definition.knowledge || [])].filter((id) =>
-    !basis.value.records.some((record: any) => record.id === id)
+    !basis.value.records.some((record: any) => record.id === id) && !localBasis.value.some((ref: any) => ref.id === id)
   )
 );
 function explicitReference(k: any) {
@@ -621,7 +642,7 @@ async function submit(advanced = false) {
         .map((x) => x.trim())
         .filter(Boolean),
     };
-    if (attempt.unit === "execute")
+    if (attempt.unit === "execute" && result.value.status === "pass" && result.value.knowledge_reason.trim())
       stepResult.knowledge = {
         status: result.value.knowledge_status,
         reason: result.value.knowledge_reason,
@@ -828,7 +849,7 @@ function checkReason(c: any) {
     return mayJudge.value ? "等候当前候选与验收条件就绪。可先记录人工意见。" : "";
   }
   if (!t.value.candidate) return "待执行者提交候选后运行检查。";
-  if (remoteProject.value || !c.command?.length) return "由具备对应能力的执行者提交报告。";
+  if (remoteProject.value || !c.command?.length) return "由具备对应能力的执行者记录实际检查结果。";
   return canCheck(c) ? "" : "当前条件尚未允许执行该检查。";
 }
 </script>
@@ -896,8 +917,21 @@ function checkReason(c: any) {
           <details v-if="unownedRunning && !remoteProject"><summary>当前接手无法继续？</summary><p>当前标签页没有原责任凭据。若原执行确已停止，可按原规则核实并恢复。</p><button @click="start('resume','恢复无法继续的接手')">核实并恢复接手</button></details>
           <TaskChildren :key="id" :task-id="id" />
         </section>
-        <ResultsGallery :key="id" :task-id="id" :snapshot="n" :hide-empty="!t.historical" />
-        <section v-if="availableHumanChecks.length || currentHumanChecks.length" id="overview-review" class="overview-review" aria-label="当前人工验收"><h2>{{ availableHumanChecks.length?'需要处理的检查':'本次人工验收结果' }}</h2><article v-for="check in availableHumanChecks" :key="check.id" class="overview-review-check" :data-check="check.id"><h3>{{ check.covers?.join('；') || check.id }}</h3><ResultsGallery :task-id="id" :snapshot="n" scope="check" :check-id="check.id" heading="本项验收材料" :limit="3" /><DirectHumanReview v-if="mayJudge && info.project && !n.check_access[check.id].evidence_required" :snapshot="n" :check="check" @saved="reviewSaved" @advanced="manualCheck=check.id" /><button v-else-if="mayJudge" class="primary" @click="manualCheck=check.id">打开专项验收</button><p v-else class="secondary">等待有验收权限的人员处理。</p></article><article v-for="check in currentHumanChecks.filter((c:any)=>!n.check_access[c.id].can_review)" :key="'result-'+check.id" class="review-receipt" role="status"><h3>{{ check.covers?.join('；') || check.id }} · {{ label(n.current_checks[check.id].result) }}</h3><p>{{ n.current_checks[check.id].reason || '已记录具名人工结论' }}</p><a :href="taskHref(id,'checks',check.id)">查看原检查与完整回执</a></article></section>
+        <section v-if="implementation || ((t.status === 'completed' || t.historical) && t.definition.type !== 'epic')" class="content-section" aria-label="实施结果">
+          <h2>{{ implementation && !implementation.current ? '最近实施记录' : '实施结果' }}</h2>
+          <p v-if="implementation?.summary" class="fact-full">{{ implementation.summary }}</p>
+          <p v-else class="secondary">未记录可读的实施说明。</p>
+        </section>
+        <section v-if="recordedChecks.length" class="content-section" aria-label="检查结果">
+          <h2>检查结果</h2>
+          <article v-for="check in recordedChecks" :key="check.id" class="overview-review-check">
+            <h3>{{ check.covers?.join('；') || check.id }} · {{ label(n.current_checks[check.id].result) }}</h3>
+            <p v-if="n.current_checks[check.id].reason" class="fact-full">{{ n.current_checks[check.id].reason }}</p>
+            <small>{{ evidenceSource(n.current_checks[check.id]) }} · <a :href="taskHref(id, 'checks', check.id)">查看检查记录</a></small>
+          </article>
+        </section>
+        <ResultsGallery :key="id" :task-id="id" :snapshot="n" heading="附件" hide-empty />
+        <section v-if="availableHumanChecks.length || currentHumanChecks.length" id="overview-review" class="overview-review" aria-label="当前人工验收"><h2>{{ availableHumanChecks.length?'需要处理的检查':'本次人工验收结果' }}</h2><article v-for="check in availableHumanChecks" :key="check.id" class="overview-review-check" :data-check="check.id"><h3>{{ check.covers?.join('；') || check.id }}</h3><ResultsGallery :task-id="id" :snapshot="n" scope="check" :check-id="check.id" heading="本项验收材料" :limit="3" :hide-empty="!n.check_access[check.id].evidence_required" /><DirectHumanReview v-if="mayJudge && info.project && !n.check_access[check.id].evidence_required" :snapshot="n" :check="check" @saved="reviewSaved" @advanced="manualCheck=check.id" /><button v-else-if="mayJudge" class="primary" @click="manualCheck=check.id">打开专项验收</button><p v-else class="secondary">等待有验收权限的人员处理。</p></article><article v-for="check in currentHumanChecks.filter((c:any)=>!n.check_access[c.id].can_review)" :key="'result-'+check.id" class="review-receipt" role="status"><h3>{{ check.covers?.join('；') || check.id }} · {{ label(n.current_checks[check.id].result) }}</h3><p>{{ n.current_checks[check.id].reason || '已记录具名人工结论' }}</p><a :href="taskHref(id,'checks',check.id)">查看原检查与完整回执</a></article></section>
         <details v-if="t.definition.type==='epic'" class="content-section" :open="epicDetailsOpen" @toggle="epicDetailsOpen=($event.target as HTMLDetailsElement).open"><summary>父级计划与整体验收详情</summary><EpicOverview v-if="epicDetailsOpen" :key="id" :id="id" @open-artifact="(ref,task)=>openArtifact(ref,task)" /></details>
         <details class="content-section task-description">
           <summary>完整任务说明与验收条目</summary>
@@ -937,7 +971,7 @@ function checkReason(c: any) {
         </p>
         <div v-if="basisError" class="alert" role="alert">无法读取任务关联依据。<button @click="load(true)">重试</button></div>
         <p v-if="basis?.health?.state === 'load_failed'" class="secondary">项目资料读取不完整，已保存的依据快照仍可核对。</p>
-        <p v-if="basis && !basis.records.length && !unresolvedBasisIDs.length && basis.health?.state !== 'load_failed'" class="empty">
+        <p v-if="basis && !basis.records.length && !unresolvedBasisIDs.length && !localBasis.length && basis.health?.state !== 'load_failed'" class="empty">
           本任务尚无已提供或显式引用的规范与决策。
         </p>
         <div v-if="basis?.records?.length" class="record-list task-basis-list"><article v-for="k in basis.records" :key="k.id" class="record-row"><span class="basis-icon"><AppIcon name="file" /></span><div>
@@ -945,6 +979,12 @@ function checkReason(c: any) {
           <p v-if="k.summary || k.rationale">{{ k.summary || k.rationale }}</p>
           <small>{{ [label(k.kind), ...basisRelations(k), k.hash?.slice(0, 12)].filter(Boolean).join(' · ') }}</small>
         </div></article></div>
+        <details v-if="localBasis.length">
+          <summary>工作区中的规范依据（{{ localBasis.length }} 项）</summary>
+          <ul class="secondary">
+            <li v-for="ref in localBasis" :key="ref.id">{{ ref.source }} · 正文保存在执行工作区 · {{ ref.version }}</li>
+          </ul>
+        </details>
         <ul v-if="unresolvedBasisIDs.length" class="secondary">
           <li v-for="source in unresolvedBasisIDs" :key="source">{{ source }} · 显式引用，当前未取得正文版本</li>
         </ul>
@@ -1025,26 +1065,25 @@ function checkReason(c: any) {
                 rows="3"
               ></textarea></label
             ><label
-              >本次产物（逗号分隔）<input
+              >附件{{ t.definition.deliverables?.length ? '（按约定提供）' : '（可选）' }}<input
                 v-model="result.artifacts"
                 placeholder="已存在的项目相对路径或 runtime: 引用" /></label
-            ><template v-if="claimed.unit === 'execute'"
-              ><label
-                >规范处理<select v-model="result.knowledge_status">
-                  <option value="unchanged">沿用现有规范</option>
-                  <option value="updated">已更新规范与决策</option>
-                </select></label
-              ><label
-                >规范处理依据 / 阻塞解除条件<textarea
-                  v-model="result.knowledge_reason"
-                  required
-                ></textarea></label
-              ><label v-if="result.knowledge_status === 'updated'"
-                >已变更的规范或决策产物（逗号分隔）<input
-                  v-model="result.knowledge_artifacts"
-                  required
-                  placeholder="实际已存在的项目相对路径" /></label></template
-            ><label v-if="result.status === 'fail'"
+            ><p v-if="t.definition.deliverables?.length">约定文件 {{ t.definition.deliverables.join('、') }}</p>
+            <details v-if="claimed.unit === 'execute' && result.status === 'pass'">
+              <summary>补充规范处理情况</summary>
+              <label>规范处理<select v-model="result.knowledge_status">
+                <option value="unchanged">沿用现有规范</option>
+                <option value="updated">已更新规范与决策</option>
+              </select></label>
+              <label>说明<textarea v-model="result.knowledge_reason"></textarea></label>
+              <label v-if="result.knowledge_status === 'updated'">关联规范文件（可选）
+                <input v-model="result.knowledge_artifacts" placeholder="项目相对路径，逗号分隔" />
+              </label>
+            </details>
+            <label v-if="result.status === 'blocked'">恢复条件
+              <textarea v-model="result.knowledge_reason"></textarea>
+            </label>
+            <label v-if="result.status === 'fail'"
               >失败类别（可选）<input v-model="result.failure_class" maxlength="128" placeholder="有实际失败证据时填写稳定类别，如 http:401" /></label
             ><label v-if="result.status === 'fail'"
               >需要回到哪个责任节点<select v-model="result.return_to">
@@ -1161,12 +1200,16 @@ function checkReason(c: any) {
               <p v-if="t.definition.type === 'epic' && c.affected_tasks?.length">关联排查任务 <template v-for="affected in c.affected_tasks" :key="affected"><a :href="taskHref(affected)">{{ affected }}</a> </template></p>
               <pre v-if="c.command?.length">{{ c.command.join(" ") }}</pre>
               <section v-if="n.current_checks[c.id]" class="evidence">
-                <h4>当前版本的有效证据 · {{ label(n.current_checks[c.id].result) }}</h4>
-                <p>{{ stamp(n.current_checks[c.id].at) }} · {{ n.current_checks[c.id].executor || n.current_checks[c.id].source }}</p>
-                <p class="secondary">{{ n.current_checks[c.id].reused_from ? "复用已有证据，已按当前定义核对" : "本次检查记录" }} · {{ n.current_checks[c.id].evidence_mode === "direct_observation" ? "具名人工直接观察" : n.current_checks[c.id].evidence_mode === "observation_with_attachments" ? "人工观察与附件" : "" }}</p>
-                <p class="secondary">候选 {{ n.current_checks[c.id].candidate?.slice(0, 12) }} · 定义 {{ n.current_checks[c.id].acceptance_revision }} / 计划 {{ n.current_checks[c.id].plan_revision }}</p>
-                <p v-if="n.current_runs[c.id]">{{ blockerText(n.current_checks[c.id].reason) }}</p>
-                <div class="actions">
+                <h4>当前检查结果 · {{ label(n.current_checks[c.id].result) }}</h4>
+                <p>{{ stamp(n.current_checks[c.id].at) }} · {{ evidenceSource(n.current_checks[c.id]) }}<template v-if="n.current_checks[c.id].executor"> · {{ n.current_checks[c.id].executor }}</template></p>
+                <p v-if="n.current_checks[c.id].reused_from" class="secondary">复用已有记录，已按当前定义核对。</p>
+                <p v-if="n.current_checks[c.id].reason" class="fact-full">{{ n.current_checks[c.id].reason }}</p>
+                <details class="source-detail">
+                  <summary>检查版本与来源</summary>
+                  <p>候选 {{ n.current_checks[c.id].candidate }} · 定义 {{ n.current_checks[c.id].acceptance_revision }} / 计划 {{ n.current_checks[c.id].plan_revision }}</p>
+                  <p>{{ n.current_checks[c.id].source }}<template v-if="n.current_checks[c.id].exit_code != null"> · 退出码 {{ n.current_checks[c.id].exit_code }}</template></p>
+                </details>
+                <div v-if="n.current_checks[c.id].artifacts?.length || n.current_checks[c.id].diagnostic_artifacts?.length" class="actions">
                   <button v-for="ref in n.current_checks[c.id].artifacts" :key="ref" @click="openArtifact(ref)">查看证据 {{ artifactName(ref) }}</button>
                   <button v-for="ref in n.current_checks[c.id].diagnostic_artifacts" :key="ref" @click="openArtifact(ref)">查看诊断材料 {{ artifactName(ref) }}</button>
                 </div>

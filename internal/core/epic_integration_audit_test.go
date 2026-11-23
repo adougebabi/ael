@@ -686,7 +686,7 @@ func TestFailedUnboundArtifactCannotDisappearWhenGitIsInitialized(t *testing.T) 
 	if err = os.WriteFile(filepath.Join(s.Root, "output.txt"), []byte("result"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.Submit(core.Submission{Task: id, Attempt: claim.Attempt.ID, Token: claim.Attempt.Token, Key: core.ID("unbound-pass-"), Result: core.StepResult{Status: "pass", Summary: "完成", Artifacts: []string{"output.txt"}}}); err != nil {
+	if _, err = s.Submit(core.Submission{Task: id, Attempt: claim.Attempt.ID, Token: claim.Attempt.Token, Key: core.ID("unbound-pass-"), Result: core.StepResult{Status: "pass", Summary: "将实际结果写入 output.txt", Artifacts: []string{"output.txt"}}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.Verify(id, "unit", "checker"); err != nil {

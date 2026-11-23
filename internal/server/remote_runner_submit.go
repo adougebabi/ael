@@ -2,13 +2,10 @@ package server
 
 import (
 	"ael/internal/core"
-	"ael/internal/remote"
 	"ael/internal/store"
-	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"path"
 	"slices"
 	"strings"
@@ -76,8 +73,8 @@ func (p *portableStore) submitRunner(principal standalonePrincipal, runnerID str
 		if _, _, err := p.service.RemoteAttemptTx(tx, input.TaskID, runnerID, input.AttemptID, input.Token, input.Fence); err != nil {
 			return nil, err
 		}
-		var revision, output, contextID string
-		if err := tx.Row("SELECT claim_revision,output_candidate,context_id FROM remote_runner_attempts WHERE attempt_id=?", input.AttemptID).Scan(&revision, &output, &contextID); err != nil {
+		var revision, output string
+		if err := tx.Row("SELECT claim_revision,output_candidate FROM remote_runner_attempts WHERE attempt_id=?", input.AttemptID).Scan(&revision, &output); err != nil {
 			return nil, err
 		}
 		if revision != input.ExpectedRevision {
@@ -89,53 +86,11 @@ func (p *portableStore) submitRunner(principal standalonePrincipal, runnerID str
 		if task.ContextAttempt != attempt.ID {
 			return nil, core.Error("REVISION_CONFLICT", "task context belongs to a different attempt; inspect runner show before recovery")
 		}
-		var candidateBody string
-		if err := tx.Row("SELECT body FROM portable_candidates WHERE id=?", input.CandidateID).Scan(&candidateBody); err != nil {
-			return nil, errors.New("CANDIDATE_NOT_FOUND")
-		}
-		var candidate remote.PortableCandidate
-		if json.Unmarshal([]byte(candidateBody), &candidate) != nil || remote.ValidatePortableCandidate(candidate) != nil {
-			return nil, errors.New("CANDIDATE_STORAGE_ERROR")
-		}
-		env.Head, env.Files, env.Basis = candidate.Commit, map[string]core.CandidateFile{}, slices.Clone(task.Basis)
-		for _, file := range candidate.Files {
-			if !file.Deleted {
-				mode := uint32(0644)
-				if file.Executable {
-					mode = 0755
-				}
-				env.Files[file.Path] = core.CandidateFile{Mode: mode, Hash: file.SHA256}
-			}
-		}
-		rows, err := tx.Conn.QueryContext(context.Background(), "SELECT artifact_id,sha256 FROM portable_context_sources WHERE context_id=?", contextID)
+		candidate, files, err := integrationCandidate(tx, input.CandidateID)
 		if err != nil {
 			return nil, err
 		}
-		type contextSource struct{ id, hash string }
-		var sources []contextSource
-		for rows.Next() {
-			var source contextSource
-			if err = rows.Scan(&source.id, &source.hash); err != nil {
-				break
-			}
-			sources = append(sources, source)
-		}
-		if err == nil {
-			err = rows.Err()
-		}
-		_ = rows.Close()
-		if err != nil {
-			return nil, err
-		}
-		for _, source := range sources {
-			item, err := scanArtifact(tx.Row("SELECT "+artifactColumns+" FROM artifact_objects WHERE id=?", source.id))
-			if err != nil || item.Status != "finalized" || item.SHA256 != source.hash {
-				return nil, errors.New("CONTEXT_SOURCE_UNAVAILABLE")
-			}
-			if _, err = artifacts.read(item); err != nil {
-				return nil, errors.New("CONTEXT_SOURCE_UNAVAILABLE")
-			}
-		}
+		env.Head, env.Files, env.Basis = candidate.Commit, files, slices.Clone(task.Basis)
 		byPath, byID := map[string]artifactObject{}, map[string]bool{}
 		var total int64
 		for _, binding := range input.Bindings {
@@ -185,41 +140,20 @@ func (p *portableStore) submitRunner(principal standalonePrincipal, runnerID str
 				return nil, errors.New("RUNNER_INVALID")
 			}
 		}
-		if task.Step == "execute" && input.Result.Status == "pass" {
-			matched, report := false, false
-			for name, item := range byPath {
-				if strings.HasPrefix(name, "runtime:") {
-					if item.MIME == "text/plain" && slices.Contains(input.Result.Artifacts, item.ID) {
-						report = true
-					}
-					continue
-				}
-				file, exists := env.Files[name]
-				if !exists {
-					return nil, core.Error("CANDIDATE_CHANGED", "binding path is absent from candidate: "+name)
-				}
-				if file.Hash != item.SHA256 {
-					return nil, core.Error("CANDIDATE_CHANGED", fmt.Sprintf("binding %s expected sha256=%s received=%s", name, file.Hash, item.SHA256))
-				}
-				if slices.Contains(input.Result.Artifacts, item.ID) {
-					matched = true
+		resultPaths := make([]string, 0, len(input.Result.Artifacts))
+		for name, item := range byPath {
+			if !strings.HasPrefix(name, "runtime:") && (task.Step == "execute" || task.Step == "verify") {
+				if file, exists := env.Files[name]; !exists || file.Hash != item.SHA256 {
+					return nil, core.Error("CANDIDATE_CHANGED", "binding does not match candidate file: "+name)
 				}
 			}
-			if task.Definition.Intent == "inspect" {
-				if !report {
-					return nil, core.Error("ARTIFACT_REQUIRED", "all result artifacts must be finalized, bound, and uploaded for this task, attempt and candidate")
-				}
-			} else if !matched {
-				return nil, core.Error("ARTIFACT_REQUIRED", "execute pass needs actual candidate file bytes; use runner submit --lease-file CLAIM --repository REPO with result.artifacts containing repository paths")
+			if slices.Contains(input.Result.Artifacts, item.ID) {
+				resultPaths = append(resultPaths, name)
 			}
 		}
-		if task.Step == "verify" {
-			for name, item := range byPath {
-				if !strings.HasPrefix(name, "runtime:") {
-					if file, ok := env.Files[name]; !ok || file.Hash != item.SHA256 {
-						return nil, errors.New("CANDIDATE_CHANGED")
-					}
-				}
+		if task.Step == "execute" && input.Result.Status == "pass" {
+			if err := core.RequireArtifactPaths(task.Definition.Deliverables, resultPaths); err != nil {
+				return nil, err
 			}
 		}
 		if p.requestDigest != "" {
@@ -270,12 +204,6 @@ func (p *portableStore) submitRunner(principal standalonePrincipal, runnerID str
 		} else if input.Method != "command" && input.ExitCode != nil {
 			return nil, errors.New("CHECK_RESULT_INVALID")
 		}
-		if input.Result.Status != "blocked" && len(input.Result.Artifacts) == 0 {
-			return nil, core.Error("ARTIFACT_REQUIRED", "all result artifacts must be finalized, bound, and uploaded for this task, attempt and candidate")
-		}
-		if (input.Method == "model" || input.Method == "scenario") && input.Result.Status != "blocked" && len(input.Inputs) == 0 {
-			return nil, errors.New("ASSESSMENT_EVIDENCE_REQUIRED")
-		}
 		hashes := map[string]string{}
 		for _, name := range input.Inputs {
 			file, ok := env.Files[name]
@@ -284,27 +212,27 @@ func (p *portableStore) submitRunner(principal standalonePrincipal, runnerID str
 			}
 			hashes[name] = file.Hash
 		}
-		for _, name := range check.Artifacts {
-			item, ok := byPath[name]
-			if (!ok || !slices.Contains(input.Result.Artifacts, item.ID)) && input.Result.Status != "blocked" {
-				return nil, core.Error("ARTIFACT_REQUIRED", "all result artifacts must be finalized, bound, and uploaded for this task, attempt and candidate")
-			}
-		}
 		image := false
 		for _, item := range byPath {
 			hashes[item.ID] = item.SHA256
-			if item.MIME == "image/png" || item.MIME == "image/jpeg" {
+			if slices.Contains(input.Result.Artifacts, item.ID) && (item.MIME == "image/png" || item.MIME == "image/jpeg") {
 				image = true
 			}
 		}
-		if check.Kind == "ui" && input.Result.Status != "blocked" && !image {
-			return nil, errors.New("SCREENSHOT_REQUIRED")
-		}
-		if check.Kind == "ux" && input.Result.Status != "blocked" && len(input.Result.Artifacts) == 0 {
-			return nil, core.Error("ARTIFACT_REQUIRED", "all result artifacts must be finalized, bound, and uploaded for this task, attempt and candidate")
-		}
 		if input.Result.Status != "blocked" {
-			item, ok := byPath["runtime:report.json"]
+			if err := core.RequireArtifactPaths(check.Artifacts, resultPaths); err != nil {
+				return nil, err
+			}
+			attachment, screenshot := core.CheckEvidenceRequirements(core.Task{}, check)
+			if screenshot && !image {
+				return nil, core.Error("SCREENSHOT_REQUIRED", check.ID)
+			}
+			if attachment && len(resultPaths) == 0 {
+				return nil, core.Error("ARTIFACT_REQUIRED", "missing required attachment for check "+check.ID)
+			}
+		}
+		// Legacy protocol reports still need to match the claim when provided.
+		if item, ok := byPath["runtime:report.json"]; ok && input.Result.Status != "blocked" {
 			var report struct {
 				Candidate          string   `json:"candidate"`
 				Check              string   `json:"check"`
@@ -315,7 +243,7 @@ func (p *portableStore) submitRunner(principal standalonePrincipal, runnerID str
 				Observations       string   `json:"observations"`
 				Covers             []string `json:"covers"`
 			}
-			if !ok || !slices.Contains(input.Result.Artifacts, item.ID) || json.Unmarshal(content[item.ID], &report) != nil || report.Candidate != input.CandidateID || report.Check != check.ID || report.DefinitionRevision != task.Definition.Revision || report.PlanRevision != task.Plan.Revision || report.Method != input.Method || report.Source != "external-"+input.Method+":"+runnerID || strings.TrimSpace(report.Observations) == "" {
+			if !slices.Contains(input.Result.Artifacts, item.ID) || json.Unmarshal(content[item.ID], &report) != nil || report.Candidate != input.CandidateID || report.Check != check.ID || report.DefinitionRevision != task.Definition.Revision || report.PlanRevision != task.Plan.Revision || report.Method != input.Method || report.Source != "external-"+input.Method+":"+runnerID || strings.TrimSpace(report.Observations) == "" {
 				return nil, errors.New("ASSESSMENT_EVIDENCE_REQUIRED")
 			}
 			for _, cover := range check.Covers {
@@ -335,7 +263,7 @@ func (p *portableStore) submitRunner(principal standalonePrincipal, runnerID str
 				diagnostic = append(diagnostic, id)
 			}
 		}
-		return &core.Evidence{Check: check.ID, Candidate: input.CandidateID, Revision: task.Definition.Revision, PlanRevision: task.Plan.Revision, Config: store.Hash(config), Result: input.Result.Status, Source: source, Executor: runnerID, Inputs: slices.Clone(input.Inputs), Environment: "remote-runner", Artifacts: slices.Clone(input.Result.Artifacts), DiagnosticArtifacts: diagnostic, ArtifactHashes: hashes, Reason: input.Result.Summary, At: time.Now().UTC()}, nil
+		return &core.Evidence{EvidenceMode: "agent_reported", ExitCode: input.ExitCode, Check: check.ID, Candidate: input.CandidateID, Revision: task.Definition.Revision, PlanRevision: task.Plan.Revision, Config: store.Hash(config), Result: input.Result.Status, Source: source, Executor: runnerID, Inputs: slices.Clone(input.Inputs), Environment: "remote-runner", Artifacts: slices.Clone(input.Result.Artifacts), DiagnosticArtifacts: diagnostic, ArtifactHashes: hashes, Reason: input.Result.Summary, At: time.Now().UTC()}, nil
 	}
 	sub := core.Submission{Task: input.TaskID, Attempt: input.AttemptID, Token: input.Token, Key: key, Result: input.Result}
 	next, err := p.service.SubmitRemote(sub, requestHash, env)

@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"path"
 	"slices"
 	"strings"
 	"time"
@@ -22,11 +23,12 @@ type Check struct {
 
 // BasisReference identifies the exact authoritative input supplied to an executor.
 type BasisReference struct {
-	ID      string `json:"id"`
-	Source  string `json:"source"`
-	Version string `json:"version"`
-	Status  string `json:"status"`
-	Reason  string `json:"reason"`
+	ID        string `json:"id"`
+	Source    string `json:"source"`
+	Version   string `json:"version"`
+	Status    string `json:"status"`
+	Reason    string `json:"reason"`
+	LocalOnly bool   `json:"local_only,omitempty"`
 }
 type KnowledgeOutcome struct {
 	Status    string   `json:"status"`
@@ -60,6 +62,7 @@ type IntegrationImpact struct {
 
 type Definition struct {
 	IntegrationImpact *IntegrationImpact `json:"integration_impact,omitempty" yaml:"integration_impact,omitempty"`
+	Deliverables      []string           `json:"deliverables,omitempty" yaml:"deliverables,omitempty"`
 	Intent            string             `json:"intent,omitempty" yaml:"intent,omitempty"`
 	OriginalRequest   string             `json:"original_request,omitempty" yaml:"original_request,omitempty"`
 	Legacy            map[string]any     `json:"legacy,omitempty" yaml:"legacy,omitempty"`
@@ -137,6 +140,7 @@ type ReviewComparison struct {
 	Actual   ReviewImage `json:"actual"`
 }
 type Evidence struct {
+	ExitCode            *int              `json:"exit_code,omitempty" yaml:"exit_code,omitempty"`
 	EvidenceMode        string            `json:"evidence_mode,omitempty"`
 	Comparison          *ReviewComparison `json:"comparison,omitempty"`
 	DiagnosticArtifacts []string          `json:"diagnostic_artifacts,omitempty" yaml:"diagnostic_artifacts,omitempty"`
@@ -312,6 +316,15 @@ func Validate(d Definition) error {
 	}
 	if d.IntegrationImpact != nil && d.Type != "epic" {
 		return Error("INVALID_INTEGRATION_IMPACT", "only an epic may declare integration impact")
+	}
+	if len(d.Deliverables) > 0 && d.Type == "epic" {
+		return Error("INVALID_DEFINITION", "declare epic files on a required integration check")
+	}
+	for _, ref := range d.Deliverables {
+		name := strings.TrimPrefix(ref, "runtime:")
+		if name == "" || path.IsAbs(name) || path.Clean(name) != name || name == "." || name == ".." || strings.HasPrefix(name, "../") || strings.ContainsAny(name, "\\:\x00\r\n") {
+			return Error("INVALID_DEFINITION", "deliverables must be project-relative paths or runtime: references")
+		}
 	}
 	if d.Intent == "inspect" && d.Goal != "report" && d.Goal != "analysis" {
 		return Error("INSPECTION_GOAL_REQUIRED", "inspection delivers a report or analysis; it cannot authorize source modification")
