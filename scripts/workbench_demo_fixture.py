@@ -153,8 +153,8 @@ try:
         cli(name, 'runner', 'register', '--file', file, '--operation-id', 'runner-' + name, '--idempotency-key', 'runner-' + name)
     command = ['python3', '-c', "from pathlib import Path; assert Path('app.txt').read_text() == 'fixed\\n'; print('fixture passed')"]
 
-    def create(task, title, kind='bug', checks=None, request='', acceptance=None, scope=None):
-        definition = {'id': task, 'title': title, 'type': kind, 'goal': 'verified', 'scope': scope or ['app.txt'],
+    def create(task, title, kind='bug', checks=None, request='', acceptance=None, scope=None, goal='verified'):
+        definition = {'id': task, 'title': title, 'type': kind, 'goal': goal, 'scope': scope or ['app.txt'],
                       'acceptance': acceptance or ['结果符合描述'], 'knowledge': ['source:spec/rules.md'],
                       'checks': checks if checks is not None else [{'id': 'unit', 'kind': 'functional', 'method': 'command', 'command': command, 'covers': (acceptance or ['结果符合描述'])[:1], 'required': True}]}
         if request:
@@ -322,6 +322,78 @@ for (const [file,title,accent] of SHOTS) {await page.setContent('<!doctype html>
     create('old-cancel', '旧版日程导出', request='已由新的日程视图取代。')
     revision = cli('a', 'task', 'show', '--task', 'old-cancel')['revision']
     api('POST', '/api/v1/projects/shared/tasks/old-cancel/cancel', {'reason': '已由新的日程视图取代', 'expected_revision': revision, 'operation_id': 'cancel-old', 'idempotency_key': 'cancel-old'})
+
+    # Delivery chain through the real repository-mode submit (the path agents
+    # use): source, Markdown, logs and a check report, where two submissions
+    # carry the same source and scope note (9 objects, 7 distinct contents).
+    npc_accept = ['已保存的响应在另一进程继续处理，不重复请求', '恢复与重放不重复产生业务结果', '来源取消后拒绝继续或抑制结果']
+    create('npc-recovery', 'NPC 持久响应的跨进程恢复验收', 'improvement', acceptance=npc_accept, request='补齐已保存 NPC 响应在进程重启后的恢复验收覆盖。',
+           scope=['app.txt', 'internal/npc/recovery_test.go', 'docs/npc-scope.md'], checks=[{'id': 'scenario', 'kind': 'functional', 'method': 'command', 'command': command, 'covers': npc_accept, 'required': True}])
+    work = to_execute('a', 'npc-recovery')
+    root = projects['a']
+    (root / 'app.txt').write_text('fixed\n')
+    (root / 'internal/npc').mkdir(parents=True, exist_ok=True)
+    (root / 'internal/npc/recovery_test.go').write_text('package npc\n\nimport "testing"\n\n// Fixture source: five recovery scenarios across two processes.\nfunc TestCheckpointAcrossProcesses(t *testing.T) {\n\tfor _, scenario := range []string{"opportunity_accept", "opportunity_decline", "opportunity_cancelled_source", "moment_comment", "moment_cancelled_source"} {\n\t\tt.Run(scenario, func(t *testing.T) {\n\t\t\tfirst := runChild(t, "checkpoint", scenario)\n\t\t\tresumed := runChild(t, "resume", scenario)\n\t\t\tif first.PID == resumed.PID {\n\t\t\t\tt.Fatal("same process")\n\t\t\t}\n\t\t})\n\t}\n}\n')
+    (root / 'docs').mkdir(exist_ok=True)
+    (root / 'docs/npc-scope.md').write_text('# 验收范围与限制\n\n## 覆盖\n\n- 五个受控恢复场景\n- 隔离数据库与受控 HTTP\n\n## 不覆盖\n\n- 真实模型的自然语言质量\n- 绕过清理逻辑的强制终止\n')
+    runtime_dir = out / 'runtime-npc'
+    runtime_dir.mkdir()
+    operation('a', 'submit', dict(work['lease'], expected_revision=work['revision'], result={'status': 'pass', 'summary': '补齐跨进程恢复测试，并写明验收范围与限制', 'artifacts': ['internal/npc/recovery_test.go', 'docs/npc-scope.md'], 'knowledge': {'status': 'unchanged', 'reason': '规范未变化'}}),
+              repository='fixture-repo', **{'artifacts-dir': runtime_dir})
+    cli('a', 'knowledge', 'index')  # docs/ joined the indexed source inventory
+    work = claim('a', 'npc-recovery')
+    assert work['state']['current_step'] == 'verify', work['state']['current_step']
+    observed = operation('a', 'observe', dict(work['lease'], expected_revision=work['revision']), repository='fixture-repo')
+    scenarios = [('机会响应 · 接受', '恢复后继续原操作'), ('机会响应 · 拒绝', '不重复产生响应与业务效果'), ('机会响应 · 来源取消', '拒绝继续或抑制新结果'),
+                 ('动态评论 · 正常恢复', '沿用已保存响应继续处理'), ('动态评论 · 来源取消', '保留响应记录，不产生新效果')]
+    (runtime_dir / 'report.json').write_text(json.dumps({'candidate': observed['candidate_id'], 'check': 'scenario', 'definition_revision': work['state']['definition_revision'],
+        'plan_revision': work['state']['plan_revision'], 'method': 'command', 'source': 'external-command:fixture-a', 'covers': npc_accept,
+        'observations': '五个受控恢复场景的验收记录；每个场景在两个独立进程中执行并核对业务去重。',
+        'scenarios': [{'scenario': a, 'focus': b, 'result': 'pass'} for a, b in scenarios],
+        'limitations': ['使用隔离数据库和受控 HTTP，没有调用真实模型', '不覆盖绕过清理逻辑的强制终止']}, ensure_ascii=False, indent=2))
+    log_lines = ['$ go test ./internal/npc -run TestCheckpointAcrossProcesses -count=1 -v']
+    for index, (name, _) in enumerate(scenarios):
+        log_lines.append('=== RUN   TestCheckpointAcrossProcesses/' + name)
+        log_lines.extend('17:36:%02d  INFO  fixture.step  scenario=%d step=%d' % (step % 60, index, step) for step in range(24))
+        log_lines.append('17:37:00  INFO  checkpoint.saved  scenario=%d' % index)
+        log_lines.append('--- PASS: TestCheckpointAcrossProcesses/' + name)
+    (runtime_dir / 'scenarios.log').write_text('\n'.join(log_lines) + '\nPASS\n')
+    (runtime_dir / 'regression.log').write_text('ok  \tfixture/internal/npc\t0.412s\nok  \tfixture/internal/reply\t0.210s\n')
+    (runtime_dir / 'baseline.txt').write_text('验收基线：fixture 仓库当前候选；隔离数据库；受控 HTTP。\n')
+    (runtime_dir / 'vet.log').write_text('$ go vet ./internal/npc\n')
+    run(command, root)
+    operation('a', 'submit', dict(work['lease'], expected_revision=work['revision'], result={'status': 'pass', 'summary': '五个受控恢复场景通过，恢复与重放没有重复产生业务结果',
+              'artifacts': ['runtime:report.json', 'internal/npc/recovery_test.go', 'docs/npc-scope.md', 'runtime:scenarios.log', 'runtime:regression.log', 'runtime:baseline.txt', 'runtime:vet.log']},
+              method='command', exit_code=0, inputs=['app.txt']), repository='fixture-repo', **{'artifacts-dir': runtime_dir})
+    assert cli('a', 'task', 'show', '--task', 'npc-recovery')['next_action'] == 'completed'
+
+    # Report goal: the report is delivered while its check records a failure.
+    create('menu-audit', '菜单焦点验收报告', 'improvement', goal='report', acceptance=['菜单关闭后焦点回到触发按钮'], request='检查菜单焦点行为并交付验收报告。',
+           checks=[{'id': 'focus', 'kind': 'functional', 'method': 'command', 'command': command, 'covers': ['菜单关闭后焦点回到触发按钮'], 'required': True}])
+    execute('a', 'menu-audit', '已按验收清单检查菜单焦点行为')
+    work = claim('a', 'menu-audit')
+    observed = operation('a', 'observe', dict(work['lease'], expected_revision=work['revision']), repository='fixture-repo')
+    report = private('report-menu-audit', {'candidate': observed['candidate_id'], 'check': 'focus', 'definition_revision': work['state']['definition_revision'],
+                                           'plan_revision': work['state']['plan_revision'], 'method': 'command', 'source': 'external-command:fixture-a', 'covers': ['菜单关闭后焦点回到触发按钮'],
+                                           'observations': '按 Esc 关闭菜单后，焦点落在页面顶部而不是触发按钮。'})
+    submit(work, [(report, 'runtime:report.json')], status='fail', summary='菜单关闭后焦点没有回到触发按钮', exit_code=1, method='command', inputs=['app.txt'])
+    manifest['report_task_state'] = cli('a', 'task', 'show', '--task', 'menu-audit')['next_action']
+    # Analysis goal: only define and analysis steps deliver a conclusion.
+    create('retry-analysis', '媒体失败重试策略分析', 'research', goal='analysis', checks=[{'id': 'review', 'kind': 'review', 'method': 'command', 'command': command, 'covers': ['给出失败分类与建议'], 'required': True}], acceptance=['给出失败分类与建议'], request='分析媒体调用失败的分类，给出重试建议。', scope=['docs/retry-analysis.md'])
+    work = to_execute('a', 'retry-analysis')
+    (out / 'runtime-analysis').mkdir()
+    (projects['a'] / 'docs').mkdir(exist_ok=True)
+    (projects['a'] / 'docs/retry-analysis.md').write_text('# 媒体失败重试策略分析\n\n## 结论\n\n失败分为超时、限流、内容拒绝三类；仅对前两类按退避重试。\n\n## 待确认\n\n- 限流阈值需要服务方确认\n')
+    operation('a', 'submit', dict(work['lease'], expected_revision=work['revision'], result={'status': 'pass', 'summary': '失败分为超时、限流、内容拒绝三类；建议仅对前两类按退避重试',
+              'artifacts': ['docs/retry-analysis.md'], 'knowledge': {'status': 'unchanged', 'reason': '规范未变化'}}), repository='fixture-repo', **{'artifacts-dir': out / 'runtime-analysis'})
+    cli('a', 'knowledge', 'index')
+    work = claim('a', 'retry-analysis')
+    observed = operation('a', 'observe', dict(work['lease'], expected_revision=work['revision']), repository='fixture-repo')
+    report = private('report-retry-analysis', {'candidate': observed['candidate_id'], 'check': 'review', 'definition_revision': work['state']['definition_revision'],
+                                               'plan_revision': work['state']['plan_revision'], 'method': 'command', 'source': 'external-command:fixture-a', 'covers': ['给出失败分类与建议'],
+                                               'observations': '分析文档包含三类失败与对应建议。'})
+    submit(work, [(report, 'runtime:report.json')], summary='分析结论已核对')
+    manifest['analysis_task_state'] = cli('a', 'task', 'show', '--task', 'retry-analysis')['next_action']
 
     # Another project, so switching can be checked for leaks.
     api('POST', '/api/v1/projects/other/tasks', {'definition': {'id': 'other-only', 'title': '另一个项目的唯一任务', 'type': 'bug', 'goal': 'verified', 'acceptance': ['仅属于另一个项目']},

@@ -465,6 +465,12 @@ func (h *standaloneHandler) remoteDashboard(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if err != nil {
+		// A material read reports why the original cannot be read (missing,
+		// purged or content mismatch) instead of a generic task rejection.
+		if (view == "artifact" || view == "artifact-status") && (errors.Is(err, sql.ErrNoRows) || strings.HasPrefix(err.Error(), "ARTIFACT_")) {
+			artifactError(w, err)
+			return
+		}
 		standaloneTaskError(w, err)
 		return
 	}

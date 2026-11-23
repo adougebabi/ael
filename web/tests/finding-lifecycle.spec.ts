@@ -7,14 +7,15 @@ async function login(page: Page, user = "owner", password = "fixture-admin-passw
   if (user === "owner" && ownerCookies.length) {
     await page.context().addCookies(ownerCookies);
     await page.goto(fixture.url + "/#/tasks?project=shared");
-    await expect(page.getByRole("heading", { name: "工作台", exact: true })).toBeVisible();
+    await expect(page.locator(".wb-sidebar")).toBeVisible();
     return;
   }
   await page.goto(fixture.url + "/#/tasks?project=shared");
   await page.getByLabel("用户名", { exact: true }).fill(user);
   await page.getByLabel("密码", { exact: true }).fill(password);
   await page.getByRole("button", { name: "登录", exact: true }).click();
-  await page.getByLabel("项目列表").getByRole("listitem").filter({ hasText: "Lifecycle shared" }).getByRole("button", { name: "查看项目", exact: true }).click();
+  // The project in the link opens directly in the workbench shell.
+  await expect(page.locator(".wb-sidebar")).toBeVisible();
   if (user === "owner") ownerCookies = await page.context().cookies();
 }
 async function openFinding(page: Page, task: string, finding: string) {

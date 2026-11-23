@@ -8,6 +8,8 @@ import ResultsGallery from "./ResultsGallery.vue";
 import FindingActions from "./FindingActions.vue";
 import EvidenceComparison from "./EvidenceComparison.vue";
 import LoadState from "./LoadState.vue";
+import { findingReading, findingStages } from "../findings";
+import { taskHref } from "../router";
 import Pagination from "./Pagination.vue";
 
 const comparison = ref({ baseline: "", actual: "" });
@@ -76,14 +78,19 @@ onUnmounted(() => clearInterval(timer));
         <button v-if="filtered" class="inline-link" @click="clearFilters">清除筛选</button>
       </p>
       <article v-for="finding in list.data.value.items" :key="finding.id" class="record-row">
-        <div><h3><button class="inline-link" @click="setQuery({ finding: finding.id })">{{ finding.title }}</button></h3><p>{{ severityNames[finding.severity] }} · {{ finding.current_completeness === 'complete' ? '证据已齐' : '待补证' }} · 出现 {{ finding.occurrence_count }} 次<span v-if="finding.validity === 'historical'"> · 历史版本</span><span v-else-if="finding.validity !== 'current'"> · 版本待核对</span></p><small>{{ finding.check_id ? '检查 ' + finding.check_id : '任务级发现' }} · {{ finding.rule }} · {{ finding.route }} · {{ finding.location.path || finding.location.selector || '页面整体' }}</small><p class="secondary">候选 {{ finding.candidate_id }}</p></div>
+        <div><h3><button class="inline-link" @click="setQuery({ finding: finding.id })">{{ finding.title }}</button> <span class="tag">{{ findingReading(finding).label }}</span></h3><p>{{ severityNames[finding.severity] }} · {{ finding.current_completeness === 'complete' ? '证据已齐' : '待补证' }} · 出现 {{ finding.occurrence_count }} 次<span v-if="finding.validity === 'historical'"> · 历史版本</span><span v-else-if="finding.validity !== 'current'"> · 版本待核对</span></p><small>{{ finding.check_id ? '检查 ' + finding.check_id : '任务级发现' }} · {{ finding.rule }} · {{ finding.route }} · {{ finding.location.path || finding.location.selector || '页面整体' }}</small><p class="secondary">候选 {{ finding.candidate_id }}</p></div>
       </article>
       <Pagination v-if="list.data.value.total > 20 || offset" :offset="offset" :limit="20" :total="list.data.value.total" name="发现" @change="setQuery({ finding_offset: $event })" />
     </template>
     <template v-else>
       <LoadState :loading="record.loading.value" :error="record.error.value" :last="record.last.value" @retry="load()" />
       <template v-if="record.data.value">
-        <h3>{{ record.data.value.title }}</h3>
+        <section class="fd-situation" aria-label="现象与当前处理">
+          <div class="fd-head"><h3>{{ record.data.value.title }}</h3><span class="tag" :class="{ pass: 'done', warn: 'amber', fail: 'red', info: 'blue', muted: '' }[findingReading(record.data.value).tone]">{{ findingReading(record.data.value).label }}</span></div>
+          <ol class="fd-stages" aria-label="处理阶段"><li v-for="(stage, i) in findingStages" :key="stage" :class="{ done: i + 1 < findingReading(record.data.value).stage, current: i + 1 === findingReading(record.data.value).stage }">{{ stage }}</li></ol>
+          <div class="fd-state" :class="findingReading(record.data.value).tone"><strong>{{ findingReading(record.data.value).title }}</strong><p>{{ findingReading(record.data.value).detail }}</p></div>
+          <p v-if="record.data.value.repair_task" class="fd-repair">修复任务：<a :href="taskHref(record.data.value.repair_task.id)">{{ record.data.value.repair_task.title || record.data.value.repair_task.id }}</a><template v-if="record.data.value.repair_task.check"> · <a :href="href('/tasks/' + encodeURIComponent(record.data.value.repair_task.id), { section: 'checks', check: record.data.value.repair_task.check })">复验检查 {{ record.data.value.repair_task.check }}</a></template></p>
+        </section>
         <p>{{ severityNames[record.data.value.severity] }} · 规则 {{ record.data.value.rule }} · 出现 {{ record.data.value.occurrence_count }} 次</p>
         <p>受检候选 <code>{{ record.data.value.candidate_id }}</code> · 定义 {{ record.data.value.definition_revision }} · 计划 {{ record.data.value.plan_revision }}</p>
         <p>路由 {{ record.data.value.route || '未声明' }} · 定位 {{ record.data.value.location.selector || record.data.value.location.path || '页面整体' }}<span v-if="record.data.value.location.line"> · 行 {{ record.data.value.location.line }}</span></p>

@@ -87,7 +87,7 @@ async function submit(result: 'pass' | 'fail') {
     emit('saved', payload.result, receipt.value);
   } catch (e) {
     if (e instanceof ApiError && /VERSION|CANDIDATE|NOT_ALLOWED|FORBIDDEN|REQUIRED|MISMATCH|TERMINAL|EVIDENCE/.test(e.code)) pending.value = null;
-    error.value = pending.value ? '提交结果未知：服务可能已经记录。请原样重试，同一请求不会被重复记录。' : readableError(String(e));
+    error.value = pending.value ? '提交结果未知：原请求可能已经成功。先核对该请求的回执，避免重复提交；也可以原样重试，同一请求不会被重复记录。' : readableError(String(e));
     persist();
   } finally { busy.value = false; }
 }
@@ -101,6 +101,22 @@ watch(recorded, (value) => {
   receipt.value = '服务端已记录这次提交（' + label(value.result) + '），原请求已生效，无需重试。';
   emit('saved', value.result, receipt.value);
 }, { immediate: true });
+// An unknown result is first looked up by the original request's key; only a
+// confirmed absence suggests resending the same request.
+const lookingUp = ref(false);
+async function lookupReceipt() {
+  const p = pending.value; if (!p || lookingUp.value) return;
+  lookingUp.value = true;
+  try {
+    const value = await api('/api/operation-receipt?key=' + encodeURIComponent(p.request_key));
+    if (value?.found === false) { error.value = '服务端没有这次请求的记录。可以原样重试，同一请求不会被重复记录。'; return; }
+    pending.value = null; clearReviewDraft(scope, task.value.definition.id, props.check.id); error.value = '';
+    receiptTone.value = p.result === 'pass' ? 'ok' : '';
+    receipt.value = '已核对原请求回执：服务端已记录这次提交（' + label(p.result) + '），无需重试。';
+    emit('saved', p.result, receipt.value);
+  } catch (e) { error.value = '暂时无法核对回执：' + readableError(String(e)) + '。原请求仍保留，可稍后再核对或原样重试。'; }
+  finally { lookingUp.value = false; }
+}
 function recheck() { if (pending.value) return; target.value = { candidate: task.value.candidate, revision: props.snapshot.definition_revision, plan_revision: props.snapshot.plan_revision }; error.value = ''; persist(); }
 const head = computed(() => recorded.value?.result === 'pass' ? '验收记录' : eligible.value && mayJudge.value ? '需要你的确认' : eligible.value ? '等待有权限的人确认' : '验收条件');
 const tag = computed(() => recorded.value?.result === 'pass' ? ['已通过', 'done'] : recorded.value?.result === 'fail' ? ['需要调整', 'red'] : recorded.value?.result === 'blocked' ? ['暂无法验证', 'amber'] : eligible.value ? ['待验收', 'blue'] : ['尚未进入验收', '']);
@@ -126,7 +142,7 @@ const tag = computed(() => recorded.value?.result === 'pass' ? ['已通过', 'do
       </form>
       <div v-else-if="!receipt && eligible && mayJudge" class="wb-review-controls">
         <label v-if="!remoteProject" class="wb-actor">记录人<input v-model="actor" autocomplete="name" @input="persist" /></label>
-        <button v-if="pending" class="primary" :disabled="busy" @click="submit(pending.result)">原样重试提交</button>
+        <template v-if="pending"><button v-if="remoteProject" class="primary" :disabled="busy || lookingUp" @click="lookupReceipt">{{ lookingUp ? '正在核对…' : '核对原请求回执' }}</button><button :class="remoteProject ? '' : 'primary'" :disabled="busy || lookingUp" @click="submit(pending.result)">原样重试提交</button></template>
         <template v-else>
           <button class="primary" :disabled="busy || changed || evidenceRequired" @click="submit('pass')"><AppIcon name="tick" />{{ busy ? '正在提交…' : '确认通过' }}</button>
           <button :disabled="busy || changed" @click="mode = 'adjust'; persist()">需要调整</button>

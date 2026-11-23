@@ -2416,10 +2416,10 @@ test("TD-05 任务读取错误保留页面与重试入口，断线明确标记�
   await expect(error).toContainText("尚未加载");
   unavailable = false;
   await error.getByRole("button", { name: "重试" }).click();
-  await expect(page.locator(".wb-situation")).toBeVisible();
+  await expect(page.locator(".wb-situation, .ds-card").first()).toBeVisible();
   unavailable = true;
   await expect(error).toContainText("当前显示内容可能已过期", { timeout: 12000 });
-  await expect(page.locator(".wb-situation")).toBeVisible();
+  await expect(page.locator(".wb-situation, .ds-card").first()).toBeVisible();
   await expect(error).not.toContainText("最后成功数据：尚未加载");
   unavailable = false;
   await error.getByRole("button", { name: "重试" }).click();
@@ -2499,20 +2499,20 @@ test('WB02 默认概览直接看图片、报告与键盘返回',async({page,requ
  await c.post('/api/tasks',{id,title:'WB02 图片与报告成果',type:'bug',goal:'verified',acceptance:['成果可读'],checks:[{id:'result',kind:'functional',method:'command',command:['true'],required:true,covers:['成果可读'],artifacts:['app/wb02-result.png','app/wb02-report.json']}]});
  await step(c,id);await step(c,id,['app/wb02-result.png','app/wb02-report.json']);await c.post('/api/action',{action:'verify',id,unit:'result'});
  await goto(page,'single','/tasks/'+id);
- const gallery=page.locator('section.wb-content-section:has(#results-title)');
+ // Completed: materials sit under 验证依据; the image is shown directly.
+ const gallery=page.getByRole('region',{name:'验证依据'});
  await gallery.scrollIntoViewIfNeeded();
  await expect(gallery.locator('img')).toBeVisible();
  await expect(gallery).not.toContainText('历史版本');
- await expect(gallery).toContainText('WB02 实际报告结论');
- const thumb=gallery.getByRole('button',{name:'查看 wb02-result.png'});
+ const thumb=gallery.locator('.ds-images').getByRole('button',{name:'查看 wb02-result.png'});
  await thumb.click();const dialog=page.getByRole('dialog',{name:'wb02-result.png'});
- await expect(dialog.locator('img.wb-preview-image')).toBeVisible();await dialog.getByRole('slider',{name:'缩放'}).fill('150');
+ await expect(dialog.locator('img.wb-preview-image')).toBeVisible();await dialog.getByRole('slider',{name:/缩放/}).fill('150');
  await page.screenshot({path:path.join(output,'WB02-preview.png')});
  await page.keyboard.press('Escape');await expect(dialog).toBeHidden();await expect(thumb).toBeFocused();
  await gallery.getByRole('button',{name:'查看 wb02-report.json'}).click();
  const report=page.getByRole('dialog',{name:'wb02-report.json'});
  await expect(report).toContainText('WB02 实际报告结论');await expect(report).toContainText('图片可直接查看');
- await report.getByText('报告原文',{exact:true}).click();await expect(report.locator('pre').last()).toContainText('WB02 实际报告结论');
+ await report.getByRole('tab',{name:'原文'}).click();await expect(report.locator('pre').last()).toContainText('WB02 实际报告结论');
  await page.keyboard.press('Escape');
  await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:path.join(output,'WB02-overview.png'),fullPage:true,animations:'disabled'});
 });
@@ -2606,7 +2606,7 @@ test('R1 用途与版本先选材，保留共享检查关联和真实预览',asy
  // Only the delivered AGENTS.md is a current result; the input copy stays below.
  await expect(gallery.getByRole('button',{name:'查看 AGENTS.md'})).toHaveCount(1);
  await gallery.getByRole('button',{name:'查看 report.json'}).click();const preview=page.getByRole('dialog',{name:'report.json'});
- await expect(preview).toContainText('本次准确候选报告');await preview.getByText('来源与关联').click();await expect(preview).toContainText('关联检查：A、B');await page.keyboard.press('Escape');
+ await expect(preview).toContainText('本次准确候选报告');await preview.getByText('来源与提交关联').click();await expect(preview).toContainText(/关联检查\s*A、B/);await page.keyboard.press('Escape');
  const other=page.locator('details').filter({hasText:'历史成果与相关资料'});await other.locator('summary').click();
  await other.getByRole('button',{name:'old.png'}).click();const old=page.getByRole('dialog',{name:'old.png'});await expect.poll(()=>old.locator('img.wb-preview-image').evaluate((e:HTMLImageElement)=>e.naturalWidth)).toBeGreaterThan(0);await expect(old).toContainText('历史版本');await page.keyboard.press('Escape');
  await expect(other).toContainText('AGENTS.md');
@@ -2644,7 +2644,7 @@ test('R3 普通功能父项先看剩余，唯一情况与下一步',async({page,
  // read relationships, with no Epic membership, authority or status mutation.
  execFileSync('python3',['-c',"import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); pairs=[(sys.argv[2],sys.argv[3]),(sys.argv[3],sys.argv[4]),(sys.argv[2],sys.argv[5])]; [c.execute(\"UPDATE tasks SET body=json_set(body,'$.definition.parent',?) WHERE id=?\",p) for p in pairs]; c.commit()",path.join(projects.single.data_dir,'runtime.db'),parent,child,leaf,done]);
  await goto(page,'single','/tasks/'+parent);const children=page.locator('section.wb-content-section:has(#remaining-title)');await expect(children).toContainText('已完成 1 / 3');await expect(children).toContainText('R3 待接手子项');await expect(children).toContainText('缺少日历测试服务');
- await expect(page.locator('.wb-next-line')).toHaveCount(1);await expect(page.locator('.wb-situation')).toHaveCount(1);
+ await expect(page.locator('.wb-situation-facts')).toHaveCount(1);await expect(page.locator('.wb-situation')).toHaveCount(1);
  expect((await children.boundingBox())!.y).toBeLessThan(850);await expect(page.locator('#task-basis')).not.toHaveAttribute('open','');
  await expect(children).not.toContainText('必需子任务已满足');expect((await c.get('/api/task?id='+parent)).task.definition.type).toBe('feature');
  const scoped=await c.get('/api/tasks?view=workbench&parent='+child);expect(scoped.total).toBe(1);expect(scoped.family.direct).toBe(1);

@@ -10,7 +10,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 func runnerOutputFile(cfg remoteRunnerConfig, dir, ref string, candidate remote.PortableCandidate, secrets ...string) ([]byte, string, string, error) {
@@ -68,7 +71,33 @@ func runnerOutputFile(cfg remoteRunnerConfig, dir, ref string, candidate remote.
 	case strings.HasPrefix(detected, "text/plain"):
 		mimeType, extension = "text/plain", ".txt"
 	}
-	return data, "runner-" + store.Hash([]byte(ref))[:16] + extension, mimeType, nil
+	return data, runnerArtifactName(ref, rel, mimeType, extension), mimeType, nil
+}
+
+// runnerArtifactName keeps the submitted file's own name so a reader can tell
+// a report from a log or source file. The stored type still comes from the
+// detected bytes; a name whose extension the Server does not accept for that
+// type keeps the original name and gains the type's extension
+// (recovery_test.go -> recovery_test.go.txt). Names the Server would reject
+// fall back to the former content-addressed name.
+func runnerArtifactName(ref, rel, mimeType, extension string) string {
+	fallback := "runner-" + store.Hash([]byte(ref))[:16] + extension
+	base := filepath.Base(filepath.FromSlash(rel))
+	accepted := map[string][]string{"image/png": {".png"}, "image/jpeg": {".jpg", ".jpeg"}, "video/mp4": {".mp4"},
+		"text/plain": {".txt", ".md", ".log", ".json", ".csv"}, "application/octet-stream": {".bin"}}[mimeType]
+	name := base
+	if !slices.Contains(accepted, strings.ToLower(filepath.Ext(base))) {
+		name = base + extension
+	}
+	if name == "" || len(name) > 180 || !utf8.ValidString(name) || strings.TrimSpace(name) != name || strings.HasPrefix(name, ".") || strings.Contains(name, "..") || strings.ContainsAny(name, `/\`) {
+		return fallback
+	}
+	for _, r := range name {
+		if unicode.IsControl(r) {
+			return fallback
+		}
+	}
+	return name
 }
 
 func sanitizeRunnerResult(result core.StepResult, secrets ...string) core.StepResult {

@@ -460,3 +460,23 @@ export function handoffText(project: string, task?: { id: string; title: string;
     (task?.next ? `下一步：${task.next}。` : '按已有父级计划接续可执行的工作。') +
     '按 AEL 的领取、上下文与提交协议执行；保留已完成成果，只在真实阻塞或需要人作决定时等待。';
 }
+
+// Responsibility and reporting facts for an open task. A report is a past
+// observation: it never proves an Agent is online, and silence never proves
+// a failure.
+export function progressFacts(n: any) {
+  const s = n?.summary || {}, h = s.health || n?.health || {};
+  const active = (n?.collaboration || []).filter((c: any) => c.responsibility_state === 'active' || c.responsibility_state === 'claimed');
+  const owner = active.map((c: any) => c.alias || c.runner).filter(Boolean).join('、') || (s.executors || []).join('、');
+  const kind: Record<string, string> = { artifact: '提交成果', check: '提交检查记录' };
+  let record = '';
+  if (h.reported_at && (!h.last_progress_at || h.reported_at >= h.last_progress_at)) record = relativeShort(h.reported_at) + '上报进展';
+  else if (h.last_progress_at) record = relativeShort(h.last_progress_at) + (kind[h.last_progress_kind] || '记录进展');
+  else if (s.running) record = '已领取责任，尚未上报进展';
+  const contact = h.last_contact ? relativeShort(h.last_contact) + '客户端联系（不代表当前在线）' : '';
+  const since = h.last_progress_at || h.reported_at;
+  const minutes = since ? Math.max(0, Math.round((Date.now() - new Date(since).getTime()) / 60000)) : 0;
+  const quiet = s.running && h.no_progress ? { minutes, threshold: Math.round((h.threshold_seconds || 0) / 60) } : null;
+  const long = s.running && h.healthy_long && h.expected_until ? { until: h.expected_until } : null;
+  return { owner, record, contact, quiet, long };
+}

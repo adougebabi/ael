@@ -141,9 +141,16 @@ function selectTask(id: string) {
   offset.value = 0;
   query.value = id;
 }
+// A newer server value is shown next to the edited one; nothing is
+// overwritten until the user chooses.
+const quotaConflict = ref<number | null>(null);
 function editQuota() {
   quotaDirty.value = true;
   quotaRequest.value = null;
+}
+function adoptQuota() {
+  quotaConflict.value = null; quotaDirty.value = false; quotaRequest.value = null; mutationError.value = "";
+  if (data.value) { unlimited.value = data.value.stats.quota_bytes === 0; quotaMiB.value = String(data.value.stats.quota_bytes / 1048576); }
 }
 async function saveQuota() {
   if (busy.value || !data.value) return;
@@ -172,6 +179,7 @@ async function saveQuota() {
     await props.request(`${base}/quota`, quotaRequest.value);
     quotaRequest.value = null;
     quotaDirty.value = false;
+    quotaConflict.value = null;
     notice.value = limit
       ? `附件容量上限已设为 ${bytes(limit)}。`
       : "已关闭此项目的附件容量限制。";
@@ -182,6 +190,7 @@ async function saveQuota() {
     if (code === "REVISION_CONFLICT" || code === "QUOTA_TOO_SMALL") {
       quotaRequest.value = null;
       await load();
+      if (code === "REVISION_CONFLICT" && data.value) { quotaConflict.value = data.value.stats.quota_bytes; mutationError.value = ""; }
     }
   } finally {
     busy.value = false;
@@ -290,7 +299,9 @@ onUnmounted(() => clearTimeout(debounce));
           <form v-if="admin" class="wb-form storage-quota" @submit.prevent="saveQuota">
             <label class="wb-check"><input v-model="unlimited" type="checkbox" :disabled="busy" @change="editQuota" />不限制附件容量</label>
             <label v-if="!unlimited">容量上限<span class="wb-input-unit"><input v-model="quotaMiB" type="number" min="0.000001" max="1048576" step="any" required :disabled="busy" aria-label="容量上限（MiB）" @input="editQuota" /><span>MiB</span></span></label>
-            <div><button class="primary" :disabled="busy || loading">{{ quotaRequest ? "重试保存配额" : "保存配额" }}</button></div>
+            <div v-if="quotaConflict !== null" class="wb-banner warn" role="alert"><strong>配额已被其他人修改</strong><p>服务端当前：{{ quotaConflict ? bytes(quotaConflict) : '不限制' }}；你填写的：{{ unlimited ? '不限制' : quotaMiB + ' MiB' }}。旧请求不会覆盖新值，请明确选择。</p><button type="button" class="small" :disabled="busy" @click="adoptQuota">采用最新值</button><button type="submit" class="small" :disabled="busy">保留输入后重新保存</button></div>
+            <p v-else-if="quotaRequest && mutationError" class="wb-review-help">保存没有成功，你的输入已保留；重试会沿用原请求，不会重复记录。</p>
+            <div><button class="primary" :disabled="busy || loading">{{ quotaConflict !== null ? "保留输入后重新保存" : quotaRequest ? "重试保存配额" : "保存配额" }}</button></div>
           </form>
           <p v-else class="muted">容量上限由服务管理员设置。未完成上传仅展示当前账号的记录。</p>
         </section>

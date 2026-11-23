@@ -33,6 +33,9 @@ function input() { clearTimeout(debounce); const value = search.value; debounce 
 function filter(values: Record<string, string | undefined>) { setQuery({ offset: undefined, ...values }); }
 const filtered = computed(() => !!(q.value || task.value || mime.value || source.value !== 'results' || since.value || until.value));
 const candidates = ref<Record<string, string | null>>({}), objectCandidates = ref<Record<string, string>>({});
+// Per-task snapshot and object metadata, so the shared reader shows the same
+// check link, content identity and relations as the task page.
+const snapshots = ref<Record<string, any>>({}), objectMeta = ref<Record<string, any>>({});
 async function load(quiet = false) {
   await page.load(() => api('/api/inventory?' + params({ kind: 'files', order: 'recent', limit: 25, offset: offset.value, q: q.value, task: task.value, mime: mime.value, source: sourceParam.value, since: since.value, until: until.value })), quiet);
   const ids = [...new Set<string>((page.data.value?.items || []).map((i: any) => i.task_id))].filter((id) => !(id in candidates.value));
@@ -40,18 +43,19 @@ async function load(quiet = false) {
     try {
       const [n, objects] = await Promise.all([api('/api/task?' + params({ id })), api('/api/review-evidence?' + params({ id }))]);
       candidates.value[id] = n.task?.candidate || '';
-      for (const o of objects || []) objectCandidates.value[o.id] = o.candidate || '';
+      snapshots.value[id] = n;
+      for (const o of objects || []) { objectCandidates.value[o.id] = o.candidate || ''; objectMeta.value[o.id] = o; }
     } catch { candidates.value[id] = null; }
   }));
 }
 watch(() => route.value.key, () => { search.value = q.value; void load(); });
-watch(refreshRevision, () => { candidates.value = {}; objectCandidates.value = {}; void load(true); });
+watch(refreshRevision, () => { candidates.value = {}; objectCandidates.value = {}; snapshots.value = {}; objectMeta.value = {}; void load(true); });
 onMounted(() => void load());
 const isInputItem = (i: any) => i.source === 'knowledge snapshot' || /快照/.test(i.purpose || '') || (i.retention_reasons || []).some((r: string) => r.includes('快照'));
 function material(i: any): Material {
   const current = candidates.value[i.task_id], candidate = objectCandidates.value[i.artifact_id] || '';
   const state = isInputItem(i) || !candidate || !current ? 'unknown' : candidate === current ? 'current' : 'historical';
-  return { id: i.artifact_id, ref: i.artifact_id, task: i.task_id, name: i.filename, mime: i.mime, size: i.size, at: i.created_at, source: i.source, candidate, state, role: isInputItem(i) ? 'input' : /检查/.test(i.purpose || '') ? 'evidence' : 'output' };
+  return { id: i.artifact_id, ref: i.artifact_id, task: i.task_id, name: i.filename, mime: i.mime, size: i.size, at: i.created_at, source: i.source, candidate, sha256: i.sha256 || objectMeta.value[i.artifact_id]?.sha256, status: i.status, state, role: isInputItem(i) ? 'input' : /检查/.test(i.purpose || '') ? 'evidence' : 'output' };
 }
 const items = computed(() => (page.data.value?.items || []).map((i: any) => ({ raw: i, m: material(i) })));
 const roleName = (m: Material) => m.role === 'input' ? '输入资料' : m.role === 'evidence' ? '验收材料' : '工作成果';
@@ -59,6 +63,11 @@ const stateName = (m: Material) => m.role === 'input' ? '执行时读取的规�
 const typeOptions = computed(() => (page.data.value?.file_types || []).map((f: any) => [f.kind, f.kind.startsWith('image/') ? '图片 · ' + f.kind.slice(6).toUpperCase() : f.kind === 'text/plain' ? '文本、报告与文档' : f.kind]));
 const taskName = computed(() => (page.data.value?.tasks || []).find((t: any) => t.task_id === task.value)?.title || task.value);
 const preview = ref<Material | null>(null), previewTask = ref('');
+const previewRelations = computed(() => {
+  const m = preview.value; if (!m) return [];
+  return Object.values<any>(objectMeta.value).filter((o) => o.task_id === m.task && (o.id === m.ref || (m.sha256 && o.sha256 === m.sha256 && o.size === m.size)))
+    .map((o) => ({ ref: o.id, name: o.filename, label: o.source === 'knowledge snapshot' ? '执行输入（规范快照）' : o.attempt_id ? '提交记录 ' + o.attempt_id.slice(0, 12) : o.source || '附件', at: o.created_at, candidate: o.candidate || undefined }));
+});
 function open(entry: { raw: any; m: Material }) { previewTask.value = entry.raw.task_title || entry.raw.task_id; preview.value = entry.m; }
 </script>
 <template>
@@ -89,5 +98,5 @@ function open(entry: { raw: any; m: Material }) { previewTask.value = entry.raw.
     </tr></tbody>
   </table>
   <Pagination v-if="(page.data.value?.total || 0) > 25 || offset" :offset="offset" :limit="25" :total="page.data.value?.total || 0" name="资料" :busy="page.loading.value" @change="setQuery({ offset: $event })" />
-  <MaterialPreview v-if="preview" :material="preview" :task-title="previewTask" :note="preview.role === 'input' ? '这是执行时读取的输入规范快照，不是任务成果。' : preview.state === 'historical' ? '这份材料属于更早的候选，只供查阅，不能作为当前检查证据。' : preview.state === 'unknown' ? '适用版本待核对，只供查阅。' : ''" @close="preview = null" />
+  <MaterialPreview v-if="preview" :material="preview" :task-title="previewTask" :relations="previewRelations" :checks="snapshots[preview.task]?.current_checks" :current-candidate="snapshots[preview.task]?.task?.candidate" :note="preview.role === 'input' ? '这是执行时读取的输入规范快照，不是任务成果。' : preview.state === 'historical' ? '这份材料属于更早的候选，只供查阅，不能作为当前检查证据。' : preview.state === 'unknown' ? '适用版本待核对，只供查阅。' : ''" @close="preview = null" />
 </template>

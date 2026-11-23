@@ -195,7 +195,11 @@ test("切片3 验收：同处查看、只提交当前检查、反馈回到修复
   const inline = page.locator("#overview-review");
   await inline.getByRole("button", { name: "确认通过" }).click();
   await expect(inline).toContainText(/提交结果未知|原请求已生效/);
-  if (await inline.getByRole("button", { name: "原样重试提交" }).count()) await inline.getByRole("button", { name: "原样重试提交" }).click();
+  // An unknown result is looked up by the original request key before any resend.
+  if (await inline.getByRole("button", { name: "核对原请求回执" }).count()) {
+    await inline.getByRole("button", { name: "核对原请求回执" }).click();
+    await expect(inline).toContainText(/已核对原请求回执|原请求已生效/);
+  }
   await expect.poll(async () => (await task(page, "child-schedule")).evidence.filter((e: any) => e.check === "visual").length).toBe(1);
   expect((await task(page, "child-schedule")).status).toBe("open");
   await go(page, "tasks/plugin-parent");
@@ -360,5 +364,168 @@ test("切片5 设置、接入与服务：上报不称在线、令牌只显示一
   await go(page, "settings?section=storage");
   await expect(page.getByRole("button", { name: "保存配额" })).toHaveCount(0);
   expect((await page.request.get(base + "/api/v1/projects/shared/members")).status()).toBe(403);
+  await page.context().close();
+});
+
+// ---- Full-state restoration, package 2: delivery → material reading → check basis.
+const artifacts = async (page: Page, id: string) => (await (await page.request.get(base + "/api/v1/projects/shared/dashboard/review-evidence?id=" + id)).json()) as any[];
+
+test("包2 交付结论 → 材料阅读 → 检查依据：9 个对象 / 7 份内容、报告结论取自检查记录、日志与源码阅读", async ({ browser }) => {
+  const page = await open(browser);
+  // Real record: 9 objects, 7 distinct contents submitted through runner submit.
+  const objects = (await artifacts(page, "npc-recovery")).filter((o) => o.source !== "knowledge snapshot");
+  expect(objects).toHaveLength(9);
+  expect(new Set(objects.map((o) => o.sha256)).size).toBe(7);
+  expect(objects.map((o) => o.filename)).toContain("recovery_test.go.txt");
+  expect(objects.some((o) => /^runner-/.test(o.filename))).toBe(false);
+  const npc = await task(page, "npc-recovery");
+  expect(npc.status).toBe("completed");
+  expect(npc.result).toBe("verified");
+
+  await go(page, "tasks/npc-recovery");
+  const delivery = page.getByRole("region", { name: "交付结论" });
+  await expect(delivery).toContainText("经过验证的改动已交付");
+  await expect(delivery).toContainText("补齐跨进程恢复测试");
+  await expect(delivery).toContainText("当前候选关联 7 份材料（9 个附件对象）");
+  const basis = page.getByRole("region", { name: "验证依据" });
+  await expect(basis).toContainText("7 份不同内容 · 保留 9 个对象");
+  await expect(basis.locator(".ds-material")).toHaveCount(7);
+  await expect(basis.locator(".ds-material", { hasText: "recovery_test.go.txt" })).toContainText("Go 源码");
+  await expect(basis.locator(".ds-material", { hasText: "recovery_test.go.txt" })).toContainText("同内容 2 次提交");
+  await shot(page, "p2-npc-delivery");
+
+  // The report's verdict line comes from the linked check record.
+  await delivery.getByRole("button", { name: "阅读验收报告" }).click();
+  const report = page.getByRole("dialog", { name: "report.json" });
+  await expect(report).toContainText("检查 scenario 的记录：通过");
+  await expect(report.locator(".rd-report .rd-table")).toContainText("机会响应 · 来源取消");
+  await expect(report.locator(".rd-report .rd-table")).toContainText("记录为通过");
+  await expect(report.locator(".rd-boundary")).toContainText("没有调用真实模型");
+  await report.getByRole("tab", { name: "原文" }).click();
+  await expect(report.locator("pre")).toContainText('"check": "scenario"');
+  await shot(page, "p2-npc-report");
+  await page.keyboard.press("Escape");
+  await expect(delivery.getByRole("button", { name: "阅读验收报告" })).toBeFocused();
+
+  // Same content, two submissions: one reading entry, both relations kept.
+  await basis.getByRole("button", { name: "查看 recovery_test.go.txt" }).click();
+  const source = page.getByRole("dialog", { name: "recovery_test.go.txt" });
+  await expect(source).toContainText("Go · 16 行");
+  await expect(source.locator(".rd-lines li")).toHaveCount(16);
+  await source.getByText("来源与提交关联").click();
+  await expect(source).toContainText("2 次关联");
+  await expect(source.locator(".rd-provenance tbody tr")).toHaveCount(2);
+  const download = await source.getByRole("link", { name: "下载原件" }).getAttribute("href");
+  const bytes = await (await page.request.get(base + download!)).body();
+  const crypto = await import("node:crypto");
+  expect(crypto.createHash("sha256").update(bytes).digest("hex")).toBe(objects.find((o) => o.filename === "recovery_test.go.txt").sha256);
+  await page.keyboard.press("Escape");
+
+  // Log search locates; it never decides a result.
+  await basis.getByRole("button", { name: "查看 scenarios.log" }).click();
+  const log = page.getByRole("dialog", { name: "scenarios.log" });
+  await log.getByRole("searchbox", { name: "在日志中查找" }).fill("checkpoint.saved");
+  await log.getByRole("button", { name: "查找" }).click();
+  await expect(log.locator(".rd-log-search")).toContainText("1 / 5 处");
+  await expect(log.locator(".rd-lines li.hit")).toContainText("checkpoint.saved");
+  await expect(log).toContainText("检查结论来自关联记录，不由搜索结果判断");
+  await page.keyboard.press("Escape");
+
+  // Markdown scope note and the relation table.
+  await basis.getByRole("button", { name: "查看 npc-scope.md" }).click();
+  await expect(page.getByRole("dialog", { name: "npc-scope.md" }).locator(".rd-markdown h2").first()).toHaveText("覆盖");
+  await page.keyboard.press("Escape");
+  await basis.getByText(/附件提交关系/).click();
+  await expect(basis.locator(".ds-relations tbody tr")).toHaveCount(9);
+
+  // Check detail from the verification table.
+  await page.getByRole("region", { name: "验证结果" }).getByRole("button", { name: /scenario · / }).click();
+  const detail = page.getByRole("dialog", { name: /scenario · NPC/ });
+  await expect(detail).toContainText("当前候选的检查通过");
+  await expect(detail).toContainText("来源取消后拒绝继续或抑制结果");
+  await detail.getByRole("button", { name: "打开 report.json" }).click();
+  await expect(page.getByRole("dialog", { name: "report.json" })).toContainText("检查 scenario 的记录：通过");
+  await page.keyboard.press("Escape");
+  await expect(detail).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  // 390 px: page and reader stay within the viewport.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await go(page, "tasks/npc-recovery");
+  await noOverflow(page);
+  await page.getByRole("button", { name: "阅读验收报告" }).click();
+  await noOverflow(page);
+  await shot(page, "p2-npc-report-390");
+  await page.keyboard.press("Escape");
+  await page.context().close();
+});
+
+test("包2 报告与分析交付、失败检查、受阻检查与损坏原件各自如实呈现", async ({ browser }) => {
+  const page = await open(browser);
+  const audit = await task(page, "menu-audit");
+  expect(audit.result).toBe("report_delivered_with_findings");
+  await go(page, "tasks/menu-audit");
+  const delivery = page.getByRole("region", { name: "交付结论" });
+  await expect(delivery).toContainText("报告已交付，报告中的问题仍待处理");
+  await expect(delivery).toContainText("1 项必需检查中 0 项通过");
+  await delivery.getByRole("button", { name: "阅读验收报告" }).click();
+  const report = page.getByRole("dialog", { name: "report-menu-audit.json" });
+  await expect(report).toContainText("检查 focus 的记录：未通过");
+  await expect(report).toContainText("焦点落在页面顶部");
+  await page.keyboard.press("Escape");
+  await page.getByRole("region", { name: "验证结果" }).getByRole("button", { name: /focus · / }).click();
+  await expect(page.getByRole("dialog", { name: /focus · / })).toContainText("不因报告提交而修复");
+  await page.keyboard.press("Escape");
+
+  expect((await task(page, "retry-analysis")).result).toBe("analysis_delivered");
+  await go(page, "tasks/retry-analysis");
+  await expect(page.getByRole("region", { name: "交付结论" })).toContainText("分析结论已交付");
+  await expect(page.getByRole("region", { name: "交付结论" })).toContainText("没有实施或发布改动");
+
+  // Blocked check: shared check reading in the checks tab and its detail.
+  await go(page, "tasks/schedule-fix?section=checks");
+  await expect(page.locator("#task-check-unit .status")).toHaveText("受阻");
+  await page.locator("#task-check-unit").getByRole("button", { name: "检查详情" }).click();
+  await expect(page.getByRole("dialog", { name: /unit · / })).toContainText("受阻不等于检查失败");
+  await page.keyboard.press("Escape");
+
+  // A damaged original reads as a content mismatch, not a generic error.
+  await go(page, "materials?task=evidence-review");
+  await page.locator('.wb-library-item[data-material="account-before.png"] .wb-result-card').click();
+  const broken = page.getByRole("dialog", { name: "account-before.png" });
+  await expect(broken).toContainText(/原件内容与记录不一致|图片内容无法解码/);
+  await expect(broken.getByRole("link", { name: "下载原件" })).toHaveCount(0);
+  const read = await page.request.get(base + "/api/v1/projects/shared/dashboard/artifact?task=evidence-review&ref=" + fixture.tasks.broken_image);
+  expect((await read.json()).code).toBe("ARTIFACT_CONTENT_MISMATCH");
+  await page.keyboard.press("Escape");
+  await page.context().close();
+});
+
+// ---- Package 3: current work → concrete progress → human handling.
+test("包3 当前步骤、责任与上报事实：步骤取自真实计划，上报不等于在线", async ({ browser }) => {
+  const page = await open(browser);
+  const trim = await task(page, "context-trim");
+  await go(page, "tasks/context-trim");
+  const steps = page.getByRole("list", { name: "任务步骤" });
+  await expect(steps.locator("li")).toHaveCount(trim.plan.steps.length);
+  await expect(steps.locator('li[aria-current="step"]')).toHaveText(/实施/);
+  const situation = page.getByRole("region", { name: "当前情况" });
+  await expect(situation).toContainText("负责处理开发 Agent C");
+  await expect(situation).toContainText(/最近记录.*上报进展/);
+  await expect(situation).toContainText("不代表当前在线");
+  // A short fix only shows the steps its plan has; a blocked step reads as blocked.
+  const fix = await task(page, "schedule-fix");
+  await go(page, "tasks/schedule-fix");
+  await expect(steps.locator("li")).toHaveCount(fix.plan.steps.length);
+  await expect(steps.locator("li.blocked")).toHaveText(/验证/);
+  await expect(page.getByRole("region", { name: "当前情况" })).toContainText("解除条件");
+  // Completed and unclaimed tasks: no step bar for done work; waiting work names its owner role.
+  await go(page, "tasks/npc-recovery");
+  await expect(page.getByRole("list", { name: "任务步骤" })).toHaveCount(0);
+  await go(page, "tasks/child-memory");
+  await expect(page.getByRole("region", { name: "当前情况" })).toContainText("负责处理");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await go(page, "tasks/context-trim");
+  await noOverflow(page);
   await page.context().close();
 });

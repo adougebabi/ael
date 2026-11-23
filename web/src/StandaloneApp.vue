@@ -9,7 +9,7 @@ import RemoteServicePanel from "./components/RemoteServicePanel.vue";
 import RemoteAccountPanel from "./components/RemoteAccountPanel.vue";
 import ProjectStoragePanel from "./components/ProjectStoragePanel.vue";
 import MaterialsPage from "./pages/MaterialsPage.vue";
-import { refreshRevision, currentUser } from "./api";
+import { refreshRevision, currentUser, notices } from "./api";
 import { stamp, relativeShort } from "./display";
 import { theme, setTheme } from "./theme";
 import { toast, copyText } from "./toast";
@@ -54,7 +54,7 @@ async function doRevoke() { if (!revokeTarget.value) return; await revoke(revoke
 function switchTheme() { setTheme(theme.value === "indigo" ? "graphite" : "indigo"); closeAccount(true); }
 const pickerRoot = ref<HTMLElement | null>(null), pickerInput = ref<HTMLInputElement | null>(null);
 const panelLoading = ref(false), panelError = ref("");
-const projectConfiguration = ref<any>(null), clients = ref<ClientReport[]>([]), serviceInfo = ref<any>(null);
+const projectConfiguration = ref<any>(null), clients = ref<ClientReport[]>([]), serviceInfo = ref<any>(null), serviceInfoAt = ref("");
 const servicePlatform = ref("");
 const settingsTab = computed(() => ({ storage: "storage", members: "members" } as Record<string, string>)[route.value.query.get("section") || ""] || "connection");
 const members = ref<{ username: string; role: string }[]>([]);
@@ -91,7 +91,7 @@ async function loadPanel() {
       if (!session.value.admin) return;
       const value = await request("/api/v1/admin/client-release" + (servicePlatform.value ? "?platform=" + encodeURIComponent(servicePlatform.value) : ""));
       if (generation !== projectGeneration || panel.value !== currentPanel || requestID !== panelRequest) return;
-      serviceInfo.value = value;
+      serviceInfo.value = value; serviceInfoAt.value = new Date().toLocaleTimeString("zh-CN");
     }
   } catch (e) { if (generation === projectGeneration && panel.value === currentPanel && requestID === panelRequest) panelError.value = e instanceof Error ? e.message : "页面信息读取失败。"; }
   finally { if (generation === projectGeneration && panel.value === currentPanel && requestID === panelRequest) panelLoading.value = false; }
@@ -192,12 +192,19 @@ async function refresh() {
   }
 }
 
+// The Server answers the same way for a missing project and one this account
+// may not read, so both possibilities are stated; no empty task list is shown.
+function unreachableProject(id: string) { return "无法打开链接中的项目「" + id + "」：项目不存在、已移除，或当前账号没有访问权限。可以选择下面仍可访问的项目。"; }
+async function copyAccessCheck() {
+  const text = "AEL 授权核对\n服务地址：" + location.origin + "\n账号：" + (session.value?.username || "") + "\n当前没有可访问的项目，请服务管理员核对项目成员授权。";
+  try { await navigator.clipboard.writeText(text); notices.value = "已复制授权核对信息。"; } catch { notices.value = "浏览器未允许复制。"; }
+}
 async function restore() {
   try {
     session.value = await request("/api/v1/auth/session");
     await refresh();
     const wanted = new URL(location.hash.slice(1) || "/tasks", location.origin).searchParams.get("project") || sessionStorage.getItem("ael-remote-project:" + session.value?.csrf);
-    if (wanted && !projects.value.some(project => project.id === wanted)) error.value = "当前账号无法访问此项目。";
+    if (wanted && !projects.value.some(project => project.id === wanted)) error.value = unreachableProject(wanted);
     else if (wanted || projects.value[0]) await view(wanted || projects.value[0].id);
     else await loadPanel();
   } catch {
@@ -412,7 +419,7 @@ watch(() => route.value.key, () => {
   const id = route.value.query.get("project");
   if (id && workspaceMode.value && id !== selected.value?.id) {
     if (projects.value.some(project => project.id === id)) void view(id);
-    else { workspaceMode.value = false; selected.value = null; connectDashboard(null); error.value = "当前账号无法访问此项目。"; }
+    else { workspaceMode.value = false; selected.value = null; connectDashboard(null); error.value = unreachableProject(id); }
     return;
   }
   void loadPanel();
@@ -638,7 +645,7 @@ onUnmounted(() => { document.removeEventListener("click", closePicker); if (prev
         <template v-else-if="panel === 'service'">
           <h1>服务管理</h1>
           <section v-if="!session.admin" class="wb-empty" role="alert"><AppIcon name="lock" /><h3>当前账号没有服务管理权限</h3><p>服务管理仅对服务管理员开放。</p></section>
-          <p v-if="panelError" role="alert" class="wb-banner error">{{ panelError }}</p>
+          <p v-if="panelError" role="alert" class="wb-banner error">当前无法读取服务状态：{{ panelError }}<template v-if="serviceInfo">。下方是 {{ serviceInfoAt }} 成功读取的信息，可能已过期</template>；这不说明任何本机 Agent 是否在线。<button class="small" :disabled="panelLoading" @click="loadPanel">重试连接</button></p>
           <RemoteServicePanel :projects="projects" v-if="session.admin" :key="session.csrf" :info="serviceInfo" :loading="panelLoading" :platform="servicePlatform" :request="request" @refresh="loadPanel" @platform="changeServicePlatform" @created="serviceProjectCreated" />
         </template>
         <template v-else>
@@ -646,7 +653,7 @@ onUnmounted(() => { document.removeEventListener("click", closePicker); if (prev
           <p v-if="error" class="wb-banner error" role="alert">{{ error }}</p>
           <p v-if="notice" class="wb-banner ok" role="status">{{ notice }}</p>
           <section class="wb-card" aria-label="项目列表">
-            <div v-if="!projects.length" class="wb-empty"><AppIcon name="folder" /><h3>当前账号还没有可访问的项目</h3><p>请联系服务管理员把你加入项目。</p><a v-if="session.admin" class="button" href="#/service">创建项目与管理服务</a></div>
+            <div v-if="!projects.length" class="wb-empty"><AppIcon name="folder" /><h3>当前账号还没有可访问的项目</h3><p>账号「{{ session.username }}」已登录且有效；只是还没有被加入任何项目。请服务管理员核对项目授权，这里不会自动创建项目。</p><button class="button" @click="copyAccessCheck">复制授权核对信息</button><a v-if="session.admin" class="button" href="#/service">创建项目与管理服务</a></div>
             <ul v-else class="wb-project-list">
               <li v-for="project in projects" :key="project.id">
                 <span class="wb-project-symbol"><AppIcon name="folder" /></span><div><strong>{{ project.name }}</strong><small>{{ project.id }} · {{ roles[project.role] || project.role }}</small></div>

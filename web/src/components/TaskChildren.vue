@@ -41,7 +41,7 @@ const marks: Record<string, string> = { done: 'tick', review: 'user', decision: 
     <p v-if="family" class="wb-delivery-note"><AppIcon name="info" /><span>
       <template v-if="family.formal && family.required && family.satisfied === family.required">必需子任务已满足原条件，父级仍需集成、整体验收及原定交付。</template>
       <template v-else-if="family.formal && family.required">原计划还有 {{ family.required - family.satisfied }} 个必需子任务未满足父级条件；父级集成与交付单独验收。</template>
-      <template v-else>子任务状态与父级完成条件分别保留：子项全部完成不会自动让父事项完成，父事项仍按自身的验收与交付推进。</template>
+      <template v-else>普通父子关系，没有集成协议。子任务状态与父级完成条件分别保留：子项全部完成不会自动让父事项完成，父事项仍按自身的验收与交付推进。</template>
     </span></p>
   </section>
 </template>

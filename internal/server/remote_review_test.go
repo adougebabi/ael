@@ -5,6 +5,7 @@ import (
 	"ael/internal/store"
 	"encoding/json"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -297,5 +298,45 @@ func TestDashboardJSONArtifactKeepsReadableReportAndProvenance(t *testing.T) {
 	value := standaloneJSON(t, standaloneRequest(t, f.h, "GET", "/api/v1/projects/shared/dashboard/artifact?task=task&ref="+start["artifact_id"].(string), nil, nil, "", f.reader, "", ""), http.StatusOK)
 	if value["body"] != string(content) || value["filename"] != "report.json" || value["source"] != "fixture" {
 		t.Fatal(value)
+	}
+}
+
+func TestDashboardArtifactReadReportsWhyOriginalIsUnreadable(t *testing.T) {
+	f := newArtifactFixture(t)
+	upload := func(name, key string, content []byte) string {
+		start := artifactStart(t, f, name, "text/plain", content, key)
+		id := start["upload_id"].(string)
+		standaloneJSON(t, standaloneRequest(t, f.h, "POST", "/api/v1/projects/shared/artifacts/uploads/"+id+"/chunks", map[string]any{"offset": 0, "data": content}, nil, "", f.uploader, "", "1"), http.StatusOK)
+		standaloneJSON(t, standaloneRequest(t, f.h, "POST", "/api/v1/projects/shared/artifacts/uploads/"+id+"/finalize", map[string]any{"operation_id": key, "idempotency_key": key}, nil, "", f.uploader, "", "1"), http.StatusOK)
+		return start["artifact_id"].(string)
+	}
+	read := func(ref string, status int) map[string]any {
+		return standaloneJSON(t, standaloneRequest(t, f.h, "GET", "/api/v1/projects/shared/dashboard/artifact?task=task&ref="+ref, nil, nil, "", f.reader, "", ""), status)
+	}
+	if value := read("artifact_missing_object_for_reader", http.StatusNotFound); value["code"] != "ARTIFACT_NOT_FOUND" {
+		t.Fatalf("unknown object must read as not found: %v", value)
+	}
+	service, _ := f.s.projectService("shared")
+	a, _ := f.s.artifacts("shared", service)
+	changed := upload("changed.txt", "changed", []byte("original bytes\n"))
+	item, err := a.get(changed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path, _ := a.objectPath(item.ContentID)
+	if err = os.WriteFile(path, []byte("altered bytes!\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if value := read(changed, http.StatusBadRequest); value["code"] != "ARTIFACT_CONTENT_MISMATCH" {
+		t.Fatalf("altered bytes must not read as a generic task rejection: %v", value)
+	}
+	removed := upload("removed.txt", "removed", []byte("to be removed\n"))
+	item, _ = a.get(removed)
+	path, _ = a.objectPath(item.ContentID)
+	if err = os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if value := read(removed, http.StatusGone); value["code"] != "ARTIFACT_UNAVAILABLE" {
+		t.Fatalf("a missing original must read as unavailable: %v", value)
 	}
 }

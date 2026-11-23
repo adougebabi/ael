@@ -25,6 +25,8 @@ export function connectDashboard(project: Project | null, csrf = "", expired?: (
     const url = new URL(path, location.origin);
     let endpoint = `/api/v1/projects/${encodeURIComponent(project.id)}/dashboard/${url.pathname.slice(5)}` + url.search;
     if (url.pathname === "/api/inventory") endpoint = `/api/v1/projects/${encodeURIComponent(project.id)}/artifacts/inventory` + url.search;
+    // Receipt of the caller's own request, looked up by its idempotency key.
+    if (url.pathname === "/api/operation-receipt") endpoint = `/api/v1/projects/${encodeURIComponent(project.id)}/portable-operations/${encodeURIComponent(url.searchParams.get("key") || "")}`;
     if (url.pathname === "/api/findings") endpoint = `/api/v1/projects/${encodeURIComponent(project.id)}/findings` + url.search;
     if (url.pathname === "/api/finding") endpoint = `/api/v1/projects/${encodeURIComponent(project.id)}/findings/${encodeURIComponent(url.searchParams.get("id") || "")}`;
     if (url.pathname === "/api/authority-import") endpoint = `/api/v1/projects/${encodeURIComponent(project.id)}/imports/${encodeURIComponent(url.searchParams.get("id") || "")}?task_id=${encodeURIComponent(url.searchParams.get("task") || "")}`;
