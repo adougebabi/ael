@@ -370,11 +370,11 @@ test("A07 大量观察事件仍可诊断，真实变化不会被淹没", async (
   ).toBeTruthy();
   expect(changes.total).toBeLessThan(20);
   await goto(page, "many", "/evolution");
-  await expect(page.locator(".change-row")).toHaveCount(changes.total);
-  await expect(page.locator(".evolution-aside")).toContainText("让变化留下理由");
+  await expect(page.locator(".wb-change")).toHaveCount(changes.total);
+  await expect(page.locator(".wb-lead")).toContainText("保留每次调整的来由");
   await expect(page.locator("main")).not.toContainText("knowledge_observed");
   await shot(page, "A07-project-evolution");
-  await page.getByRole("link", { name: "查看原始项目事件诊断" }).click();
+  await page.getByRole("link", { name: "查看原始项目事件" }).click();
   await expect(
     page.getByRole("heading", { name: "原始项目事件", exact: true }),
   ).toBeVisible();
@@ -398,7 +398,9 @@ test("A08 显式多任务、规范和决策关系汇总且可往返", async ({
     ),
   ).toBeFalsy();
   await goto(page, "many", "/evolution/knowledge%3Alocal-choice");
-  await expect(page.locator(".change-comparison")).toContainText("未单独记录");
+  // No recorded before/after: the dialog shows the recorded facts only.
+  await expect(page.getByRole("dialog")).toContainText("发生了什么");
+  await expect(page.getByRole("dialog")).not.toContainText("变化前");
   await expect(
     page.getByRole("link", {
       name: "隔离夹具：真实隔离交付 change-a",
@@ -441,10 +443,10 @@ test("A09 日期未知、实现未发布、决定与否决均保持原事实", a
     page.getByRole("heading", { name: "日期未确认", exact: true }),
   ).toBeVisible();
   await expect(
-    page.locator(".change-row").filter({ hasText: "已实现但尚未发布" }),
+    page.locator(".wb-change").filter({ hasText: "已实现但尚未发布" }),
   ).toContainText("已实现 · 尚无发布依据");
   await expect(
-    page.locator(".change-row").filter({ hasText: "本地结果与回归交付" }),
+    page.locator(".wb-change").filter({ hasText: "本地结果与回归交付" }),
   ).toContainText("已决定 · 未据此认定实现");
   await page
     .getByRole("link", { name: "隔离夹具：否决远程索引方案", exact: true })
@@ -457,9 +459,9 @@ test("A09 日期未知、实现未发布、决定与否决均保持原事实", a
   await page.getByText("更多筛选", { exact: true }).click();
   await page.getByLabel("发生于 / 从").fill("2026-10-20");
   await page.getByLabel("至", { exact: true }).fill("2026-10-20");
-  await expect(page.locator(".change-row")).toHaveCount(1);
-  await expect(page.locator(".change-row")).toContainText("本地结果与回归交付");
-  await expect(page.locator(".change-row")).toContainText("已验证");
+  await expect(page.locator(".wb-change")).toHaveCount(1);
+  await expect(page.locator(".wb-change")).toContainText("本地结果与回归交付");
+  await expect(page.locator(".wb-change")).toContainText("已验证");
 });
 
 test("A10 大量迁移告警先汇总，当前阻断与历史可分页定位", async ({
@@ -538,7 +540,7 @@ test("A11 断线恢复、真实空、后端错误与快速搜索无旧响应覆�
   await expect(page.locator("main")).toContainText("当前没有活跃任务");
   await goto(page, "empty", "/evolution");
   await expect(
-    page.getByRole("heading", { name: "暂无可追溯的项目变化" }),
+    page.getByRole("heading", { name: "还没有可展示的变化" }),
   ).toBeVisible();
   await shot(page, "A11-empty-evolution");
   await goto(page, "many", "/knowledge/nonexistent");
@@ -1692,7 +1694,7 @@ test("A31 资料分区、筛选清除和诊断摘要连接真实数据", async (
   await goto(page, "many", "/evolution?q=not-present-in-fixture-2026");
   await page.getByRole("button", { name: "清除筛选" }).click();
   await expect(page).not.toHaveURL(/q=/);
-  await expect(page.locator(".change-row").first()).toBeVisible();
+  await expect(page.locator(".wb-change").first()).toBeVisible();
   await goto(page, "many", "/settings?section=diagnostics");
   await expect(page.getByRole("button", { name: "复制诊断摘要" })).toBeVisible();
 });
@@ -2255,16 +2257,19 @@ test("A48 规范读取失败可重试，分类和范围切换复位分页", asyn
 
 test("A49 项目演进与设置按参考分区保留真实操作", async ({ page }) => {
   await goto(page, "many", "/evolution/knowledge%3Alocal-choice");
-  await expect(page.getByRole("heading", { name: "这次改变" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "取舍与没有采用的方案" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "关联工作与当前结果" })).toBeVisible();
-  await expect(page.locator(".evolution-aside")).toContainText("变化依据");
-  await expect(page.locator(".evolution-aside")).toContainText("记录信息");
+  const change = page.getByRole("dialog");
+  await expect(change.getByRole("heading", { name: "发生了什么" })).toBeVisible();
+  await expect(change.getByRole("heading", { name: "为什么调整" })).toBeVisible();
+  await expect(change.getByRole("heading", { name: "目前的结果" })).toBeVisible();
+  await expect(change).toContainText("关联规范或决策");
+  await expect(change.locator(".ev-record")).toContainText("影响范围");
   await goto(page, "many", "/evolution");
   await page.getByLabel("查找项目变化").fill("本地结果与回归交付");
-  await expect(page.locator(".change-row")).toHaveCount(1);
-  await expect(page.locator(".change-footer")).toContainText("项工作");
-  await expect(page.locator(".change-footer")).toContainText("份依据");
+  await expect(page.locator(".wb-change")).toHaveCount(1);
+  await page.locator(".wb-change").getByRole("link", { name: "查看变化" }).click();
+  await expect(page.getByRole("dialog").locator(".ev-record")).toContainText("项工作");
+  await expect(page.getByRole("dialog").locator(".ev-record")).toContainText("份依据");
+  await page.getByRole("dialog").getByRole("button", { name: "关闭", exact: true }).click();
   await goto(page, "many", "/settings");
   await expect(page.locator(".settings-panel").filter({ hasText: "执行器能力" })).toContainText("浏览器验收");
   await expect(page.locator(".settings-panel").filter({ hasText: "执行器能力" })).toContainText("未单独探测");

@@ -128,7 +128,7 @@ const navItems = [["tasks", "工作台", "workbench"], ["materials", "资料", "
       <button class="icon-button" aria-label="刷新项目状态" title="刷新项目状态" @click="refreshCurrentView"><AppIcon name="refresh" /></button>
     </header>
     <main id="main-content" class="wb-page" tabindex="-1">
-      <header v-if="['knowledge', 'evolution', 'settings', 'account', 'service', 'materials', 'local-setup'].includes(area) && !id || area === 'tasks' && id === 'new'" class="wb-page-header">
+      <header v-if="['knowledge', 'evolution', 'settings', 'account', 'service', 'materials', 'local-setup'].includes(area) && (!id || area === 'evolution') || area === 'tasks' && id === 'new'" class="wb-page-header">
         <div><h1>{{ pageTitle }}</h1><p class="wb-lead">{{ area === "tasks" ? "在本地项目中记录新的工作目标。" : area === "settings" && !remoteProject ? "管理本地项目接入、资料来源、迁移与运行诊断。" : subtitles[area] }}</p></div>
         <div class="wb-header-actions"><slot name="page-actions" :area="area"><template v-if="!remoteProject"><a v-if="area === 'knowledge'" class="button ghost" :href="href('/settings', { section: 'sources' })"><AppIcon name="folder" />资料来源</a><a v-else-if="area === 'evolution'" class="button ghost" :href="href('/settings', { section: 'diagnostics' })"><AppIcon name="terminal" />技术记录</a></template></slot></div>
       </header>

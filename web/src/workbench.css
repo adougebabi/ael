@@ -672,17 +672,54 @@ button.wb-star.on svg { fill: currentColor; }
 
 /* Evolution timeline */
 .wb-range-note { margin-left: auto; font-size: 12px; color: #8a91a3; }
-.wb-change-timeline { margin-top: 8px; }
-.wb-change-date { font-size: 14px; color: #5f687c; margin: 22px 0 14px; }
-.wb-change .wb-event-body h3 a { color: var(--ink); text-decoration: none; font-size: 16px; }
-.wb-change .wb-event-body h3 a:hover { color: var(--accent); }
-.wb-change .wb-event-body h3 { margin-top: 6px; }
-.wb-change .wb-event-body p { font-size: 14px; }
-.wb-change-time { margin-left: 12px; }
-.wb-change-reason { color: #8a91a3 !important; font-size: 13px !important; }
-.wb-change-refs { font-size: 12px; }
+/* Project evolution: timeline and reading dialog */
+.ev-filters { margin: -8px 0 10px; padding: 0; border: 0; }
+.ev-filters > summary { color: #7f879a; font-size: 13px; width: fit-content; }
+.ev-filters[open] { padding-bottom: 6px; }
+.wb-change-timeline { max-width: 850px; margin-top: 4px; }
+.wb-change-date { font-size: 13px; font-weight: 600; color: #7a8091; margin: 29px 0 18px; letter-spacing: .1px; }
+.wb-change-timeline > .wb-change-date:first-child { margin-top: 4px; }
+.wb-change { display: flex; gap: 18px; position: relative; margin-bottom: 17px; padding-bottom: 21px; }
+.wb-change:not(.last)::after { content: ""; position: absolute; left: 17px; top: 39px; bottom: -16px; width: 1px; background: var(--line); }
+.wb-change-mark { position: relative; z-index: 1; width: 35px; height: 35px; flex-shrink: 0; display: flex; justify-content: center; align-items: center; border: 1px solid #dedff0; background: #f0effc; border-radius: 10px; color: #6963c6; }
+.wb-change-mark svg { width: 18px; height: 18px; }
+.wb-change-mark.spec { background: #edf1fa; color: #6882ad; border-color: #e0e7f3; }
+.wb-change-mark.decision { background: #f1eff9; color: #8b72ad; border-color: #e9e3f2; }
+.wb-change-body { min-width: 0; flex: 1; padding-top: 1px; }
+.wb-change-meta { display: flex; gap: 12px; align-items: center; font-size: 12px; color: #959aa6; }
+.wb-change-body h3 { font-size: 16px; line-height: 1.5; font-weight: 600; margin: 9px 0 8px; }
+.wb-change-body h3 a { color: var(--ink); text-decoration: none; overflow-wrap: anywhere; }
+.wb-change-body h3 a:hover { color: var(--accent); }
+.wb-change-body p { color: #727889; font-size: 14px; line-height: 1.75; margin: 0 0 13px; overflow-wrap: anywhere; }
+.wb-change-bottom { display: flex; align-items: center; gap: 17px; flex-wrap: wrap; }
+.wb-change-bottom .text-button { font-size: 13px; }
+.wb-change-facts { font-size: 12px; color: #858b9c; }
 .wb-change-foot { font-size: 12px; margin-top: 18px; }
 .wb-change-foot a { margin-left: 8px; }
+.ev-reader { font-size: 15px; line-height: 1.9; color: #555e73; }
+.ev-reader h3 { font-size: 17px; font-weight: 650; color: #30394f; line-height: 1.6; margin: 26px 0 10px; }
+.ev-reader p { margin: 10px 0; overflow-wrap: anywhere; }
+.ev-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; color: #969cab; font-size: 12px; margin-bottom: 20px; }
+.ev-meta + h3 { margin-top: 0; }
+.ev-missing { color: #969cab; font-size: 14px; }
+.ev-small { font-size: 12px !important; color: var(--muted, #72788a); line-height: 1.7; }
+.ev-link { color: var(--accent); text-decoration: none; }
+.ev-link:hover { text-decoration: underline; }
+.ev-source { display: flex; align-items: baseline; gap: 10px; margin: 0 !important; padding: 6px 0; font-size: 14px; line-height: 1.65; }
+.ev-source small { color: #969cab; font-size: 12px; }
+.ev-work { list-style: none; margin: 12px 0 0; padding: 0; border-top: 1px solid var(--line); }
+.ev-work > li { padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.ev-work > li > a { color: var(--accent); font-weight: 600; text-decoration: none; }
+.ev-work > li > a:hover { text-decoration: underline; }
+.ev-fact p { margin: 4px 0; font-size: 13px; line-height: 1.7; }
+.ev-record { margin-top: 22px !important; padding-top: 14px; border-top: 1px solid var(--line); }
+@media (max-width: 520px) {
+  .wb-change { gap: 13px; }
+  .wb-change-body h3 { font-size: 15px; }
+  .wb-change-body p { font-size: 13px; }
+  .ev-reader { font-size: 14px; }
+  .ev-reader h3 { font-size: 16px; }
+}
 
 /* Settings */
 .wb-card-head h2 .muted { font-size: 15px; font-weight: 400; margin-left: 4px; }

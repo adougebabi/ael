@@ -278,6 +278,16 @@ test("切片4 资料、规范与演进：任务↔资料往返、输入与产物
   await go(page, "evolution");
   await expect(page.locator(".wb-change").first()).toBeVisible();
   await shot(page, "s4-evolution");
+  // A change opens as a reading dialog over the list, with only recorded facts.
+  await page.locator(".wb-change").first().getByRole("link", { name: "查看变化" }).click();
+  const change = page.getByRole("dialog");
+  for (const name of ["发生了什么", "为什么调整", "目前的结果"]) await expect(change.getByRole("heading", { name })).toBeVisible();
+  await expect(change).not.toContainText("变化前");
+  await expect(page).toHaveURL(/#\/evolution\/[^?]+/);
+  await shot(page, "s4-evolution-detail");
+  await change.getByRole("button", { name: "关闭", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page).toHaveURL(/#\/evolution(\?|$)/);
   for (const route of ["materials", "knowledge", "evolution"]) { await page.setViewportSize({ width: 390, height: 844 }); await go(page, route); await noOverflow(page); }
   await page.setViewportSize({ width: 1440, height: 900 });
 
@@ -287,7 +297,7 @@ test("切片4 资料、规范与演进：任务↔资料往返、输入与产物
   await page.goto(base + "/#/knowledge?project=other"); await page.waitForTimeout(1500);
   await expect(page.locator("main")).toContainText(/当前分类暂无资料/);
   await page.goto(base + "/#/evolution?project=other"); await page.waitForTimeout(1500);
-  await expect(page.locator("main")).toContainText("暂无可追溯的项目变化");
+  await expect(page.locator("main")).toContainText("还没有可展示的变化");
   await page.context().close();
 });
 
