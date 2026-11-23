@@ -153,6 +153,65 @@ func TestArtifactUploadFinalizeDownloadAndAuthorization(t *testing.T) {
 	}
 }
 
+func TestDeliveryCorrectionArtifactPreservesCompletedTask(t *testing.T) {
+	f, task, evidence := reviewFixture(t)
+	review := reviewBody(task, evidence, "pass")
+	standaloneJSON(t, standaloneRequest(t, f.h, "POST", "/api/v1/projects/shared/reviews", review, f.admin, f.csrf, "", "http://server.test", "1"), http.StatusOK)
+	review["unit"], review["request_key"] = "independent", "other-check"
+	standaloneJSON(t, standaloneRequest(t, f.h, "POST", "/api/v1/projects/shared/reviews", review, f.admin, f.csrf, "", "http://server.test", "1"), http.StatusOK)
+
+	service, err := f.s.projectService("shared")
+	if err != nil {
+		t.Fatal(err)
+	}
+	completed, err := service.Get("task")
+	if err != nil || completed.Status != "completed" || completed.Result != "verified" || len(completed.Evidence) != 2 {
+		t.Fatalf("fixture did not complete: %v, status %q, result %q", err, completed.Status, completed.Result)
+	}
+
+	const route = "/api/v1/projects/shared/artifacts"
+	report := []byte("Task: task\nFailed run: fixture-ci-1 (gofmt)\nCorrected commit: 1234567890123456789012345678901234567890\nLocal format: pass\nRemote CI: pending\n")
+	start := map[string]any{
+		"operation_id": "correction", "idempotency_key": "correction", "expected_revision": core.RemoteRevision(completed),
+		"task_id": "task", "candidate": completed.Candidate, "filename": "correction.md", "mime": "text/plain",
+		"size": len(report), "sha256": store.Hash(report), "source": "delivery-correction",
+	}
+	denied := standaloneRequest(t, f.h, "POST", route+"/uploads", start, nil, "", f.reader, "", "1")
+	if denied.Code != http.StatusForbidden {
+		t.Fatalf("read-only user could start a correction upload: %d", denied.Code)
+	}
+	created := standaloneJSON(t, standaloneRequest(t, f.h, "POST", route+"/uploads", start, nil, "", f.uploader, "", "1"), http.StatusCreated)
+	uploadPath := route + "/uploads/" + created["upload_id"].(string)
+	chunk := map[string]any{"offset": 0, "data": report}
+	standaloneJSON(t, standaloneRequest(t, f.h, "POST", uploadPath+"/chunks", chunk, nil, "", f.uploader, "", "1"), http.StatusOK)
+	keys := map[string]string{"operation_id": "correction", "idempotency_key": "correction"}
+	finalized := standaloneRequest(t, f.h, "POST", uploadPath+"/finalize", keys, nil, "", f.uploader, "", "1")
+	metadata := standaloneJSON(t, finalized, http.StatusOK)
+	replay := standaloneRequest(t, f.h, "POST", uploadPath+"/finalize", keys, nil, "", f.uploader, "", "1")
+	if replay.Code != http.StatusOK || replay.Body.String() != finalized.Body.String() {
+		t.Fatalf("correction replay did not return the same receipt: %d %s", replay.Code, replay.Body.String())
+	}
+	content := standaloneRequest(t, f.h, "GET", route+"/"+metadata["id"].(string)+"/content", nil, nil, "", f.reader, "", "")
+	if content.Code != http.StatusOK || !bytes.Equal(content.Body.Bytes(), report) {
+		t.Fatalf("correction report not readable: %d", content.Code)
+	}
+	after, err := service.Get("task")
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeJSON, err := json.Marshal(completed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	afterJSON, err := json.Marshal(after)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(beforeJSON, afterJSON) {
+		t.Fatal("delivery correction changed the original task or check history")
+	}
+}
+
 func TestArtifactRejectsUnsafeInputAndRespectsQuota(t *testing.T) {
 	f := newArtifactFixture(t)
 	for _, name := range []string{"../escape.png", "/tmp/absolute.png", `folder\\file.png`, ".hidden.png"} {
