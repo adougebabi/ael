@@ -186,13 +186,13 @@ func portableError(w http.ResponseWriter, err error) {
 	switch code {
 	case "PROJECT_NOT_FOUND", "FINDING_NOT_FOUND", "REPOSITORY_NOT_FOUND", "TASK_NOT_FOUND", "CANDIDATE_NOT_FOUND", "CONTEXT_NOT_FOUND", "OBSERVATION_NOT_FOUND", "CHECK_NOT_FOUND", "RUNNER_NOT_FOUND":
 		status = http.StatusNotFound
-	case "FINDING_EVIDENCE_INVALID", "FINDING_SOURCE_MISMATCH", "REMOTE_HANDOFF_TARGET", "WORKSPACE_CONFIRMATION_REQUIRED", "REVISION_CONFLICT", "IDEMPOTENCY_CONFLICT", "CANDIDATE_CONFLICT", "CONTEXT_SOURCE_MISMATCH", "KNOWLEDGE_MISSING", "KNOWLEDGE_CONFLICT", "KNOWLEDGE_UNVERIFIED", "CANDIDATE_CHANGED", "REMOTE_WORKSPACE_MISMATCH", "STALE_TOKEN", "STALE_EXECUTION_UNIT", "CLAIM_CONFLICT", "RUNNER_WIP", "NEXT_WORK_CHANGED", "PARENT_SCOPE_REQUIRED", "NOT_RUNNABLE", "PLAN_APPLY_IN_PROGRESS", "DEPENDENCY_BLOCKED", "DELIVERY_MANUAL_REQUIRED", "PLAN_APPROVAL_REQUIRED", "HUMAN_REVIEW_REQUIRED", "RUNNER_CAPABILITY_MISSING", "CHECK_REQUIRED", "PARENT_WRITE_FORBIDDEN", "ROOT_CAUSE_REVIEW_REQUIRED", "ROOT_CAUSE_REVIEW_NOT_EXPECTED", "ROOT_CAUSE_NEW_EVIDENCE_REQUIRED", "BUDGET_EXHAUSTED", "POLICY_CHANGED", "INSPECTION_WRITE_DETECTED", "ARTIFACT_REQUIRED", "ARTIFACT_MISSING", "CHECK_METHOD_MISMATCH", "CHECK_RESULT_INVALID", "ASSESSMENT_EVIDENCE_REQUIRED", "SCREENSHOT_REQUIRED", "TASK_CONTEXT_REQUIRED", "KNOWLEDGE_OUTCOME_REQUIRED", "KNOWLEDGE_ARTIFACT_REQUIRED", "TRUSTED_CHECK_REQUIRED", "TERMINAL_TASK", "WRONG_UNIT":
+	case "FINDING_EVIDENCE_INVALID", "FINDING_SOURCE_MISMATCH", "REMOTE_HANDOFF_TARGET", "WORKSPACE_CONFIRMATION_REQUIRED", "REVISION_CONFLICT", "IDEMPOTENCY_CONFLICT", "CANDIDATE_CONFLICT", "CONTEXT_SOURCE_MISMATCH", "KNOWLEDGE_MISSING", "KNOWLEDGE_CONFLICT", "KNOWLEDGE_UNVERIFIED", "CANDIDATE_CHANGED", "REMOTE_WORKSPACE_MISMATCH", "STALE_TOKEN", "STALE_EXECUTION_UNIT", "CLAIM_CONFLICT", "RUNNER_WIP", "NEXT_WORK_CHANGED", "PARENT_SCOPE_REQUIRED", "NOT_RUNNABLE", "PLAN_APPLY_IN_PROGRESS", "DEPENDENCY_BLOCKED", "DELIVERY_MANUAL_REQUIRED", "PLAN_APPROVAL_REQUIRED", "HUMAN_REVIEW_REQUIRED", "RUNNER_CAPABILITY_MISSING", "CHECK_REQUIRED", "PARENT_WRITE_FORBIDDEN", "ROOT_CAUSE_REVIEW_REQUIRED", "ROOT_CAUSE_REVIEW_NOT_EXPECTED", "ROOT_CAUSE_NEW_EVIDENCE_REQUIRED", "BUDGET_EXHAUSTED", "POLICY_CHANGED", "INSPECTION_WRITE_DETECTED", "ARTIFACT_REQUIRED", "ARTIFACT_MISSING", "CHECK_METHOD_MISMATCH", "CHECK_RESULT_INVALID", "ASSESSMENT_EVIDENCE_REQUIRED", "SCREENSHOT_REQUIRED", "TASK_CONTEXT_REQUIRED", "KNOWLEDGE_OUTCOME_REQUIRED", "KNOWLEDGE_ARTIFACT_REQUIRED", "TRUSTED_CHECK_REQUIRED", "TERMINAL_TASK", "WRONG_UNIT", "QUEUE_RESERVED", "QUEUE_STARTED", "QUEUE_VERSION_CONFLICT":
 		status = http.StatusConflict
 	case "CONTEXT_SOURCE_UNAVAILABLE":
 		status = http.StatusGone
-	case "ARTIFACT_INVALID", "FINDING_INVALID", "FINDING_DUPLICATE", "REMOTE_RECOVERY_INVALID", "REMOTE_OPERATION_REQUIRED", "CANDIDATE_INVALID", "RUNNER_INVALID", "PROGRESS_REQUIRED", "INVALID_WORK_STAGE", "RESULT_REQUIRED", "INVALID_RESULT", "INVALID_FAILURE_CLASS":
+	case "ARTIFACT_INVALID", "FINDING_INVALID", "FINDING_DUPLICATE", "REMOTE_RECOVERY_INVALID", "REMOTE_OPERATION_REQUIRED", "CANDIDATE_INVALID", "RUNNER_INVALID", "PROGRESS_REQUIRED", "INVALID_WORK_STAGE", "RESULT_REQUIRED", "INVALID_RESULT", "INVALID_FAILURE_CLASS", "QUEUE_INVALID":
 		status = http.StatusBadRequest
-	case "FORBIDDEN":
+	case "FORBIDDEN", "QUEUE_TARGET_FORBIDDEN":
 		status = http.StatusForbidden
 	case "ONBOARDING_GRANT_REVOKED":
 		status = http.StatusForbidden
@@ -204,7 +204,7 @@ func portableError(w http.ResponseWriter, err error) {
 		standaloneFail(w, http.StatusInternalServerError, "CANDIDATE_STORAGE_ERROR")
 		return
 	}
-	if detail != "" && len(detail) <= 500 && !strings.ContainsAny(detail, "\r\n\x00") && (code == "KNOWLEDGE_MISSING" || code == "KNOWLEDGE_CONFLICT" || code == "CONTEXT_SOURCE_MISMATCH" || code == "REVISION_CONFLICT" || code == "CANDIDATE_CHANGED" || code == "ARTIFACT_REQUIRED" || code == "RUNNER_INVALID") {
+	if detail != "" && len(detail) <= 500 && !strings.ContainsAny(detail, "\r\n\x00") && (code == "KNOWLEDGE_MISSING" || code == "KNOWLEDGE_CONFLICT" || code == "CONTEXT_SOURCE_MISMATCH" || code == "REVISION_CONFLICT" || code == "CANDIDATE_CHANGED" || code == "ARTIFACT_REQUIRED" || code == "RUNNER_INVALID" || strings.HasPrefix(code, "QUEUE_")) {
 		standaloneReply(w, status, map[string]string{"code": code, "error": code, "detail": detail})
 		return
 	}
@@ -256,6 +256,16 @@ func (h *standaloneHandler) remotePortable(w http.ResponseWriter, r *http.Reques
 	}
 	if kind == "runners" && len(parts) == 3 && parts[1] == "operations" && r.Method == http.MethodGet {
 		result, err := p.runnerResultReceipt(principal, parts[0], parts[2])
+		if err != nil {
+			portableError(w, err)
+			return
+		}
+		standaloneReply(w, http.StatusOK, result)
+		return
+	}
+	if kind == "queue" && len(parts) == 0 && r.Method == http.MethodGet {
+		q := r.URL.Query()
+		result, err := p.listQueue(principal, q.Get("runner"), q.Get("state"), q.Get("task"))
 		if err != nil {
 			portableError(w, err)
 			return
@@ -315,6 +325,28 @@ func (h *standaloneHandler) remotePortable(w http.ResponseWriter, r *http.Reques
 			}
 			if service.Store.Flush() != nil {
 				standaloneFail(w, http.StatusServiceUnavailable, "PROJECTION_BLOCKED")
+				return
+			}
+			standaloneReply(w, http.StatusOK, result)
+			return
+		}
+		if len(parts) == 2 && (parts[1] == "queue" || parts[1] == "queue-release" || parts[1] == "queue-transfer") {
+			var input remoteQueueInput
+			if decodePortable(r, &input, p) != nil {
+				portableError(w, errors.New("QUEUE_INVALID"))
+				return
+			}
+			var result map[string]any
+			switch parts[1] {
+			case "queue":
+				result, err = p.enqueueRunner(principal, role, parts[0], input)
+			case "queue-release":
+				result, err = p.releaseQueue(principal, role, parts[0], input)
+			default:
+				result, err = p.transferQueue(principal, role, parts[0], input, h.server.queueMember(project))
+			}
+			if err != nil {
+				portableError(w, err)
 				return
 			}
 			standaloneReply(w, http.StatusOK, result)

@@ -1,7 +1,0 @@
---- FAIL: TestAuthorityImportVerifiesBytesBeforeActivatingAndReplaysUploads (0.35s)
-    authority_import_test.go:150: verified import evidence was offered for pruning
---- FAIL: TestAuthorityImportPreservesCompletedEpicAndOptionalLeaf (0.31s)
-    authority_import_test.go:191: archived tree failed to import EPIC_NOT_OPEN: import-bbbfc5b58f9b3f4f9321ab843a16b0bf
-FAIL
-FAIL	ael/internal/server	1.053s
-FAIL

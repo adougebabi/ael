@@ -1,9 +1,0 @@
-{
-  "result": "PASS",
-  "actual_remote_service_stopped": true,
-  "offline_cache_non_authoritative": true,
-  "offline_next_rejected": true,
-  "same_revision_after_restart": true,
-  "candidate": "b642770dad38717481d7f60e81711e34189bcb4aecaf34ae481dd5b202831a92",
-  "restored_service": "healthy"
-}

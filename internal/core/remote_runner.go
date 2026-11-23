@@ -14,8 +14,10 @@ import (
 // the same transaction before invoking the shared task-state rules below.
 type RemoteClaimInput struct {
 	TaskID, ParentID, ExpectedRevision, Runner, Workspace, Candidate, Token string
-	Basis                                                                   []BasisReference
-	ReviewerOnly                                                            bool
+	// Actor is the authenticated executor account owning Runner.
+	Actor        string
+	Basis        []BasisReference
+	ReviewerOnly bool
 }
 
 // RemoteSubmitEnvironment supplies server-validated, finalized artifacts and
@@ -67,6 +69,15 @@ func (s *Service) RemoteClaimTx(tx *store.Tx, input RemoteClaimInput) (Task, Att
 		if json.Unmarshal([]byte(reservation), &target) != nil || target["runner"] != input.Runner || target["workspace"] != input.Workspace {
 			return task, attempt, Error("REMOTE_HANDOFF_TARGET", "claim from the explicitly selected receiving workspace")
 		}
+	}
+	// Another executor's not-yet-started queue record blocks an ordinary
+	// claim; the holder's claim converts it into this Attempt below.
+	queued, err := CurrentQueueTx(tx, task)
+	if err != nil {
+		return task, attempt, err
+	}
+	if queued != nil && !queued.Permits(input.Runner, input.Actor) {
+		return task, attempt, QueueReservedError(*queued)
 	}
 	parentCheck := task.Definition.Type == "epic"
 	if parentCheck {

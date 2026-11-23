@@ -1,9 +1,0 @@
-=== RUN   TestRunnerTruncatedLogDoesNotPersistPartialSecret
-    remote_runner_process_test.go:95: truncated output lost its safe prefix or retained a partial secret (length 13)
---- FAIL: TestRunnerTruncatedLogDoesNotPersistPartialSecret (0.00s)
-=== RUN   TestRunnerLogRedactsCredentialsSplitAcrossLines
-    remote_runner_process_test.go:109: unfinished credential key was written early: "password:\n" <nil>
---- FAIL: TestRunnerLogRedactsCredentialsSplitAcrossLines (0.00s)
-FAIL
-FAIL	ael/cmd/ael	0.417s
-FAIL

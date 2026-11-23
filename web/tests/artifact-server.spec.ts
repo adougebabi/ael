@@ -10,58 +10,60 @@ if (!fixture.isolated || !fs.existsSync(path.join(fixture.out, "ISOLATED-ARTIFAC
 const output = process.env.AEL_UI_OUT || "/tmp/ael-artifact-browser";
 fs.mkdirSync(output, { recursive: true });
 
+const offscreen = (page: any) => page.locator(".wb-sidebar").evaluate((el: HTMLElement) => el.getBoundingClientRect().right <= 0);
+async function signIn(page: any, user: string, password: string) {
+ await page.goto(fixture.url+'/#/tasks?project=shared');
+ await page.getByLabel('用户名',{exact:true}).fill(user);await page.getByLabel('密码',{exact:true}).fill(password);await page.getByRole('button',{name:'登录',exact:true}).click();
+ await expect(page.locator('.wb-sidebar')).toBeVisible();
+}
 test("WB04 资料默认浏览、组合筛选、原图与报告",async({page})=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto(fixture.url+'/#/tasks?project=shared');
- await page.getByLabel('用户名',{exact:true}).fill('reader');await page.getByLabel('密码',{exact:true}).fill('fixture-reader-password');await page.getByRole('button',{name:'登录',exact:true}).click();
- await page.goto(fixture.url+'/#/tasks/task?project=shared');const current=page.getByRole('region',{name:'附件',exact:true});await expect(current).toContainText('当前版本暂无关联附件');await expect(current.locator('.result-file')).toHaveCount(0);await current.getByRole('button',{name:/相关资料/}).click();await expect(current).toContainText('report.txt');
- await page.getByRole('link',{name:'项目设置',exact:true}).click();await page.getByRole('link',{name:'存储与附件',exact:true}).click();
- const storage=page.getByRole('region',{name:'存储与附件',exact:true});
- await expect(storage.getByLabel('不限制附件容量')).toHaveCount(0);
- await expect(storage.locator('.result-file').filter({hasText:'resume.txt'})).toContainText('报告较长，打开读取结论与原文');
- await storage.getByLabel('资料类型',{exact:true}).selectOption('image/');
- const imageButton=storage.locator('.result-file').filter({hasText:'screen.png'});await imageButton.scrollIntoViewIfNeeded();await expect(imageButton.locator('img')).toBeVisible();
- await expect(storage.locator('.result-file')).toHaveCount(1);
- await expect(storage).toContainText('原文件');await imageButton.click();
- const preview=page.getByRole('dialog',{name:'成果预览'});await expect(preview.locator('img')).toBeVisible();await expect.poll(()=>preview.locator('img').evaluate((e:HTMLImageElement)=>e.naturalWidth)).toBeGreaterThan(0);
- await page.keyboard.press('Escape');await expect(imageButton).toBeFocused();
- await storage.getByLabel('开始日期',{exact:true}).fill('2099-01-01');await expect(storage.locator('.result-file')).toHaveCount(0);
- await storage.getByLabel('开始日期',{exact:true}).fill('');await storage.getByLabel('资料类型',{exact:true}).selectOption('text/');
- await storage.getByLabel('搜索附件或任务').fill('report.txt');await expect(storage.locator('.result-file')).toHaveCount(1);
- await storage.locator('.result-file').click();await expect(preview).toContainText('Synthetic cross-device report');await page.keyboard.press('Escape');
- await storage.getByRole('button',{name:'清除搜索',exact:true}).click();await storage.getByLabel('资料类型',{exact:true}).selectOption('');
+ await signIn(page,'reader','fixture-reader-password');
+ await page.goto(fixture.url+'/#/tasks/task?project=shared');
+ await expect(page.locator('#results-title')).toHaveCount(0);
+ await page.getByText(/历史成果与相关资料/).click();await expect(page.locator('main')).toContainText('report.txt');
+ await page.getByRole('link',{name:'资料',exact:true}).click();
+ const library=page.locator('main');
+ await expect(page.getByRole('button',{name:'保存配额'})).toHaveCount(0);
+ await expect(library.locator('.wb-library-item').filter({hasText:'resume.txt'})).toContainText('报告较长，打开读取结论与原文');
+ const typeSelect=page.getByLabel('资料类型',{exact:true});await typeSelect.selectOption((await typeSelect.locator('option',{hasText:'图片'}).first().getAttribute('value'))!);
+ const imageCard=library.locator('.wb-library-item').filter({hasText:'screen.png'});await imageCard.scrollIntoViewIfNeeded();await expect(imageCard.locator('img')).toBeVisible();
+ await expect(library.locator('.wb-library-item')).toHaveCount(1);
+ await imageCard.locator('.wb-result-card').click();
+ const preview=page.getByRole('dialog',{name:'screen.png'});await expect(preview.locator('img.wb-preview-image')).toBeVisible();await expect.poll(()=>preview.locator('img.wb-preview-image').evaluate((e:HTMLImageElement)=>e.naturalWidth)).toBeGreaterThan(0);
+ await page.keyboard.press('Escape');await expect(imageCard.locator('.wb-result-card')).toBeFocused();
+ await page.getByText('按上传日期筛选').click();await page.getByLabel('开始日期',{exact:true}).fill('2099-01-01');await expect(library.locator('.wb-library-item')).toHaveCount(0);await expect(library).toContainText('没有匹配的资料');
+ await page.getByLabel('开始日期',{exact:true}).fill('');await typeSelect.selectOption((await typeSelect.locator('option',{hasText:'文本'}).first().getAttribute('value'))!);
+ await page.getByLabel('搜索资料').fill('report.txt');await expect(library.locator('.wb-library-item')).toHaveCount(1);
+ await library.locator('.wb-library-item .wb-result-card').click();await expect(page.getByRole('dialog',{name:'report.txt'})).toContainText('Synthetic cross-device report');await page.keyboard.press('Escape');
+ await page.getByRole('link',{name:'清除筛选'}).first().click();
  await page.screenshot({path:path.join(output,'WB04-materials-1440.png'),fullPage:true});
- await page.setViewportSize({width:390,height:844});await expect(page.locator('.sidebar')).toBeHidden();
+ await page.setViewportSize({width:390,height:844});await expect.poll(()=>offscreen(page)).toBeTruthy();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();await page.screenshot({path:path.join(output,'WB04-materials-390.png'),fullPage:true});expect(errors).toEqual([]);
 });
-
 test("管理员在项目设置查看占用、修改额度和放弃未完成上传", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
-  await page.goto(fixture.url + "/#/tasks?project=shared");
-  await page.getByLabel("用户名", { exact: true }).fill("owner");
-  await page.getByLabel("密码", { exact: true }).fill("fixture-admin-password");
-  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await signIn(page, "owner", "fixture-admin-password");
   await page.getByRole("link", { name: "项目设置", exact: true }).click();
-  await page.getByRole("link", { name: "存储与附件", exact: true }).click();
-  const storage = page.getByRole("region", { name: "存储与附件", exact: true });
+  await page.getByRole("link", { name: "存储管理", exact: true }).click();
+  const storage = page.getByRole("region", { name: "存储管理", exact: true });
+  await storage.getByText("附件与上传记录").click();
   await expect(storage.getByText("report.txt", { exact: true })).toBeVisible();
-  await storage.getByRole("button",{name:"存储管理",exact:true}).click();
-  await storage.getByText("占用组成与内容复用",{exact:true}).click();
-  await expect(storage).toContainText("共享内容避免保存");
-  await expect(storage).toContainText("现存相同哈希的物理重复 0 B");
+  await storage.getByText("查看统计口径",{exact:true}).click();
+  await expect(storage).toContainText("内容复用");
+  await expect(storage).toContainText("逻辑大小");
   await page.screenshot({path:path.join(output,"storage-attribution.png"),fullPage:true});
-
   await expect(storage.getByText("100.00 MiB", { exact: false }).first()).toBeVisible();
   await storage.getByLabel("不限制附件容量").check();
-  await storage.getByRole("button", { name: "保存容量设置", exact: true }).click();
+  await storage.getByRole("button", { name: "保存配额", exact: true }).click();
   await expect(storage.getByRole("status").filter({ hasText: "已关闭此项目的附件容量限制" })).toBeVisible();
   await storage.getByLabel("不限制附件容量").uncheck();
   await storage.getByLabel("容量上限（MiB）").fill("0.000001");
-  await storage.getByRole("button", { name: "保存容量设置", exact: true }).click();
+  await storage.getByRole("button", { name: "保存配额", exact: true }).click();
   await expect(storage.getByRole("alert")).toContainText("新上限小于");
   await storage.getByLabel("容量上限（MiB）").fill("100");
-  await storage.getByRole("button", { name: "保存容量设置", exact: true }).click();
+  await storage.getByRole("button", { name: "保存配额", exact: true }).click();
   await expect(storage.getByRole("status").filter({ hasText: "附件容量上限已设为 100.00 MiB" })).toBeVisible();
   await storage.getByRole("button", { name: "未完成上传", exact: true }).click();
   const pending = storage.getByRole("row").filter({ hasText:"pending-browser.txt" });
@@ -80,7 +82,7 @@ test("管理员在项目设置查看占用、修改额度和放弃未完成上�
     expect(response.status()).toBe(201);
     uploads.push({ ...(await response.json()), operation_id:key, idempotency_key:key });
   }
-  await storage.getByRole("button", { name:"刷新容量", exact:true }).click();
+  await storage.getByRole("button", { name:"刷新", exact:true }).click();
   await expect(storage.getByRole("navigation", { name:"附件分页" })).toContainText("共 26 项");
   await storage.getByRole("button", { name:"下一页", exact:true }).click();
   await expect(storage.locator("tbody tr")).toHaveCount(1);
@@ -92,13 +94,13 @@ test("管理员在项目设置查看占用、修改额度和放弃未完成上�
     const response = await page.request.post(fixture.url + `/api/v1/projects/shared/artifacts/uploads/${upload.upload_id}/cancel`, { headers, data:{ operation_id:upload.operation_id, idempotency_key:upload.idempotency_key } });
     expect(response.status()).toBe(200);
   }
-  await storage.getByRole("button", { name:"刷新容量", exact:true }).click();
+  await storage.getByRole("button", { name:"刷新", exact:true }).click();
   await expect(storage.getByText("当前没有未完成上传。", { exact:true })).toBeVisible();
   await storage.getByLabel("创建日期早于").evaluate((input:HTMLInputElement) => { input.value="10000-01-01"; input.dispatchEvent(new Event("input", { bubbles:true })); });
-  await storage.getByRole("button", { name:"预览可清理项", exact:true }).click();
+  await storage.getByRole("button", { name:"预览清理清单", exact:true }).click();
   await expect(storage.getByRole("alert")).toContainText("请选择有效的清理日期");
-  await expect(storage.getByRole("button", { name:"刷新容量", exact:true })).toBeEnabled();
-  await storage.getByRole("button", { name:"保存容量设置", exact:true }).click();
+  await expect(storage.getByRole("button", { name:"刷新", exact:true })).toBeEnabled();
+  await storage.getByRole("button", { name:"保存配额", exact:true }).click();
   await storage.getByRole("button", { name:"附件原件", exact:true }).click();
   await storage.getByLabel("搜索附件或任务").fill("report.txt");
   await expect(storage.getByRole("row").filter({ hasText:"report.txt" })).toBeVisible();
@@ -108,26 +110,23 @@ test("管理员在项目设置查看占用、修改额度和放弃未完成上�
   await page.evaluate(() => window.scrollTo(0,0));
   await page.screenshot({ path:path.join(output,"storage-desktop.png"), fullPage:true, animations:"disabled" });
   await page.setViewportSize({ width:390, height:844 });
-  await expect(storage.getByRole("button", { name:"保存容量设置", exact:true })).toBeVisible();
+  await expect(storage.getByRole("button", { name:"保存配额", exact:true })).toBeVisible();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
-  await expect(page.locator(".sidebar")).toBeHidden();
+  await expect.poll(() => offscreen(page)).toBeTruthy();
   await page.evaluate(() => window.scrollTo(0,0));
   await page.screenshot({ path:path.join(output,"storage-mobile.png"), fullPage:true, animations:"disabled" });
   expect(errors).toEqual([]);
 });
-
 test("授权用户预览真实证据，清理后不显示假预览", async ({ page, request, browser }) => {
-  await page.goto(fixture.url + "/#/tasks?project=shared");
-  await page.getByLabel("用户名", { exact: true }).fill("reader");
-  await page.getByLabel("密码", { exact: true }).fill("fixture-reader-password");
-  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await signIn(page, "reader", "fixture-reader-password");
   await page.getByRole("link", { name: "项目设置", exact: true }).click();
-  await page.getByRole("link", { name: "存储与附件", exact: true }).click();
-  const storage = page.getByRole("region", { name: "存储与附件", exact: true });
+  await page.getByRole("link", { name: "存储管理", exact: true }).click();
+  const storage = page.getByRole("region", { name: "存储管理", exact: true });
+  await storage.getByText("附件与上传记录").click();
   await expect(storage.getByText("report.txt", { exact: true })).toBeVisible();
   await expect(storage.getByLabel("不限制附件容量")).toHaveCount(0);
   await page.getByRole("link", { name: "项目接入", exact: true }).click();
-  await page.getByText("按任务检索执行依据与附件", { exact: true }).click();
+  await page.getByText(/按任务检索执行依据快照与附件/).click();
   const evidence = page.getByLabel("项目证据");
   await evidence.getByLabel("按任务 ID 查找").fill("task");
   await evidence.getByRole("button", { name: "查找任务" }).click();
@@ -141,7 +140,6 @@ test("授权用户预览真实证据，清理后不显示假预览", async ({ pa
   await reportRow.getByRole("button", { name: "预览" }).click();
   await expect(page.getByLabel("证据预览")).toContainText("Synthetic cross-device report");
   await page.screenshot({ path: path.join(output, "report-preview.png"), fullPage: true });
-
   const headers = { "Content-Type": "application/json", "X-AEL-Protocol": "1", Origin: fixture.url };
   const login = await request.post(fixture.url + "/api/v1/auth/login", { headers, data: { username: "owner", password: "fixture-admin-password" } });
   expect(login.status()).toBe(200);
@@ -154,11 +152,10 @@ test("授权用户预览真实证据，清理后不显示假预览", async ({ pa
   const adminPage = await adminContext.newPage();
   await adminPage.goto(fixture.url + "/#/tasks?project=shared");
   await adminPage.getByRole("link", { name:"项目设置", exact:true }).click();
-  await adminPage.getByRole("link", { name:"存储与附件", exact:true }).click();
-  const adminStorage = adminPage.getByRole("region", { name:"存储与附件", exact:true });
-  await adminStorage.getByRole("button",{name:"存储管理",exact:true}).click();
+  await adminPage.getByRole("link", { name:"存储管理", exact:true }).click();
+  const adminStorage = adminPage.getByRole("region", { name:"存储管理", exact:true });
   await adminStorage.getByLabel("创建日期早于").fill(new Date(Date.now()+2*86400000).toISOString().slice(0,10));
-  await adminStorage.getByRole("button", { name:"预览可清理项", exact:true }).click();
+  await adminStorage.getByRole("button", { name:"预览清理清单", exact:true }).click();
   await expect(adminPage.getByRole("dialog")).toContainText("本次可清理 4 项");
   await adminPage.getByRole("dialog").getByRole("button", { name:"确认清理原件", exact:true }).click();
   await expect(adminStorage.getByRole("status").filter({ hasText: "已清理 4 项原件" })).toBeVisible();

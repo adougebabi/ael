@@ -52,10 +52,17 @@ func TestRemoteTasksAreScopedRevisionedAndIdempotent(t *testing.T) {
 	postAdmin("/api/v1/projects/one/members", map[string]string{"username": "client-a", "role": "executor"})
 	postAdmin("/api/v1/projects/one/members", map[string]string{"username": "client-b", "role": "executor"})
 	postAdmin("/api/v1/projects/two/members", map[string]string{"username": "client-b", "role": "executor"})
+	members := standaloneJSON(t, standaloneRequest(t, h, "GET", "/api/v1/projects/one/members", nil, admin, csrf, "", "", ""), http.StatusOK)["members"].([]any)
+	if len(members) != 2 || members[0].(map[string]any)["username"] != "client-a" || members[0].(map[string]any)["role"] != "executor" {
+		t.Fatal("project members", members)
+	}
 	a := postAdmin("/api/v1/tokens", map[string]string{"username": "client-a", "project_id": "one", "label": "A"})
 	b := postAdmin("/api/v1/tokens", map[string]string{"username": "client-b", "project_id": "one", "label": "B"})
 	other := postAdmin("/api/v1/tokens", map[string]string{"username": "client-b", "project_id": "two", "label": "other"})
 	tokenA, tokenB, tokenOther := a["token"].(string), b["token"].(string), other["token"].(string)
+	if w := standaloneRequest(t, h, "GET", "/api/v1/projects/one/members", nil, nil, "", tokenA, "", ""); w.Code != http.StatusForbidden {
+		t.Fatal("member list must require an admin session", w.Code)
+	}
 	parent := core.Definition{ID: "parent", Title: "Parent", Type: "epic", Goal: "verified", Acceptance: []string{"integrated"}}
 	create := map[string]any{"operation_id": "op-parent", "idempotency_key": "key-parent", "expected_revision": "absent", "definition": parent}
 	w := standaloneRequest(t, h, "POST", "/api/v1/projects/one/tasks", create, nil, "", tokenA, "", "1")

@@ -121,6 +121,9 @@ export function blockerText(value: string, compact = true) {
   const exit = /^exit status (\d+)$/.exec(value);
   if (exit) return `检查命令失败，退出码 ${exit[1]}`;
   if (value === "command completed and acceptance coverage recorded") return "命令已完成，检查结果与覆盖条件已记录。";
+  if (value === "restore the missing capability or dependency; verify any old writer stopped then resume") return "补齐缺失的能力或依赖，确认旧执行已经停止后恢复";
+  if (value === "restore the missing capability and prepare a stable candidate again") return "补齐缺失的能力，重新准备稳定候选";
+  if (["verify", "execute", "analysis", "define", "integrate", "delivery"].includes(value)) return labels[value];
   if (labels[value]) return labels[value];
   if (value.includes("approve strict plan before execution"))
     return "方案需要审阅当前定义与计划，批准后才可继续实施。";
@@ -216,7 +219,8 @@ export function reviewNoteStatus(s: any) {
 }
 export function nextAction(s: any) {
   if (s.recovery_action === "resume") return "执行者调用 resume 恢复任务，刷新依据后领取当前工作；无需再次人工确认";
-  if (s.needs_history_review) return "核对原始工作与当前要求，恢复后重新提交成果和验收";
+  if (s.needs_history_review && s.imported) return "执行者核对导入记录与当前实现，用 ael task reconcile-import 记录核对结果与继续起点，再按原门禁重新执行和验收；负责人也可直接确认核对";
+  if (s.needs_history_review) return "负责人核对原始工作与当前要求并确认恢复，之后由执行者重新提交成果和验收";
   if (s.requires_task_decision) return "审阅确认对象及其准确版本后作出决定";
   if (s.manual_reviews?.length) return "对照当前候选记录人工验收";
   if (s.next_action === "wait_confirmation" && !s.requires_task_decision)
@@ -227,7 +231,7 @@ export function nextAction(s: any) {
     wait_executor: s.waiting_checks
       ? "可接手其余待运行检查"
       : "等待执行者提交实际结果",
-    wait_environment: s.recovery || "解决阻塞条件后恢复",
+    wait_environment: s.recovery ? blockerText(s.recovery, false) : "解决阻塞条件后恢复",
     wait_dependency: "完成前置任务后继续",
     wait_children: "完成或处理必需子任务后继续父任务",
     wait_integration: "核对全部必要结果后进行父级整体验收",
@@ -319,7 +323,7 @@ export function workPresentation(s: any) {
   s=s || {};const h=s.health || {};
   const title=schedule(s);
   const reason=s.blocker_reason ? blockerText(s.blocker_reason,false) : (s.blocking_reasons || []).map((x:string)=>blockerText(x,false)).join('；');
-  const role=s.recovery_action === 'resume' ? '执行者' : s.needs_history_review || s.requires_task_decision ? '负责人' : s.manual_reviews?.length ? '验收人' : s.next_action === 'wait_environment' ? '阻塞处理人' : s.running ? '当前执行者' : '执行者';
+  const role=s.recovery_action === 'resume' || (s.needs_history_review && s.imported) ? '执行者' : s.needs_history_review || s.requires_task_decision ? '负责人' : s.manual_reviews?.length ? '验收人' : s.next_action === 'wait_environment' ? '阻塞处理人' : s.running ? '当前执行者' : '执行者';
   const next=h.reported_next && s.running && !reason ? h.reported_next : nextAction(s);
   const latest=h.last_progress_summary ? ((h.last_progress_validity === 'prior' || (h.last_progress_candidate && h.last_progress_candidate!==h.candidate) ? '先前候选或修订结果，当前需复验：' : h.last_progress_validity === 'unknown' ? '适用版本待核对：' : '')+(['define','analysis'].includes(h.last_progress_unit) ? '分析产物：' : '')+h.last_progress_summary) : '';
   const current=reason || (s.running ? h.current_work || (h.stage ? '正在处理：'+label(h.stage) : '已领取当前工作，尚未回报具体工作内容') : s.next_action === 'completed' || s.next_action === 'cancelled' ? '' : next);
@@ -336,11 +340,14 @@ export function workFocus(s:any) {
  if(s?.next_action==='wait_children')return '等待子任务处理，剩余工作见下方';
  if(s?.next_action==='wait_integration')return '子任务条件已满足，父级仍待集成与整体验收';
  if(s?.next_action==='repair')return '待修复：'+(p.reason || p.latest || '具体失败点请查看原检查记录');
- if(s?.manual_reviews?.length)return '需要判断：'+s.manual_reviews.flatMap((c:any)=>c.covers || []).join('；');
+ if(s?.manual_reviews?.length)return '需要判断：'+[...new Set<string>(s.manual_reviews.flatMap((c:any)=>c.covers?.length ? c.covers : [c.check]))].join('；');
  if(s?.running && h.no_progress)return (h.current_work || '已有执行责任')+'；最近上报后运行情况待核实';
  if(s?.running)return h.current_work || p.latest || '已接手，尚未回报具体工作';
  if(p.latest)return p.latest;
  if(['completed','cancelled'].includes(s?.board))return s.last_result || (s.board==='completed'?'已按原规则完成':'已取消');
+ // The step only advances after the previous one passed, so it is itself the fact.
+ const reached:Record<string,string>={analysis:'目标已明确，等待接手分析与方案',execute:'定义与分析已完成，等待接手实施',verify:'实施结果已提交，等待验证',integrate:'子任务条件已满足，等待整体验收',delivery:'验收已通过，等待交付'};
+ if(s?.next_action==='continue' && reached[s?.step])return reached[s.step];
  return '等待执行者接手';
 }
 
@@ -348,4 +355,128 @@ export function historyReviewText(reason?:string) {
  if(reason?.includes('historical import requires current context and fresh execution'))return '导入记录尚无本次上下文与新执行证据；负责人核对原工作范围后，执行者按原门禁恢复并重新执行。';
  if(reason?.includes('runtime restored; reconcile checkpoints'))return '需核对恢复的检查点、候选与可能已发生的交付运行；具体异常项尚未记录。';
  return reason || '具体核对项尚未记录；相关历史资料仍可查，请由负责人核实后按原门禁继续。';
+}
+
+// Reading-layer status for list rows and detail headers. It only names facts
+// the authority already returned (board, next action, reviews, history); the
+// backend enums and gates are unchanged.
+export type WorkState = { key: string; label: string; tone: string };
+export function workState(s: any, canJudge = true): WorkState {
+  s = s || {};
+  if (s.board === 'completed') return s.historical ? { key: 'done', label: '历史完成', tone: '' } : { key: 'done', label: '已完成', tone: 'done' };
+  if (s.board === 'cancelled') return { key: 'cancelled', label: '已取消', tone: '' };
+  if (s.recovery_action === 'resume') return { key: 'resume', label: '可恢复', tone: 'active' };
+  if (s.needs_history_review) return { key: 'history', label: '历史待核对', tone: '' };
+  if (s.requires_task_decision || s.board === 'confirmation') return { key: 'decision', label: canJudge ? '待你决定' : '待决定', tone: 'review' };
+  if (s.manual_reviews?.length && !s.running) return { key: 'review', label: canJudge ? '待你验收' : '待验收', tone: 'review' };
+  if (s.next_action === 'wait_environment' || s.blocker_reason) return { key: 'blocked', label: (s.blocking_reasons || []).some((r: string) => r.includes('expired attempt')) ? '责任已过期' : '受阻', tone: 'blocked' };
+  if (s.next_action === 'repair') return { key: 'repair', label: '待修复', tone: 'amber' };
+  if (s.board === 'active') return { key: 'active', label: '推进中', tone: 'active' };
+  if (s.next_action === 'wait_dependency') return { key: 'dependency', label: '等待前置', tone: '' };
+  if (s.next_action === 'wait_children') return { key: 'children', label: '等待子任务', tone: '' };
+  if (s.next_action === 'wait_integration') return { key: 'integration', label: '待整体验收', tone: 'review' };
+  if (s.next_action === 'wait_executor') return { key: 'active', label: '推进中', tone: 'active' };
+  // Waiting for a taker: name the step so "analysed, awaiting implementation"
+  // is distinguishable from "never started".
+  const stepLabel: Record<string, string> = { analysis: '待分析', execute: '待实施', verify: '待验证', integrate: '待整体验收', delivery: '待交付' };
+  return { key: 'pending', label: stepLabel[s.step] || '待接手', tone: '' };
+}
+// A parent row also says what its unfinished children are doing, without
+// changing the parent's own state or completion conditions.
+export function rowState(row: any, canJudge = true): WorkState {
+  const own = workState(row?.task, canJudge);
+  if (!row?.children || !['pending', 'children'].includes(own.key)) return own;
+  if (row.active_children) return { key: 'active', label: '推进中', tone: 'active' };
+  if (row.review_children) return { key: 'review', label: canJudge ? '子项待你验收' : '子项待验收', tone: 'review' };
+  if (row.blocked_children) return { key: 'blocked', label: '子项受阻', tone: 'blocked' };
+  return own;
+}
+// Detail pages read the same family counts as the list row.
+export function familyRow(task: any, family: any) {
+  return family?.descendants ? { task, children: family.descendants, completed: family.completed, remaining: family.remaining, active_children: family.active_children, review_children: family.review_children, blocked_children: family.blocked_children } : { task, children: 0 };
+}
+export function rowSummary(row: any) {
+  if (!row?.children) return workFocus(row?.task);
+  const parts = [`已完成 ${row.completed} / ${row.children} 个子任务`];
+  const states = [[row.active_children, '推进中'], [row.review_children, '待验收'], [row.blocked_children, '受阻']].filter(([n]) => n).map(([n, t]) => `${n} 项${t}`);
+  const own = workState(row.task);
+  const tail = own.key === 'pending' || own.key === 'children' ? '' : '；父事项：' + workFocus(row.task);
+  return parts[0] + (states.length ? '，' + states.join('、') : row.remaining ? `，剩余 ${row.remaining} 项` : '') + tail;
+}
+export type Owner = { name: string; mark: string; gray: boolean; you: boolean };
+export function workOwner(s: any, canJudge = true, username = '', row?: any): Owner {
+  s = s || {};
+  const you = (name = '你') => ({ name, mark: (username || 'W').slice(0, 1).toUpperCase(), gray: false, you: true });
+  const agent = (name: string) => ({ name, mark: 'A', gray: true, you: false });
+  const role = (name: string) => ({ name, mark: name.slice(0, 1), gray: true, you: false });
+  if (s.board === 'completed') return { name: s.historical ? '历史记录' : '已交付', mark: '✓', gray: true, you: false };
+  if (s.board === 'cancelled') return { name: '—', mark: '·', gray: true, you: false };
+  if (s.requires_task_decision || s.board === 'confirmation') return canJudge ? you() : role('负责人');
+  if (s.manual_reviews?.length && !s.running) return canJudge ? you() : role('验收人');
+  if (s.running && s.executors?.length) return agent(s.executors.join('、'));
+  // Queued is a collaboration marker, not running work: neutral, own label.
+  if (s.assignment === 'queued' && s.queue) return { name: queueLabel(s.queue) + ' · 排队中', mark: queueLabel(s.queue).slice(0, 1).toUpperCase(), gray: true, you: false };
+  if (s.recovery_action === 'resume' || (s.needs_history_review && s.imported)) return agent('执行者');
+  if (s.needs_history_review) return canJudge ? you() : role('负责人');
+  if (s.next_action === 'wait_environment' || s.blocker_reason) return role('阻塞处理人');
+  if (row?.children && row.active_children && !s.running) return agent('子任务执行者');
+  if (s.next_action === 'repair') return agent('执行者');
+  // "未安排" only says AEL holds no queue record; another system may still have one.
+  return { name: s.assignment === 'unassigned' ? '未安排' : '待接手', mark: '·', gray: true, you: false };
+}
+export function queueLabel(q: any) { return q?.runner_label || q?.runner || '执行者'; }
+// Actual waiting time since the record was written; never a liveness verdict.
+export function waitedFor(value: string | null | undefined) {
+  if (!value || !Number.isFinite(Date.parse(value))) return '时间未确认';
+  const minutes = Math.max(0, Math.floor((Date.now() - Date.parse(value)) / 60000));
+  if (minutes < 1) return '不到 1 分钟';
+  if (minutes < 60) return `${minutes} 分钟`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return `${hours} 小时${minutes % 60 ? ' ' + (minutes % 60) + ' 分钟' : ''}`;
+  return `${Math.floor(hours / 24)} 天`;
+}
+export const queueErrors: Record<string, string> = {
+  QUEUE_VERSION_CONFLICT: '排队安排已被他人更新或已失效，已刷新为最新归属。',
+  QUEUE_STARTED: '任务已被领取开始执行，不能再释放或转交排队；请使用现有交接入口。',
+  QUEUE_RESERVED: '任务已由其他执行者安排，尚未开始。',
+  QUEUE_TARGET_FORBIDDEN: '接收者在本项目没有领取这一步骤的权限。',
+  QUEUE_INVALID: '请求不完整：请选择接收者并填写原因。',
+  REMOTE_HANDOFF_TARGET: '任务已指定交接接收方，只能转交给该接收方。',
+  RUNNER_NOT_FOUND: '接收者未在本项目注册。',
+  FORBIDDEN: '只有安排所属的执行者账号或项目管理员可以操作。',
+  IDEMPOTENCY_CONFLICT: '同一请求键已用于不同内容，请重新提交。',
+};
+export function relativeShort(value: string | null | undefined) {
+  if (!value || !Number.isFinite(Date.parse(value))) return '';
+  const days = Math.floor((Date.now() - Date.parse(value)) / 86400000);
+  if (days < 1) return relativeStamp(value);
+  if (days === 1) return '昨天';
+  if (days === 2) return '前天';
+  return new Date(value).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
+}
+// Copyable hand-off text. Copying never claims, starts or reserves work.
+export function handoffText(project: string, task?: { id: string; title: string; next?: string }) {
+  return `请在 AEL 项目 ${project} 中读取${task ? `任务「${task.title}」（${task.id}）` : '当前未完成工作'}，核对当前状态、已有结果与授权范围。` +
+    (task?.next ? `下一步：${task.next}。` : '按已有父级计划接续可执行的工作。') +
+    '按 AEL 的领取、上下文与提交协议执行；保留已完成成果，只在真实阻塞或需要人作决定时等待。';
+}
+
+// Responsibility and reporting facts for an open task. A report is a past
+// observation: it never proves an Agent is online, and silence never proves
+// a failure.
+export function progressFacts(n: any) {
+  const s = n?.summary || {}, h = s.health || n?.health || {};
+  const active = (n?.collaboration || []).filter((c: any) => c.responsibility_state === 'active' || c.responsibility_state === 'claimed');
+  const owner = active.map((c: any) => c.alias || c.runner).filter(Boolean).join('、') || (s.executors || []).join('、');
+  const kind: Record<string, string> = { artifact: '提交成果', check: '提交检查记录' };
+  let record = '';
+  if (h.reported_at && (!h.last_progress_at || h.reported_at >= h.last_progress_at)) record = relativeShort(h.reported_at) + '上报进展';
+  else if (h.last_progress_at) record = relativeShort(h.last_progress_at) + (kind[h.last_progress_kind] || '记录进展');
+  else if (s.running) record = '已领取责任，尚未上报进展';
+  const contact = h.last_contact ? relativeShort(h.last_contact) + '客户端联系（不代表当前在线）' : '';
+  const since = h.last_progress_at || h.reported_at;
+  const minutes = since ? Math.max(0, Math.round((Date.now() - new Date(since).getTime()) / 60000)) : 0;
+  const quiet = s.running && h.no_progress ? { minutes, threshold: Math.round((h.threshold_seconds || 0) / 60) } : null;
+  const long = s.running && h.healthy_long && h.expected_until ? { until: h.expected_until } : null;
+  return { owner, record, contact, quiet, long };
 }

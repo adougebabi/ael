@@ -23,14 +23,20 @@ try {
     await expect(page.getByRole("button", { name: "切换项目", exact: true })).toContainText("Eight-module full chain");
     if (action === "text-result") {
       await page.goto(config.url + "/#/tasks/" + config.task + "?project=shared");
-      await expect(page.getByRole("region", { name: "实施结果" })).toContainText("Module 4 now returns 4");
-      await expect(page.getByRole("region", { name: "检查结果" })).toContainText("command read the integrated value");
-      await expect(page.getByRole("region", { name: "附件", exact: true })).toHaveCount(0);
+      await expect(page.getByRole("region", { name: "交付结论" })).toContainText("Module 4 now returns 4");
+      const verification = page.getByRole("region", { name: "验证结果" });
+      await expect(verification).toContainText("command read the integrated value");
+      await verification.getByRole("button", { name: /^unit-4/ }).click();
+      const check = page.getByRole("dialog");
+      await expect(check).toContainText("command read the integrated value");
+      await expect(check.getByRole("button", { name: /^打开 / })).toHaveCount(0);
+      await check.getByRole("button", { name: "关闭检查详情" }).click();
+      await expect(page.getByRole("region", { name: "验证依据", exact: true })).toHaveCount(0);
       await page.goto(config.url + "/#/tasks/" + config.legacy + "?project=shared");
-      const gallery = page.getByRole("region", { name: "附件", exact: true });
+      const gallery = page.getByRole("region", { name: "验证依据", exact: true });
       await expect(gallery).toBeVisible();
-      await gallery.locator(".result-entry button").first().click();
-      await expect(page.getByRole("dialog", { name: "成果预览" }).getByRole("link", { name: "下载原件" })).toBeVisible();
+      await gallery.locator(".ds-materials button").first().click();
+      await expect(page.getByRole("dialog").getByRole("link", { name: "下载原件" })).toBeVisible();
     } else {
       await page.goto(config.url + "/#/tasks/" + config.task + "?project=shared&section=checks&review=layout");
       const dialog = page.getByRole("dialog");

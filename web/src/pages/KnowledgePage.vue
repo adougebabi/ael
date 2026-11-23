@@ -28,6 +28,15 @@ const views = [["current", "现行规范"], ["decisions", "决策与取舍"], ["
 const bookmarks = ref<string[]>([]), bookmarkError = ref("");
 
 function syncBookmarks() { bookmarks.value = readKnowledgeBookmarks(info.value.project || ""); }
+const saved = useResource<any[]>([]);
+async function loadSaved() { const ids = bookmarks.value.slice(0, 25); await saved.load(async () => (await Promise.all(ids.map((id) => api("/api/knowledge-record?" + params({ id })).catch(() => ({ id, title: id, status: "unavailable", description: "这份收藏的资料当前不可读取（可能已移除或改名）。" }))))).filter((x: any) => !search.value || (x.title + " " + (x.description || "")).toLowerCase().includes(search.value.toLowerCase()))); }
+const shown = computed<any[]>(() => view.value === "bookmarks" ? saved.data.value : list.data.value.items);
+const startHere = computed(() => view.value === "current" ? (list.data.value.items || []).slice(0, 3) : []);
+function toggleBookmarkFor(id: string) {
+  const next = toggleKnowledgeBookmark(info.value.project || "", id);
+  if (next === null) { bookmarkError.value = "浏览器无法保存收藏，请检查本地存储权限。"; return; }
+  bookmarks.value = next; bookmarkError.value = "";
+}
 function toggleBookmark() {
   const next = toggleKnowledgeBookmark(info.value.project || "", props.id);
   if (next === null) { bookmarkError.value = "浏览器无法保存常用资料，请检查本地存储权限。"; return; }
@@ -40,6 +49,8 @@ async function load() {
   if (props.id) {
     const id = props.id, version = route.value.query.get("version") || "";
     await record.load(() => api("/api/knowledge-record?" + params({ id, version, context: route.value.query.get("context") || "" })));
+  } else if (view.value === "bookmarks") {
+    await loadSaved();
   } else {
     const query = { q: route.value.query.get("q") || "", view: view.value, scope: scope.value, limit: 25, offset: offset.value };
     await list.load(() => api("/api/knowledge-page?" + params(query)));
@@ -66,53 +77,53 @@ function clearFilters() { clearTimeout(searchTimer); typing = false; search.valu
 <template>
   <div class="knowledge-page">
     <template v-if="!id">
-      <nav class="tabs knowledge-tabs" aria-label="资料分类">
-        <button v-for="[key, title] in views" :key="key" :class="{ chosen: view === key }" :aria-current="view === key ? 'page' : undefined" @click="changeView(key)">{{ title }} <span class="count">{{ list.data.value.view_counts?.[key] ?? list.data.value.counts[key] ?? 0 }}</span></button>
-        <button v-if="view === 'all'" class="chosen" aria-current="page">全部搜索结果</button>
+      <nav class="wb-page-tabs" aria-label="资料分类">
+        <button v-for="[key, title] in views" :key="key" :class="{ selected: view === key }" :aria-current="view === key ? 'page' : undefined" @click="changeView(key)">{{ title }}<span class="tiny-count">{{ list.data.value.view_counts?.[key] ?? list.data.value.counts[key] ?? 0 }}</span></button>
+        <button :class="{ selected: view === 'bookmarks' }" :aria-current="view === 'bookmarks' ? 'page' : undefined" @click="changeView('bookmarks')">我的收藏<span class="tiny-count">{{ bookmarks.length }}</span></button>
+        <button v-if="view === 'all'" class="selected" aria-current="page">全部搜索结果</button>
       </nav>
-      <LoadState :loading="list.loading.value" :error="list.error.value" :last="list.last.value" @retry="load" />
-      <div class="knowledge-library">
-        <aside class="knowledge-scopes" aria-label="资料范围导航">
-          <span>按适用范围</span>
-          <button :class="{ chosen: !scope }" @click="filter({ scope: '' })"><span>全部范围</span><small>{{ list.data.value.scope_counts?.all || 0 }}</small></button>
-          <button :class="{ chosen: scope === 'unclassified' }" @click="filter({ scope: 'unclassified' })"><span>未分类 / 项目级</span><small>{{ list.data.value.scope_counts?.unclassified || 0 }}</small></button>
-          <button v-for="item in list.data.value.scopes.slice(0, 8)" :key="item" :class="{ chosen: scope === item }" :title="item" @click="filter({ scope: item })"><span>{{ item }}</span><small>{{ list.data.value.scope_counts?.paths?.[item] || 0 }}</small></button>
-          <label v-if="list.data.value.scopes.length > 8" class="library-scope-select"><span class="visually-hidden">适用范围</span><select :value="scope" @change="filter({ scope: ($event.target as HTMLSelectElement).value })"><option value="">更多范围</option><option value="unclassified">未分类 / 项目级</option><option v-for="item in list.data.value.scopes" :key="item" :value="item">{{ item }}</option></select></label>
-          <p>规范说明应该怎样做。<br />决策保留为什么。<br />历史不自动成为当前规则。</p>
-        </aside>
-        <div class="knowledge-main">
-          <div class="library-heading">
-            <div><h2>{{ views.find(([key]) => key === view)?.[1] || '全部搜索结果' }}</h2><small>{{ list.data.value.total }} 份资料 · 正文按需阅读</small></div>
-            <form class="toolbar library-search" @submit.prevent="searchNow"><label class="search"><AppIcon name="search"/><span class="visually-hidden">搜索规范</span><input v-model="search" type="search" placeholder="搜索标题、正文或路径…" @input="searchInput" /></label><button v-if="search && view !== 'all'" type="button" class="inline-link" @click="searchAcross">搜索全部资料 →</button></form>
-          </div>
-          <p v-if="view === 'history'" class="info-strip">这里保留历史资料；阅读历史不等于采用它作为现行约束。</p>
-          <div v-if="!list.loading.value && !list.error.value && !list.data.value.items.length" class="record-list library-empty"><AppIcon name="search"/><h2>{{ search || scope ? '没有匹配资料' : '当前分类暂无资料' }}</h2><p>调整关键词或适用范围，或查看资料接入情况。</p><button v-if="search || scope || view !== 'current'" @click="clearFilters">清除筛选</button><a href="#/settings?section=sources">查看资料来源</a></div>
-          <div v-else class="record-list">
-            <article v-for="item in list.data.value.items" :key="item.id" class="record-row knowledge">
-              <span class="library-icon"><AppIcon :name="item.kind === 'decision' ? 'evolution' : 'file'" /></span>
-              <div class="library-row-body">
-                <h3><a :id="'knowledge-link-' + item.id" :href="knowledgeHref(item.id)" class="record-title">{{ item.title }}</a><AppIcon v-if="bookmarks.includes(item.id)" name="star" class="bookmark-mark" /></h3>
-                <p class="record-description"><span v-if="item.excerpt" class="excerpt-label">正文摘录 · </span>{{ item.description || '尚无摘要，打开详情阅读。' }}</p>
-                <div class="library-meta"><span>{{ item.paths?.join('、') || '未分类 / 项目级' }}</span><span v-if="item.hash" :title="item.hash">指纹 {{ item.hash.slice(0, 8) }}</span><span>{{ item.task_count || 0 }} 个关联任务</span><span v-if="item.occurred_at">{{ stamp(item.occurred_at) }}</span></div>
-              </div>
-              <div class="record-meta"><span class="status" :class="item.status">{{ label(item.status) }}</span><a :href="knowledgeHref(item.id)" :aria-label="'阅读' + item.title" class="library-arrow">›</a></div>
-            </article>
-          </div>
-          <Pagination v-if="list.data.value.total > 25 || offset" :offset="offset" :limit="25" :total="list.data.value.total" name="资料" @change="setQuery({ offset: $event })" />
-          <div class="library-hint"><span>点击标题阅读完整规范与关联依据</span><span>本页 {{ list.data.value.items.length }} / {{ list.data.value.total }} 份资料</span></div>
+      <div class="wb-knowledge-tools">
+        <form class="wb-knowledge-search" @submit.prevent="view === 'bookmarks' ? searchAcross() : searchNow()"><AppIcon name="search" /><span class="visually-hidden">搜索规范</span><input v-model="search" type="search" placeholder="搜索标题、正文或路径" aria-label="搜索规范" @input="view !== 'bookmarks' && searchInput()" /><button type="submit" class="text-button">搜索</button></form>
+        <button v-if="search && view !== 'all' && view !== 'bookmarks'" type="button" class="text-button" @click="searchAcross">在全部分类中搜索</button>
+        <select v-if="view !== 'bookmarks'" aria-label="适用范围" :value="scope" @change="filter({ scope: ($event.target as HTMLSelectElement).value })"><option value="">全部范围（{{ list.data.value.scope_counts?.all || 0 }}）</option><option value="unclassified">未分类 / 项目级（{{ list.data.value.scope_counts?.unclassified || 0 }}）</option><option v-for="item in list.data.value.scopes" :key="item" :value="item">{{ item }}（{{ list.data.value.scope_counts?.paths?.[item] || 0 }}）</option></select>
+      </div>
+      <p v-if="view === 'history'" class="wb-banner">这里保留历史资料；阅读历史不等于采用它作为现行约束。</p>
+      <div class="wb-knowledge-layout">
+        <div class="wb-knowledge-main">
+          <LoadState :loading="(view === 'bookmarks' ? saved.loading.value : list.loading.value) && !shown.length" :error="view === 'bookmarks' ? saved.error.value : list.error.value" :last="list.last.value" @retry="load" />
+          <div v-if="!(view === 'bookmarks' ? saved.loading.value : list.loading.value) && !shown.length" class="wb-empty"><AppIcon :name="view === 'bookmarks' ? 'star' : 'search'" /><h3>{{ view === 'bookmarks' ? '还没有收藏的资料' : search || scope ? '没有匹配的资料' : '当前分类暂无资料' }}</h3><p>{{ view === 'bookmarks' ? '在列表或阅读页点星标收藏，常用规范会出现在这里（只保存在本浏览器）。' : '调整关键词或适用范围，或查看资料接入情况。' }}</p><button v-if="search || scope || !['current', 'bookmarks'].includes(view)" @click="clearFilters">清除筛选</button></div>
+          <article v-for="item in shown" :key="item.id" class="wb-doc-row">
+            <span class="wb-doc-icon"><AppIcon :name="item.kind === 'decision' ? 'branch' : item.kind === 'research' || ['historical', 'superseded'].includes(item.status) ? 'history' : 'book'" /></span>
+            <div class="wb-doc-body">
+              <h3><a :id="'knowledge-link-' + item.id" :href="knowledgeHref(item.id)" class="record-title">{{ item.title }}</a><span class="tag" :class="item.status === 'current' ? 'blue' : ['proposed', 'conflict'].includes(item.status) ? 'amber' : ''">{{ label(item.status) }}</span></h3>
+              <p>{{ item.description || item.summary || '尚无摘要，打开阅读全文。' }}</p>
+              <small>{{ item.paths?.join('、') || '未分类 / 项目级' }}<template v-if="item.task_count !== undefined"> · {{ item.task_count || 0 }} 个关联任务</template><template v-if="item.occurred_at"> · {{ stamp(item.occurred_at) }}</template><template v-else-if="item.hash"> · 指纹 {{ item.hash.slice(0, 8) }}</template></small>
+            </div>
+            <button class="icon-button wb-star" :class="{ on: bookmarks.includes(item.id) }" :aria-pressed="bookmarks.includes(item.id)" :aria-label="(bookmarks.includes(item.id) ? '取消收藏 ' : '收藏 ') + item.title" :disabled="!info.project" @click="toggleBookmarkFor(item.id)"><AppIcon name="star" /></button>
+          </article>
+          <Pagination v-if="view !== 'bookmarks' && (list.data.value.total > 25 || offset)" :offset="offset" :limit="25" :total="list.data.value.total" name="资料" @change="setQuery({ offset: $event })" />
+          <p v-if="bookmarkError" role="alert" class="wb-banner error">{{ bookmarkError }}</p>
         </div>
+        <aside class="wb-knowledge-aside" aria-label="阅读指引">
+          <h3><AppIcon name="book" />从这里开始</h3>
+          <p>执行前读现行规范；需要了解背景时，再看决策与历史。历史资料不会自动成为当前规则。</p>
+          <a v-for="item in startHere" :key="item.id" :href="knowledgeHref(item.id)">{{ item.title }}</a>
+          <p v-if="!startHere.length" class="muted">暂无现行规范。可在项目设置查看资料来源。</p>
+          <hr />
+          <p class="muted">规范正文、版本与关联工作在同一处阅读；关联任务列在每份资料的阅读页中。</p>
+        </aside>
       </div>
     </template>
     <template v-else>
-      <button class="back-link" @click="back('/knowledge')">← 返回规范库</button>
+      <a class="text-button wb-back-line" :href="'#/knowledge'" @click.prevent="back('/knowledge')"><AppIcon name="chevron-left" />规范与决策</a>
       <LoadState :loading="activeResource.loading.value" :error="activeResource.error.value" :last="activeResource.last.value" @retry="load" />
       <template v-if="detail">
-        <header class="object-header knowledge-detail-header">
-          <div><p class="eyebrow">{{ label(detail.kind) }}</p><h1>{{ detail.title }}</h1><p class="knowledge-detail-meta"><span class="status" :class="detail.status">{{ label(detail.status) }}</span><span>{{ detail.paths?.join('、') || '未分类 / 项目级' }}</span><span v-if="detail.hash" :title="detail.hash">指纹 {{ detail.hash.slice(0, 8) }}</span></p></div>
-          <button class="bookmark-button" :class="{ chosen: bookmarks.includes(detail.id) }" :aria-pressed="bookmarks.includes(detail.id)" :disabled="!info.project" title="仅保存在此浏览器" @click="toggleBookmark"><AppIcon name="star"/>{{ bookmarks.includes(detail.id) ? '已加入常用' : '加入常用' }}</button>
+        <header class="wb-detail-header wb-detail-title-bar">
+          <div><h1 class="wb-detail-title">{{ detail.title }}</h1><div class="wb-detail-meta"><span class="tag" :class="detail.status === 'current' ? 'blue' : ['proposed', 'conflict'].includes(detail.status) ? 'amber' : ''">{{ label(detail.status) }}</span><span>{{ label(detail.kind) }}</span><span class="wb-thin-divider"></span><span>{{ detail.paths?.join('、') || '未分类 / 项目级' }}</span><span v-if="detail.hash" :title="detail.hash">指纹 {{ detail.hash.slice(0, 8) }}</span></div></div>
+          <button class="bookmark-button" :class="{ chosen: bookmarks.includes(detail.id) }" :aria-pressed="bookmarks.includes(detail.id)" :disabled="!info.project" title="仅保存在此浏览器" @click="toggleBookmark"><AppIcon name="star"/>{{ bookmarks.includes(detail.id) ? '已收藏' : '收藏' }}</button>
         </header>
-        <p v-if="bookmarkError" role="alert" class="alert">{{ bookmarkError }}</p>
-        <p v-if="route.query.get('version')" class="notice">正在阅读任务实际使用的历史版本，不能据此认定当前实现已复验。</p>
+        <p v-if="bookmarkError" role="alert" class="wb-banner error">{{ bookmarkError }}</p>
+        <p v-if="route.query.get('version')" class="wb-banner">正在阅读任务实际使用的历史版本，不能据此认定当前实现已复验。</p>
         <section class="knowledge-reader">
           <section v-if="detail?.versions?.length" class="info-strip"><p>{{ detail.reason }}</p><a v-for="version in detail.versions" :key="version.hash" :href="knowledgeHref(detail.id, version.hash)">{{ version.hash }} · {{ label(version.status) }}</a></section>
         <MarkdownBody :id="detail.id" :body="detail.body" :version="detail.hash" :context="detail.context_id" :show-body="readerTab === 'body'" toc-right @show-body="setQuery({ reader: undefined, fragment: undefined })">

@@ -1,9 +1,0 @@
---- FAIL: TestRunnerWorkspaceFingerprintIncludesStagedMode (2.16s)
-    remote_runner_workspace_test.go:240: staged mode was not independently protected: candidate unchanged=false fingerprint unchanged=false
-FAIL
-FAIL	ael/cmd/ael	119.535s
-ok  	ael/internal/core	96.632s
-ok  	ael/internal/server	143.997s
-ok  	ael/internal/remote	14.352s
-ok  	ael/internal/knowledge	7.344s
-FAIL

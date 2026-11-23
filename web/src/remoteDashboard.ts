@@ -24,6 +24,9 @@ export function connectDashboard(project: Project | null, csrf = "", expired?: (
   useRemoteTransport(project, async (path, body, raw) => {
     const url = new URL(path, location.origin);
     let endpoint = `/api/v1/projects/${encodeURIComponent(project.id)}/dashboard/${url.pathname.slice(5)}` + url.search;
+    if (url.pathname === "/api/inventory") endpoint = `/api/v1/projects/${encodeURIComponent(project.id)}/artifacts/inventory` + url.search;
+    // Receipt of the caller's own request, looked up by its idempotency key.
+    if (url.pathname === "/api/operation-receipt") endpoint = `/api/v1/projects/${encodeURIComponent(project.id)}/portable-operations/${encodeURIComponent(url.searchParams.get("key") || "")}`;
     if (url.pathname === "/api/findings") endpoint = `/api/v1/projects/${encodeURIComponent(project.id)}/findings` + url.search;
     if (url.pathname === "/api/finding") endpoint = `/api/v1/projects/${encodeURIComponent(project.id)}/findings/${encodeURIComponent(url.searchParams.get("id") || "")}`;
     if (url.pathname === "/api/authority-import") endpoint = `/api/v1/projects/${encodeURIComponent(project.id)}/imports/${encodeURIComponent(url.searchParams.get("id") || "")}?task_id=${encodeURIComponent(url.searchParams.get("task") || "")}`;
@@ -32,6 +35,15 @@ export function connectDashboard(project: Project | null, csrf = "", expired?: (
       const input = body as Record<string, any>;
       if (url.pathname === "/api/finding-action" && ["decisions", "repair", "revalidations"].includes(url.searchParams.get("kind") || "")) {
         endpoint = `/api/v1/projects/${encodeURIComponent(project.id)}/findings/${encodeURIComponent(input.finding_id)}/${url.searchParams.get("kind")}`;
+      } else if (url.pathname === "/api/queue-action" && ["release", "transfer"].includes(input.kind)) {
+        // Queue marker writes go to the holder's runner path; the server checks
+        // the caller is that executor account or a project admin.
+        endpoint = `/api/v1/projects/${encodeURIComponent(project.id)}/runners/${encodeURIComponent(input.holder)}/queue-${input.kind}`;
+        payload = {
+          task_id: input.task_id, expected_version: input.expected_version, reason: input.reason,
+          ...(input.kind === "transfer" ? { to_runner: input.to_runner } : {}),
+          operation_id: input.request_key, idempotency_key: input.request_key,
+        };
       } else if (url.pathname === "/api/action" && ["review_result", "review_pending", "review_confirm", "review_resume"].includes(input.action)) {
         endpoint = `/api/v1/projects/${encodeURIComponent(project.id)}/reviews`;
       } else {

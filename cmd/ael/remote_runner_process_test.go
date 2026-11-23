@@ -264,3 +264,34 @@ with open(os.environ["AEL_RESULT"],"w") as f: json.dump({"status":"pass","summar
 		t.Fatal(err)
 	}
 }
+
+func TestRunnerArtifactsKeepSubmittedNames(t *testing.T) {
+	workspace, dir := t.TempDir(), t.TempDir()
+	files := map[string]string{"internal/npc/recovery_test.go": "package npc\n", "docs/scope.md": "# 范围\n"}
+	candidate := remote.PortableCandidate{}
+	for rel, body := range files {
+		if err := os.MkdirAll(filepath.Join(workspace, filepath.Dir(rel)), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(workspace, rel), []byte(body), 0600); err != nil {
+			t.Fatal(err)
+		}
+		candidate.Files = append(candidate.Files, remote.PortableFile{Path: rel, SHA256: store.Hash([]byte(body))})
+	}
+	if err := os.WriteFile(filepath.Join(dir, "scenario-report.json"), []byte(`{"observations":[]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("A=1\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := remoteRunnerConfig{Workspace: workspace}
+	for ref, want := range map[string]string{"internal/npc/recovery_test.go": "recovery_test.go.txt", "docs/scope.md": "scope.md", "runtime:scenario-report.json": "scenario-report.json"} {
+		_, name, mime, err := runnerOutputFile(cfg, dir, ref, candidate)
+		if err != nil || name != want || mime != "text/plain" {
+			t.Fatalf("%s: got %q %q %v, want %q text/plain", ref, name, mime, err, want)
+		}
+	}
+	if _, name, _, err := runnerOutputFile(cfg, dir, "runtime:.env", candidate); err != nil || !strings.HasPrefix(name, "runner-") {
+		t.Fatalf("hidden file name must fall back to the content-addressed name: %q %v", name, err)
+	}
+}

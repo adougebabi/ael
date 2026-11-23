@@ -192,7 +192,7 @@ func (h *standaloneHandler) remoteDashboard(w http.ResponseWriter, r *http.Reque
 			offsets[board] = max(0, value)
 		}
 		if q.Get("view") == "workbench" {
-			result, err = service.Workbench(core.Query{Limit: limit, Offset: offset, Days: days, Text: q.Get("q"), Type: q.Get("type"), Board: q.Get("board"), Parent: q.Get("parent")})
+			result, err = service.Workbench(core.Query{Limit: limit, Offset: offset, Days: days, Text: q.Get("q"), Type: q.Get("type"), Board: q.Get("board"), Parent: q.Get("parent"), Assign: q.Get("assign")})
 			break
 		}
 		page, e := service.QueryPage(core.Query{Limit: limit, Offset: offset, Offsets: offsets, Days: days, Text: q.Get("q"), Type: q.Get("type"), Board: q.Get("board"), Parent: q.Get("parent")})
@@ -219,6 +219,20 @@ func (h *standaloneHandler) remoteDashboard(w http.ResponseWriter, r *http.Reque
 		result = map[string]any{"items": items, "counts": page.Counts, "total": page.Total, "limit": page.Limit, "offset": page.Offset, "offsets": page.Offsets}
 	case "task":
 		result, err = dashboardNext(service, id)
+	case "runners":
+		// Registered runner identities for queue display and transfer choice.
+		labels, e := dashboardClientLabels(service)
+		err = e
+		items := []map[string]string{}
+		for id, label := range labels {
+			alias := label["alias"]
+			if alias == "" {
+				alias = id
+			}
+			items = append(items, map[string]string{"id": id, "alias": alias, "machine": label["machine"]})
+		}
+		slices.SortFunc(items, func(a, b map[string]string) int { return strings.Compare(a["alias"]+a["id"], b["alias"]+b["id"]) })
+		result = map[string]any{"items": items}
 	case "review-candidate":
 		task, e := service.Get(id)
 		err = e
@@ -451,6 +465,12 @@ func (h *standaloneHandler) remoteDashboard(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if err != nil {
+		// A material read reports why the original cannot be read (missing,
+		// purged or content mismatch) instead of a generic task rejection.
+		if (view == "artifact" || view == "artifact-status") && (errors.Is(err, sql.ErrNoRows) || strings.HasPrefix(err.Error(), "ARTIFACT_")) {
+			artifactError(w, err)
+			return
+		}
 		standaloneTaskError(w, err)
 		return
 	}

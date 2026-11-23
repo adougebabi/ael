@@ -1,7 +1,0 @@
-lucky_network=host
-{"build":"f838a94-e5074a4d4148","capabilities":["login","projects","project_roles","revocable_tokens","remote_tasks","remote_plans","operation_receipts","artifacts","portable_candidates","portable_contexts","remote_runners","findings","authority_imports","remote_integration","remote_failure_review"],"cli_output_protocol":1,"maintenance":{"deadline":null,"epoch":1,"mode":"active"},"mode":"server","protocol":1,"skill_protocol":1,"version":"0.1.22"}
-
-unauthorized_projects_http=401
-ael-v2-server b1a8015ab2ed ael-server:v222-final-arm64 Up 55 seconds (healthy) 127.0.0.1:17332->7332/tcp
-derper e70049246126 fredliang/derper Up 8 days
-lucky ed3ec78763c4 gdy666/lucky:v3 Up 8 days

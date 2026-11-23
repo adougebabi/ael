@@ -1,1 +1,0 @@
-{"task_id":"oracle-parent","status":"blocked","candidate":"unknown: prepare was invoked exactly once but failed with PermissionError creating the project directory in this read-only session. Helper next and the final formal CLI task show failed because the project directory does not exist. No candidate could be retrieved; no leaves were completed.","leaf_ids":[]}

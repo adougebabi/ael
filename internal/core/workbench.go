@@ -24,6 +24,11 @@ type WorkbenchRow struct {
 	Completed         int         `json:"completed"`
 	Cancelled         int         `json:"cancelled"`
 	Matches           int         `json:"matches"`
+	// Unfinished descendants by reading state; the parent's own state and
+	// gates stay in Task and are never inferred from these counts.
+	ActiveChildren  int `json:"active_children"`
+	ReviewChildren  int `json:"review_children"`
+	BlockedChildren int `json:"blocked_children"`
 }
 type WorkbenchFamily struct {
 	Direct      int  `json:"direct"`
@@ -34,6 +39,10 @@ type WorkbenchFamily struct {
 	Required    int  `json:"required"`
 	Satisfied   int  `json:"satisfied"`
 	Formal      bool `json:"formal"`
+	// Same reading counts as WorkbenchRow, over unfinished descendants.
+	ActiveChildren  int `json:"active_children"`
+	ReviewChildren  int `json:"review_children"`
+	BlockedChildren int `json:"blocked_children"`
 }
 type WorkbenchPage struct {
 	Family          *WorkbenchFamily `json:"family,omitempty"`
@@ -47,6 +56,9 @@ type WorkbenchPage struct {
 	Limit           int              `json:"limit"`
 	Offset          int              `json:"offset"`
 	Counts          map[string]int   `json:"counts"`
+	// Assignees: runners holding a queue record or a running responsibility
+	// on unfinished work, for the assignment filter.
+	Assignees []string `json:"assignees,omitempty"`
 }
 
 func workbenchMatch(n TaskSummary, view string) bool {
@@ -57,6 +69,9 @@ func workbenchMatch(n TaskSummary, view string) bool {
 		return true
 	case "human":
 		return len(n.ManualReviews) > 0
+	case "review":
+		// Waiting for a person: a current human check or a recorded decision.
+		return len(n.ManualReviews) > 0 || n.Board == "confirmation"
 	case "blocked":
 		return n.Action == "wait_environment" || n.Action == "wait_dependency" || n.Blocker != "" || n.Checks.Blocked > 0
 	case "repair":
@@ -188,6 +203,15 @@ func (s *Service) Workbench(q Query) (WorkbenchPage, error) {
 				family.Cancelled++
 			default:
 				family.Remaining++
+				if workbenchMatch(facts[id].Task, "active") {
+					family.ActiveChildren++
+				}
+				if workbenchMatch(facts[id].Task, "review") {
+					family.ReviewChildren++
+				}
+				if workbenchMatch(facts[id].Task, "blocked") {
+					family.BlockedChildren++
+				}
 			}
 			member := tasks[id]
 			if family.Formal && member.EpicMembership != nil && member.EpicMembership.Parent == q.Parent && member.EpicMembership.Required {
@@ -214,7 +238,7 @@ func (s *Service) Workbench(q Query) (WorkbenchPage, error) {
 	p.ProjectTotal = len(groups)
 	p.ProjectChildren = len(ids) - len(groups)
 	selected := []WorkbenchRow{}
-	views := []string{"unfinished", "active", "pending", "confirmation", "completed", "cancelled", "human", "blocked", "repair", "all", "issues"}
+	views := []string{"unfinished", "active", "pending", "confirmation", "review", "completed", "cancelled", "human", "blocked", "repair", "all", "issues"}
 	for _, root := range order {
 		row := facts[root]
 		members := groups[root]
@@ -255,9 +279,26 @@ func (s *Service) Workbench(q Query) (WorkbenchPage, error) {
 					row.Cancelled++
 				} else {
 					row.Remaining++
+					if workbenchMatch(f.Task, "active") {
+						row.ActiveChildren++
+					}
+					if workbenchMatch(f.Task, "review") {
+						row.ReviewChildren++
+					}
+					if workbenchMatch(f.Task, "blocked") {
+						row.BlockedChildren++
+					}
 				}
 			}
 			text := strings.ToLower(f.Task.Title + " " + f.Task.ID + " " + f.Purpose)
+			for _, runner := range append(slices.Clone(f.Task.Executors), queueHolder(f.Task)) {
+				if runner != "" && !slices.Contains(p.Assignees, runner) && workbenchMatch(f.Task, "") {
+					p.Assignees = append(p.Assignees, runner)
+				}
+			}
+			if !assignMatch(f.Task, q.Assign) {
+				continue
+			}
 			if !workbenchMatch(f.Task, q.Board) || (q.Board == "issues" && len(f.Issues) == 0) || (q.Type != "" && f.Task.Type != q.Type) || (q.Text != "" && !strings.Contains(text, strings.ToLower(q.Text))) {
 				continue
 			}
@@ -301,4 +342,26 @@ func (s *Service) Workbench(q Query) (WorkbenchPage, error) {
 	end := min(start+p.Limit, p.Total)
 	p.Items = selected[start:end]
 	return p, nil
+}
+
+func queueHolder(t TaskSummary) string {
+	if t.Queue == nil {
+		return ""
+	}
+	return t.Queue.Runner
+}
+
+func assignMatch(t TaskSummary, assign string) bool {
+	switch {
+	case assign == "":
+		return true
+	case assign == "unassigned" || assign == "queued":
+		return t.Assignment == assign
+	case assign == "claimable":
+		return t.Claimable
+	case strings.HasPrefix(assign, "runner:"):
+		runner := strings.TrimPrefix(assign, "runner:")
+		return queueHolder(t) == runner || slices.Contains(t.Executors, runner)
+	}
+	return true
 }

@@ -1,8 +1,0 @@
-{
-  "agent": "existing Codex CLI",
-  "build": "f838a94-e5074a4d4148",
-  "actual_command_execution_events": 2,
-  "ael_command_observed": true,
-  "final_matches_server": true,
-  "raw_events_private": "/private/tmp/ael-v222-final-1/full-chain/codex-events.jsonl"
-}

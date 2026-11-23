@@ -1,6 +1,0 @@
-Fixture uses a fake git that cannot publish. Overlay: /private/tmp/ael-v212-publish-test-mwf8hq16/overlay.json
---- FAIL: TestV212ApprovedCheckCannotLaunchIndirectPublish (0.28s)
-    zz_v212_indirect_publish_test.go:38: an authorized check launched the unapproved publish command; result=fail
-FAIL
-FAIL	ael/cmd/ael	0.787s
-FAIL

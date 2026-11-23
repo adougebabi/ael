@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useResource } from "../resource";
-import { taskHref } from "../router";
+import { taskHref, href } from "../router";
+import AppIcon from "./AppIcon.vue";
 import { stamp } from "../display";
 import LoadState from "./LoadState.vue";
 import Pagination from "./Pagination.vue";
-import ResultsGallery from "./ResultsGallery.vue";
 import type { ResultFile } from "../results";
 import ActionDialog from "./ActionDialog.vue";
 
@@ -63,11 +63,12 @@ const props = defineProps<{
   projectId: string;
   admin: boolean;
   request: (path: string, body?: unknown) => Promise<any>;
+  initialMode?: "materials" | "management";
 }>();
 const base = `/api/v1/projects/${encodeURIComponent(props.projectId)}/artifacts`;
 const r = useResource<Inventory | null>(null);
 const { data, loading, error, last } = r;
-const mode=ref("materials"),taskFilter=ref(""),mimeFilter=ref(""),sourceFilter=ref(""),since=ref(""),until=ref("");
+const mode=ref(props.initialMode || "management"),taskFilter=ref(""),mimeFilter=ref(""),sourceFilter=ref(""),since=ref(""),until=ref("");
 const kind = ref("files"),
   search = ref(""),
   query = ref(""),
@@ -91,6 +92,9 @@ const occupied = computed(
     (data.value?.stats.used_bytes || 0) +
     (data.value?.stats.reserved_bytes || 0),
 );
+const filesOpen = ref(false);
+const composition = computed(() => [...(data.value?.file_types || [])].sort((a, b) => b.physical_bytes - a.physical_bytes));
+function typeName(kind: string) { return kind.startsWith("image/") ? "图片" : kind === "text/plain" ? "文本、报告与文档" : kind === "application/json" ? "结构化报告" : kind; }
 const percent = computed(() =>
   data.value?.stats.quota_bytes
     ? Math.min(100, (occupied.value / data.value.stats.quota_bytes) * 100)
@@ -137,9 +141,16 @@ function selectTask(id: string) {
   offset.value = 0;
   query.value = id;
 }
+// A newer server value is shown next to the edited one; nothing is
+// overwritten until the user chooses.
+const quotaConflict = ref<number | null>(null);
 function editQuota() {
   quotaDirty.value = true;
   quotaRequest.value = null;
+}
+function adoptQuota() {
+  quotaConflict.value = null; quotaDirty.value = false; quotaRequest.value = null; mutationError.value = "";
+  if (data.value) { unlimited.value = data.value.stats.quota_bytes === 0; quotaMiB.value = String(data.value.stats.quota_bytes / 1048576); }
 }
 async function saveQuota() {
   if (busy.value || !data.value) return;
@@ -168,6 +179,7 @@ async function saveQuota() {
     await props.request(`${base}/quota`, quotaRequest.value);
     quotaRequest.value = null;
     quotaDirty.value = false;
+    quotaConflict.value = null;
     notice.value = limit
       ? `附件容量上限已设为 ${bytes(limit)}。`
       : "已关闭此项目的附件容量限制。";
@@ -178,6 +190,7 @@ async function saveQuota() {
     if (code === "REVISION_CONFLICT" || code === "QUOTA_TOO_SMALL") {
       quotaRequest.value = null;
       await load();
+      if (code === "REVISION_CONFLICT" && data.value) { quotaConflict.value = data.value.stats.quota_bytes; mutationError.value = ""; }
     }
   } finally {
     busy.value = false;
@@ -254,115 +267,50 @@ onUnmounted(() => clearTimeout(debounce));
 </script>
 
 <template>
-  <section class="project-storage" aria-label="存储与附件">
-    <div class="section-heading">
-      <h2>项目资料与存储</h2>
-      <button :disabled="loading || busy" @click="load">刷新容量</button>
-    </div>
-    <nav class="tabs" aria-label="资料与管理"><button :class="{chosen:mode==='materials'}" @click="mode='materials'">资料</button><button :class="{chosen:mode==='management'}" @click="mode='management'">存储管理</button></nav>
-    <LoadState :loading="loading" :error="error" :last="last" @retry="load" />
-    <p v-if="notice" role="status">{{ notice }}</p>
-    <p
-      v-if="mutationError && !cancelTarget && !prune"
-      class="alert"
-      role="alert"
-    >
-      {{ mutationError }}
-    </p>
+  <section class="project-storage wb-storage" aria-label="存储管理">
+    <LoadState :loading="loading && !data" :error="error" :last="last" @retry="load" />
+    <p v-if="notice" class="wb-banner ok" role="status">{{ notice }}</p>
+    <p v-if="mutationError && !cancelTarget && !prune" class="wb-banner error" role="alert">{{ mutationError }}</p>
     <template v-if="data">
-      <p v-if="mode==='materials'" class="secondary">附件占用 {{ bytes(occupied) }} / {{ data.stats.quota_bytes?bytes(data.stats.quota_bytes):'未设上限' }} · {{ data.total }} 份匹配资料；文件大小为原文件长度，共享分摊见存储管理。</p>
-      <p v-if="mode==='materials' && data.stats.quota_bytes && occupied>=data.stats.quota_bytes" class="alert">容量已达上限，请从存储管理处理。</p>
-      <template v-if="mode==='management'">
-      <div class="storage-total">
-        <strong>{{ bytes(occupied) }}</strong
-        ><span>
-          /
-          {{
-            data.stats.quota_bytes ? bytes(data.stats.quota_bytes) : "未设上限"
-          }}</span
-        ><span class="secondary">附件占用与上传预留</span>
+      <section class="wb-card" aria-labelledby="capacity-title">
+        <div class="wb-card-head"><div><h2 id="capacity-title">项目容量</h2><p>用量、配额与文件组成，数值来自服务端附件目录统计。</p></div><a class="button ghost" :href="href('/materials')"><AppIcon name="folder" />打开资料库</a><button class="ghost small" :disabled="loading || busy" @click="load"><AppIcon name="refresh" />刷新</button></div>
+        <div class="wb-capacity"><strong>{{ bytes(occupied) }}</strong><span>/ {{ data.stats.quota_bytes ? bytes(data.stats.quota_bytes) + ' 配额' : '未设上限' }}</span></div>
+        <div v-if="data.stats.quota_bytes" class="wb-meter" role="progressbar" aria-label="附件容量使用比例" :aria-valuenow="Math.round(percent)" aria-valuemin="0" aria-valuemax="100"><i :style="{ width: Math.min(100, percent) + '%' }" :class="{ full: occupied >= data.stats.quota_bytes }"></i></div>
+        <div class="wb-capacity-foot"><span>附件原件 {{ bytes(data.stats.artifact_bytes) }} · 上传临时文件 {{ bytes(data.stats.temporary_bytes) }} · 上传预留 {{ bytes(data.stats.reserved_bytes) }}</span><span v-if="data.stats.quota_bytes">{{ Math.max(0, 100 - percent).toFixed(1) }}% 可用</span></div>
+        <p v-if="data.stats.quota_bytes && occupied >= data.stats.quota_bytes" class="wb-banner error" role="alert">附件容量已达上限。管理员可调整配额，或处理未完成上传与可回收原件。</p>
+        <details class="wb-disclosure"><summary>查看统计口径</summary><div class="wb-disclosure-body">
+          <p><strong>物理占用</strong>：附件目录中实际保存的文件（按内容去重后），即「附件原件」{{ bytes(data.stats.artifact_bytes) }}；已存储文件合计 {{ bytes(data.stats.used_bytes) }}。</p>
+          <p><strong>逻辑大小</strong>：每条附件记录的原文件长度之和 {{ bytes(data.logical_bytes || 0) }}；同一内容被多次引用时按记录各算一次。</p>
+          <p><strong>内容复用</strong>：相同内容共用一份原件，避免保存 {{ bytes(data.shared_savings_bytes || 0) }}；仍保留各自的证据身份。<template v-if="data.duplicate_physical_bytes"> 现存相同哈希的重复文件 {{ bytes(data.duplicate_physical_bytes) }}。</template></p>
+          <p><strong>临时与预留</strong>：未完成上传的临时文件 {{ bytes(data.stats.temporary_bytes) }}，以及为进行中的上传预留 {{ bytes(data.stats.reserved_bytes) }}，计入配额。</p>
+          <p>数据库与备份使用服务器的其他存储空间，不在此统计。<template v-if="data.untracked_bytes"> 另有 {{ bytes(data.untracked_bytes) }} 附件目录文件待管理员核对。</template></p>
+        </div></details>
+      </section>
+      <div class="wb-storage-grid">
+        <section class="wb-card" aria-labelledby="composition-title">
+          <div class="wb-card-head"><div><h2 id="composition-title">文件组成</h2><p>按内容去重后的物理占用</p></div></div>
+          <div v-if="composition.length" class="wb-stack-bar"><i v-for="(part, index) in composition" :key="part.kind" :style="{ flexGrow: Math.max(part.physical_bytes, 1) }" :class="'c' + (index % 4)"></i></div>
+          <ul class="wb-composition"><li v-for="(part, index) in composition" :key="part.kind"><i :class="'c' + (index % 4)"></i><span>{{ typeName(part.kind) }} · {{ part.logical_count }} 份</span><strong>{{ bytes(part.physical_bytes) }}</strong></li></ul>
+          <p v-if="!composition.length" class="muted">当前没有附件占用。</p>
+          <details class="wb-disclosure"><summary>按任务查看占用（含上传预留）</summary><div class="wb-disclosure-body"><p v-for="task in data.tasks" :key="task.task_id"><button class="text-button" @click="selectTask(task.task_id)">{{ task.title }}</button> · {{ bytes(task.bytes) }} · {{ task.count }} 项</p><p v-if="!data.tasks.length">当前没有附件占用。</p></div></details>
+        </section>
+        <section class="wb-card" aria-labelledby="quota-title">
+          <div class="wb-card-head"><div><h2 id="quota-title">项目配额</h2><p>调整容量上限不会删除已有材料；新上传超过上限时会被拒绝。</p></div></div>
+          <form v-if="admin" class="wb-form storage-quota" @submit.prevent="saveQuota">
+            <label class="wb-check"><input v-model="unlimited" type="checkbox" :disabled="busy" @change="editQuota" />不限制附件容量</label>
+            <label v-if="!unlimited">容量上限<span class="wb-input-unit"><input v-model="quotaMiB" type="number" min="0.000001" max="1048576" step="any" required :disabled="busy" aria-label="容量上限（MiB）" @input="editQuota" /><span>MiB</span></span></label>
+            <div v-if="quotaConflict !== null" class="wb-banner warn" role="alert"><strong>配额已被其他人修改</strong><p>服务端当前：{{ quotaConflict ? bytes(quotaConflict) : '不限制' }}；你填写的：{{ unlimited ? '不限制' : quotaMiB + ' MiB' }}。旧请求不会覆盖新值，请明确选择。</p><button type="button" class="small" :disabled="busy" @click="adoptQuota">采用最新值</button><button type="submit" class="small" :disabled="busy">保留输入后重新保存</button></div>
+            <p v-else-if="quotaRequest && mutationError" class="wb-review-help">保存没有成功，你的输入已保留；重试会沿用原请求，不会重复记录。</p>
+            <div><button class="primary" :disabled="busy || loading">{{ quotaConflict !== null ? "保留输入后重新保存" : quotaRequest ? "重试保存配额" : "保存配额" }}</button></div>
+          </form>
+          <p v-else class="muted">容量上限由服务管理员设置。未完成上传仅展示当前账号的记录。</p>
+        </section>
       </div>
-      <progress
-        v-if="data.stats.quota_bytes"
-        :value="percent"
-        max="100"
-        aria-label="附件容量使用比例"
-      />
-      <p
-        v-if="data.stats.quota_bytes && occupied >= data.stats.quota_bytes"
-        class="alert"
-        role="alert"
-      >
-        附件容量已达上限。管理员可调整额度，或从下方处理未完成上传与可回收原件。
-      </p>
-      <dl class="remote-facts storage-facts">
-        <div>
-          <dt>附件原件</dt>
-          <dd>{{ bytes(data.stats.artifact_bytes) }}</dd>
-        </div>
-        <div>
-          <dt>上传临时文件</dt>
-          <dd>{{ bytes(data.stats.temporary_bytes) }}</dd>
-        </div>
-        <div>
-          <dt>上传剩余预留</dt>
-          <dd>{{ bytes(data.stats.reserved_bytes) }}</dd>
-        </div>
-        <div>
-          <dt>已存储文件合计</dt>
-          <dd>{{ bytes(data.stats.used_bytes) }}</dd>
-        </div>
-      </dl>
-      <p class="secondary">
-        按附件目录文件大小统计。数据库与备份使用服务器的其他存储空间。
-      </p>
-      <details v-if="data.file_types" class="storage-task-breakdown"><summary>占用组成与内容复用</summary><p>逻辑附件 {{ bytes(data.logical_bytes || 0) }}；共享内容避免保存 {{ bytes(data.shared_savings_bytes || 0) }}；现存相同哈希的物理重复 {{ bytes(data.duplicate_physical_bytes || 0) }}。</p><p class="secondary">物理占用仅计一次；共享对象按稳定顺序归属一个任务。新重复上传复用内容，保留独立任务与候选身份；旧原件不会自动迁移或删除。</p><ul><li v-for="item in data.file_types" :key="item.kind">{{ item.kind }} · {{ item.logical_count }} 份逻辑附件 · {{ bytes(item.physical_bytes) }}</li></ul><ul><li v-for="item in data.sources" :key="item.kind">{{ item.kind }} · {{ bytes(item.physical_bytes) }}</li></ul><p class="secondary">当前依据、未完成任务、未决验收及其他有效引用继续保护；删除一份逻辑附件不会删除其他引用仍需的共享原件。</p></details>
-      <form v-if="admin" class="storage-quota" @submit.prevent="saveQuota">
-        <label
-          ><input
-            v-model="unlimited"
-            type="checkbox"
-            :disabled="busy"
-            @change="editQuota"
-          />不限制附件容量</label
-        >
-        <label v-if="!unlimited"
-          >容量上限（MiB）<input
-            v-model="quotaMiB"
-            type="number"
-            min="0.000001"
-            max="1048576"
-            step="any"
-            required
-            :disabled="busy"
-            @input="editQuota"
-        /></label>
-        <button class="primary" :disabled="busy || loading">
-          {{ quotaRequest ? "重试保存容量设置" : "保存容量设置" }}
-        </button>
-      </form>
-      <p v-else class="secondary">
-        容量上限由服务管理员设置。未完成上传仅展示当前账号的记录。
-      </p>
-      <details class="storage-task-breakdown">
-        <summary>按任务查看占用（含上传预留）</summary>
-        <ul>
-          <li v-for="task in data.tasks" :key="task.task_id">
-            <button class="inline-link" @click="selectTask(task.task_id)">
-              {{ task.title }}</button
-            ><span>{{ bytes(task.bytes) }} · {{ task.count }} 项</span>
-          </li>
-        </ul>
-        <p v-if="!data.tasks.length" class="secondary">当前没有附件占用。</p>
-      </details>
-      <p v-if="data.untracked_bytes" class="secondary">
-        另有 {{ bytes(data.untracked_bytes) }} 附件目录文件待管理员核对。
-      </p>
-      </template>
+      <details class="wb-card wb-storage-files" :open="filesOpen || !!query || kind === 'uploads' || offset > 0" @toggle="filesOpen = ($event.target as HTMLDetailsElement).open"><summary>附件与上传记录 · {{ data.total }} 项<small>原件下载、物理分摊、保留依据、放弃未完成上传</small></summary>
       <div class="storage-toolbar">
-        <nav v-if="mode==='management'" class="tabs" aria-label="附件记录类型">
+        <nav class="wb-segmented" aria-label="附件记录类型">
           <button
-            :class="{ chosen: kind === 'files' }"
+            :class="{ selected: kind === 'files' }"
             @click="
               offset = 0;
               kind = 'files';
@@ -370,7 +318,7 @@ onUnmounted(() => clearTimeout(debounce));
           >
             附件原件</button
           ><button
-            :class="{ chosen: kind === 'uploads' }"
+            :class="{ selected: kind === 'uploads' }"
             @click="
               offset = 0;
               kind = 'uploads';
@@ -397,9 +345,7 @@ onUnmounted(() => clearTimeout(debounce));
           清除搜索
         </button>
       </div>
-      <div v-if="mode==='materials'" class="toolbar material-filters"><label>所属任务<select v-model="taskFilter" aria-label="所属任务"><option value="">全部任务（含旧记录）</option><option v-for="task in data.tasks" :key="task.task_id" :value="task.task_id">{{ task.title }}</option></select></label><label>资料类型<select v-model="mimeFilter" aria-label="资料类型"><option value="">全部类型</option><option value="image/">图片</option><option value="text/">报告与文本</option></select></label><label>资料来源<select v-model="sourceFilter" aria-label="资料来源"><option value="">全部来源</option><option value="import history">历史导入</option><option value="execution evidence">执行材料</option><option value="context snapshot">规范快照</option><option value="other">其他 / 未分类</option></select></label><label>开始日期<input v-model="since" aria-label="开始日期" type="date" /></label><label>结束日期<input v-model="until" aria-label="结束日期" type="date" /></label></div>
-      <ResultsGallery scope="all" v-if="mode==='materials'" :files="materialFiles" heading="资料" :limit="25" />
-      <template v-else>
+      <template v-if="true">
       <p class="table-scroll-hint">左右滑动可查看来源与操作。</p>
       <div class="storage-table-scroll">
         <table class="storage-table">
@@ -471,20 +417,11 @@ onUnmounted(() => clearTimeout(debounce));
         :busy="loading"
         @change="offset = $event"
       />
-      <section v-if="admin && mode==='management'" class="storage-cleanup">
-        <h3>清理可回收原件</h3>
-        <p class="secondary">
-          清理范围由任务状态、引用和依据快照保护规则确定。先预览可回收项，再确认删除原件。
-        </p>
-        <form @submit.prevent="previewCleanup">
-          <label
-            >创建日期早于<input
-              v-model="cutoff"
-              type="date"
-              required
-              :disabled="busy" /></label
-          ><button :disabled="busy">预览可清理项</button>
-        </form>
+      </details>
+      <section v-if="admin" class="wb-card storage-cleanup" aria-labelledby="cleanup-title">
+        <div class="wb-card-head"><div><h2 id="cleanup-title">可清理的原件</h2><p>清理范围由服务端按任务状态、引用和依据快照保护规则确定。先预览清单，再确认删除。</p></div></div>
+        <form class="wb-cleanup-form" @submit.prevent="previewCleanup"><label>创建日期早于<input v-model="cutoff" type="date" required :disabled="busy" /></label><button :disabled="busy">预览清理清单</button></form>
+        <p class="wb-hint-row"><AppIcon name="shield" /><span>正在使用的成果、当前验收证据与规范快照不会进入清理清单；删除原件后仍保留历史元数据。</span></p>
       </section>
     </template>
     <ActionDialog

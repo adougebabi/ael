@@ -8,14 +8,14 @@ async function login(page: Page, user = "owner", password = "fixture-admin-passw
   if (user === "owner" && ownerCookies.length) {
     await page.context().addCookies(ownerCookies);
     await page.goto(fixture.url + "/#/tasks?project=shared");
-    await expect(page.locator(".workbench-heading")).toBeVisible();
+    await expect(page.locator(".wb-sidebar")).toBeVisible();
     return;
   }
   await page.goto(fixture.url + "/#/tasks?project=shared");
   await page.getByLabel("用户名", { exact: true }).fill(user);
   await page.getByLabel("密码", { exact: true }).fill(password);
   await page.getByRole("button", { name: "登录", exact: true }).click();
-  await expect(page.locator(".workbench-heading")).toBeVisible();
+  await expect(page.locator(".wb-sidebar")).toBeVisible();
   if (user === "owner") ownerCookies = await page.context().cookies();
 }
 async function open(page: Page, task: string) {
@@ -30,15 +30,21 @@ async function open(page: Page, task: string) {
   return dialog;
 }
 
-test("WB05 Remote 首页材料与真实验收回执",async({page})=>{
- await page.setViewportSize({width:1440,height:900});await login(page);const card=page.locator('.attention-card').filter({hasText:'Review direct-home'});
- await expect(card).toContainText('要检查什么');await card.scrollIntoViewIfNeeded();await expect(card.locator('.result-file')).toHaveCount(0);await expect(card).toContainText('本项尚无明确关联');
- await card.getByRole('button',{name:/其他任务资料/}).click();await card.getByRole('button',{name:/查看全部材料/}).click();const actual=card.locator('.result-file').filter({hasText:'actual.png'});await actual.scrollIntoViewIfNeeded();await expect(actual.locator('img')).toBeVisible();await actual.click();const preview=page.getByRole('dialog',{name:'成果预览'});await expect(preview.locator('img')).toBeVisible();await page.keyboard.press('Escape');await card.getByRole('button',{name:/本项验收材料/}).click();
- await page.evaluate(()=>window.scrollTo(0,0));expect((await page.locator('.work-list').boundingBox())!.y).toBeLessThan(900);await page.screenshot({path:path.join(fixture.out,'WB05-remote-home.png'),fullPage:false,animations:'disabled'});
+test("WB05 Remote 首页验收弹窗与真实验收回执",async({page})=>{
+ await page.setViewportSize({width:1440,height:900});await login(page);
+ // The workbench review frame opens the same check; images are viewable context.
+ await page.goto(fixture.url+'/#/tasks?project=shared&review=direct-home');
+ const dialog=page.getByRole('dialog',{name:'查看并验收'});
+ const review=dialog.getByRole('region',{name:'人工检查 visual'});
+ await expect(review).toContainText('需要你的确认');
+ await review.locator('.wb-review-image').click();
+ const preview=page.getByRole('dialog',{name:'actual.png'});await expect(preview.locator('img')).toBeVisible();await page.keyboard.press('Escape');
+ await expect(preview).toHaveCount(0);await expect(dialog).toBeVisible();
+ await page.screenshot({path:path.join(fixture.out,'WB05-remote-home.png'),fullPage:false,animations:'disabled'});
  await page.route('**/api/v1/projects/shared/reviews',async route=>{const response=await route.fetch();expect(response.ok()).toBeTruthy();await route.abort();},{times:1});
- await card.getByRole('button',{name:'验收通过',exact:true}).click();
+ await review.getByRole('button',{name:'确认通过',exact:true}).click();
  await expect.poll(async()=>{const n=await(await page.request.get(fixture.url+'/api/v1/projects/shared/tasks/direct-home')).json();return (n.task.evidence || []).filter((e:any)=>e.check==='visual'&&e.source==='human:owner').length;}).toBe(1);
- await page.reload();const pending=page.locator('.attention-card').filter({hasText:'验收提交结果待确认'});await expect(pending).toContainText('Review direct-home');await pending.getByRole('button',{name:'核对原请求回执',exact:true}).click();const retryDialog=page.getByRole('dialog');await retryDialog.getByRole('button',{name:'原样重试提交',exact:true}).click();await expect(retryDialog).toContainText('验收结果已记录');
+ await page.reload();const pending=page.locator('.wb-attention-card').filter({hasText:'验收提交结果待确认'});await expect(pending).toContainText('Review direct-home');await pending.getByRole('button',{name:'核对原请求回执',exact:true}).click();const retryDialog=page.getByRole('dialog');await retryDialog.getByRole('button',{name:'原样重试提交',exact:true}).click();await expect(retryDialog).toContainText('验收结果已记录');
  const after=await(await page.request.get(fixture.url+'/api/v1/projects/shared/tasks/direct-home')).json();expect(after.task.evidence.filter((e:any)=>e.check==='visual').length).toBe(1);
 });
 
@@ -238,33 +244,40 @@ test("无候选的任务级意见不用选附件或比较图片", async ({ page 
 test("存量普通 UI 检查在任务首屏一次通过，仍显示剩余门禁", async ({page}) => {
  await login(page);
  await page.goto(fixture.url+"/#/tasks/direct?project=shared");
- const review=page.getByRole("region",{name:"直接验收 visual"});
- await expect(review.getByRole("button",{name:"验收通过",exact:true})).toBeVisible();
+ const review=page.getByRole("region",{name:"人工检查 visual"});
+ await expect(review.getByRole("button",{name:"确认通过",exact:true})).toBeVisible();
  await expect(review.getByRole("checkbox")).toHaveCount(0);
  await page.screenshot({path:path.join(fixture.out,"direct-review-before.png"),fullPage:true});
- await review.getByRole("button",{name:"验收通过",exact:true}).click();
- await expect(page.getByText("已记录",{exact:true})).toHaveCount(0);
+ await review.getByRole("button",{name:"确认通过",exact:true}).click();
  await expect.poll(async()=> (await (await page.request.get(fixture.url+"/api/v1/projects/shared/tasks/direct")).json()).task.evidence?.filter((e:any)=>e.check==="visual").length || 0).toBe(1);
  const state=await (await page.request.get(fixture.url+"/api/v1/projects/shared/tasks/direct")).json();
  expect(state.task.evidence[0]).toMatchObject({source:"human:owner",evidence_mode:"direct_observation",result:"pass",candidate:fixture.tasks.direct.candidate});
  expect(state.task.evidence[0].artifacts).toHaveLength(0);expect(state.task.status).toBe("open");
  await page.screenshot({path:path.join(fixture.out,"direct-review-after.png"),fullPage:true});
 });
-for(const [task,outcome,button] of [["direct-fail","fail","发现问题"],["direct-blocked","blocked","暂无法验证"]]) {
- test(`直接人工 ${outcome} 只收集一段说明`,async({page})=>{
-  await login(page);await page.goto(fixture.url+"/#/tasks/"+task+"?project=shared");
-  const review=page.getByRole("region",{name:"直接验收 visual"});
-  await review.getByRole("button",{name:button,exact:true}).click();
-  await review.getByRole("textbox").fill(outcome==="fail"?"实际布局有遮挡":"当前环境无法访问");
-  await review.getByRole("button",{name:outcome==="fail"?"提交问题":"记录无法验证",exact:true}).click();
-  await expect.poll(async()=> (await (await page.request.get(fixture.url+"/api/v1/projects/shared/tasks/"+task)).json()).task.evidence?.filter((e:any)=>e.result===outcome).length || 0).toBe(1);
- });
-}
+test("直接人工「需要调整」只收集一段具体问题",async({page})=>{
+ await login(page);await page.goto(fixture.url+"/#/tasks/direct-fail?project=shared");
+ const review=page.getByRole("region",{name:"人工检查 visual"});
+ await review.getByRole("button",{name:"需要调整",exact:true}).click();
+ await review.getByLabel("具体问题").fill("实际布局有遮挡");
+ await review.getByRole("button",{name:"提交反馈",exact:true}).click();
+ await expect.poll(async()=> (await (await page.request.get(fixture.url+"/api/v1/projects/shared/tasks/direct-fail")).json()).task.evidence?.filter((e:any)=>e.result==="fail").length || 0).toBe(1);
+});
+test("暂无法验证经完整验收记录提交",async({page})=>{
+ await login(page);await page.goto(fixture.url+"/#/tasks/direct-blocked?project=shared");
+ await page.getByRole("region",{name:"人工检查 visual"}).getByRole("button",{name:"更多选项",exact:true}).click();
+ const dialog=page.getByRole("dialog");
+ const opinion=dialog.getByRole("button",{name:"记录新的验收意见",exact:true});if(await opinion.isVisible())await opinion.click();
+ await dialog.getByRole("radio",{name:"暂无法验证",exact:true}).check();
+ await dialog.getByLabel("实际观察与理由",{exact:false}).fill("当前环境无法访问");
+ await dialog.getByRole("button",{name:"提交验收结果",exact:true}).click();
+ await expect.poll(async()=> (await (await page.request.get(fixture.url+"/api/v1/projects/shared/tasks/direct-blocked")).json()).task.evidence?.filter((e:any)=>e.result==="blocked").length || 0).toBe(1);
+});
 test("直接通过丢失响应后用原请求重试",async({page})=>{
  await login(page);await page.goto(fixture.url+"/#/tasks/direct-retry?project=shared");
- const review=page.getByRole("region",{name:"直接验收 visual"});
+ const review=page.getByRole("region",{name:"人工检查 visual"});
  await page.route("**/api/v1/projects/shared/reviews",async route=>{const r=await route.fetch();expect(r.ok()).toBeTruthy();await route.abort();},{times:1});
- await review.getByRole("button",{name:"验收通过",exact:true}).click();
+ await review.getByRole("button",{name:"确认通过",exact:true}).click();
  // The committed check may disappear on polling; the original request remains
  // in the existing draft store and the task's pending-review entry can reopen it.
  await expect.poll(async()=> (await (await page.request.get(fixture.url+"/api/v1/projects/shared/tasks/direct-retry")).json()).task.evidence?.length || 0).toBe(1);
@@ -282,14 +295,14 @@ for(const viewport of [{width:1280,height:800},{width:390,height:844}]) {
   const before=await account.boundingBox();expect(before).not.toBeNull();
   await page.screenshot({path:path.join(fixture.out,`UC04-account-closed-${viewport.width}.png`),fullPage:false});
   await account.click();
-  const options=page.getByRole('region',{name:'账户操作'});await expect(options).toBeVisible();
+  const options=page.getByRole('menu',{name:'账户操作'});await expect(options).toBeVisible();
   const after=await account.boundingBox();expect(after!.y).toBe(before!.y);
   const rect=await options.boundingBox();expect(rect!.x).toBeGreaterThanOrEqual(0);expect(rect!.y).toBeGreaterThanOrEqual(0);expect(rect!.x+rect!.width).toBeLessThanOrEqual(viewport.width);
-  await expect(options.getByRole('link',{name:'身份与个人设置'})).toBeFocused();
+  await expect(options.getByRole('menuitem',{name:'个人设置'})).toBeFocused();
   await page.screenshot({path:path.join(fixture.out,`UC04-account-open-${viewport.width}.png`),fullPage:false});
   await page.keyboard.press('Escape');await expect(options).toHaveCount(0);await expect(account).toBeFocused();
-  await account.click();await page.locator('.sidebar-label').click();await expect(options).toHaveCount(0);
-  await account.focus();await page.keyboard.press('Enter');await expect(options).toBeVisible();await page.keyboard.press('Tab');await expect(options.getByRole('button',{name:'退出登录'})).toBeFocused();await page.keyboard.press('Escape');
+  await account.click();await page.locator('.wb-nav-title').click();await expect(options).toHaveCount(0);
+  await account.focus();await page.keyboard.press('Enter');await expect(options).toBeVisible();await page.keyboard.press('Tab');await expect(options.getByRole('menuitem',{name:'复制项目连接信息'})).toBeFocused();await page.keyboard.press('Escape');await expect(account).toBeFocused();
   await page.getByRole('button',{name:'切换项目',exact:true}).click();await expect(page.getByRole('region',{name:'选择项目'})).toBeVisible();await page.keyboard.press('Escape');await expect(page.getByRole('button',{name:'切换项目',exact:true})).toBeFocused();
   if(viewport.width<720) await page.getByRole('button',{name:'关闭导航',exact:true}).click({position:{x:viewport.width-10,y:100}});
   await page.goto(fixture.url+'/#/tasks/browser?project=shared&section=checks&check=visual');

@@ -25,6 +25,10 @@ func TestMaterialFiltersBeforePagingAndLogicalSize(t *testing.T) {
 	if get("since=2099-01-01")["total"] != float64(0) || get("mime=image/")["total"] != float64(0) || get("task=missing")["total"] != float64(0) {
 		t.Fatal("filters do not apply to full range")
 	}
+	// "results" keeps everything except execution input snapshots.
+	if get("source=results")["total"] != float64(2) || get("source=context%20snapshot")["total"] != float64(0) {
+		t.Fatal("results source filter")
+	}
 	p := get("q=second.txt")
 	if p["total"] != float64(1) {
 		t.Fatal(p)
