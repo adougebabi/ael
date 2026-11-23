@@ -42,6 +42,7 @@ import ScopeSummary from "../components/ScopeSummary.vue";
 import CopyButton from "../components/CopyButton.vue";
 import TaskRelations from "../components/TaskRelations.vue";
 import ReviewPanel from "../components/ReviewPanel.vue";
+import QueueOwnership from "../components/QueueOwnership.vue";
 import TaskResults from "../components/TaskResults.vue";
 import { candidateMaterials, isImage } from "../materials";
 import TaskChildren from "../components/TaskChildren.vue";
@@ -961,6 +962,7 @@ function checkReason(c: any) {
           <details v-if="unownedRunning && !remoteProject"><summary>当前接手无法继续？</summary><p>当前标签页没有原责任凭据。若原执行确已停止，可按原规则核实并恢复。</p><button @click="start('resume','恢复无法继续的接手')">核实并恢复接手</button></details>
           
           <div v-if="t.status==='open' && !n.summary.requires_task_decision" class="wb-next-line"><strong>{{ familyLed ? '父事项本身 · ' : '' }}{{ presentation.role }}</strong><span>{{ n.summary.needs_history_review ? '核实上述缺口后，按原有恢复门禁继续；具体未记录项可从相关资料核对' : !mayJudge && availableHumanChecks.length ? '等待有验收权限的人员处理当前检查' : presentation.next }}</span></div>
+          <QueueOwnership v-if="remoteProject && t.status === 'open' && !n.summary.running" :key="'queue-' + id" :task-id="id" :summary="n.summary" @changed="load(true)" />
         </section>
         <TaskChildren :key="id" :task-id="id" @family="family = $event" />
         <section v-if="reviewChecks.length" id="overview-review" aria-label="当前人工验收"><ReviewPanel v-for="check in reviewChecks" :key="id + check.id + (t.candidate || '')" :snapshot="n" :check="check" :objects="reviewObjects" @saved="reviewSaved" @advanced="manualCheck = check.id" /></section>

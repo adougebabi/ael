@@ -414,13 +414,38 @@ export function workOwner(s: any, canJudge = true, username = '', row?: any): Ow
   if (s.requires_task_decision || s.board === 'confirmation') return canJudge ? you() : role('负责人');
   if (s.manual_reviews?.length && !s.running) return canJudge ? you() : role('验收人');
   if (s.running && s.executors?.length) return agent(s.executors.join('、'));
+  // Queued is a collaboration marker, not running work: neutral, own label.
+  if (s.assignment === 'queued' && s.queue) return { name: queueLabel(s.queue) + ' · 排队中', mark: queueLabel(s.queue).slice(0, 1).toUpperCase(), gray: true, you: false };
   if (s.recovery_action === 'resume' || (s.needs_history_review && s.imported)) return agent('执行者');
   if (s.needs_history_review) return canJudge ? you() : role('负责人');
   if (s.next_action === 'wait_environment' || s.blocker_reason) return role('阻塞处理人');
   if (row?.children && row.active_children && !s.running) return agent('子任务执行者');
   if (s.next_action === 'repair') return agent('执行者');
-  return { name: '待接手', mark: '·', gray: true, you: false };
+  // "未安排" only says AEL holds no queue record; another system may still have one.
+  return { name: s.assignment === 'unassigned' ? '未安排' : '待接手', mark: '·', gray: true, you: false };
 }
+export function queueLabel(q: any) { return q?.runner_label || q?.runner || '执行者'; }
+// Actual waiting time since the record was written; never a liveness verdict.
+export function waitedFor(value: string | null | undefined) {
+  if (!value || !Number.isFinite(Date.parse(value))) return '时间未确认';
+  const minutes = Math.max(0, Math.floor((Date.now() - Date.parse(value)) / 60000));
+  if (minutes < 1) return '不到 1 分钟';
+  if (minutes < 60) return `${minutes} 分钟`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return `${hours} 小时${minutes % 60 ? ' ' + (minutes % 60) + ' 分钟' : ''}`;
+  return `${Math.floor(hours / 24)} 天`;
+}
+export const queueErrors: Record<string, string> = {
+  QUEUE_VERSION_CONFLICT: '排队安排已被他人更新或已失效，已刷新为最新归属。',
+  QUEUE_STARTED: '任务已被领取开始执行，不能再释放或转交排队；请使用现有交接入口。',
+  QUEUE_RESERVED: '任务已由其他执行者安排，尚未开始。',
+  QUEUE_TARGET_FORBIDDEN: '接收者在本项目没有领取这一步骤的权限。',
+  QUEUE_INVALID: '请求不完整：请选择接收者并填写原因。',
+  REMOTE_HANDOFF_TARGET: '任务已指定交接接收方，只能转交给该接收方。',
+  RUNNER_NOT_FOUND: '接收者未在本项目注册。',
+  FORBIDDEN: '只有安排所属的执行者账号或项目管理员可以操作。',
+  IDEMPOTENCY_CONFLICT: '同一请求键已用于不同内容，请重新提交。',
+};
 export function relativeShort(value: string | null | undefined) {
   if (!value || !Number.isFinite(Date.parse(value))) return '';
   const days = Math.floor((Date.now() - Date.parse(value)) / 86400000);

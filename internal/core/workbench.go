@@ -56,6 +56,9 @@ type WorkbenchPage struct {
 	Limit           int              `json:"limit"`
 	Offset          int              `json:"offset"`
 	Counts          map[string]int   `json:"counts"`
+	// Assignees: runners holding a queue record or a running responsibility
+	// on unfinished work, for the assignment filter.
+	Assignees []string `json:"assignees,omitempty"`
 }
 
 func workbenchMatch(n TaskSummary, view string) bool {
@@ -288,6 +291,14 @@ func (s *Service) Workbench(q Query) (WorkbenchPage, error) {
 				}
 			}
 			text := strings.ToLower(f.Task.Title + " " + f.Task.ID + " " + f.Purpose)
+			for _, runner := range append(slices.Clone(f.Task.Executors), queueHolder(f.Task)) {
+				if runner != "" && !slices.Contains(p.Assignees, runner) && workbenchMatch(f.Task, "") {
+					p.Assignees = append(p.Assignees, runner)
+				}
+			}
+			if !assignMatch(f.Task, q.Assign) {
+				continue
+			}
 			if !workbenchMatch(f.Task, q.Board) || (q.Board == "issues" && len(f.Issues) == 0) || (q.Type != "" && f.Task.Type != q.Type) || (q.Text != "" && !strings.Contains(text, strings.ToLower(q.Text))) {
 				continue
 			}
@@ -331,4 +342,26 @@ func (s *Service) Workbench(q Query) (WorkbenchPage, error) {
 	end := min(start+p.Limit, p.Total)
 	p.Items = selected[start:end]
 	return p, nil
+}
+
+func queueHolder(t TaskSummary) string {
+	if t.Queue == nil {
+		return ""
+	}
+	return t.Queue.Runner
+}
+
+func assignMatch(t TaskSummary, assign string) bool {
+	switch {
+	case assign == "":
+		return true
+	case assign == "unassigned" || assign == "queued":
+		return t.Assignment == assign
+	case assign == "claimable":
+		return t.Claimable
+	case strings.HasPrefix(assign, "runner:"):
+		runner := strings.TrimPrefix(assign, "runner:")
+		return queueHolder(t) == runner || slices.Contains(t.Executors, runner)
+	}
+	return true
 }

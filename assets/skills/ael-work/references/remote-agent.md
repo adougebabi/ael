@@ -183,3 +183,26 @@ human 检查交由项目 reviewer/admin 登录中央 Dashboard 完成。普通�
 IMPORT_NOT_ACTIVE：等待导入负责人激活；IMPORT_PAUSE_PROTECTED：按具体 blocker/未决决定/其他责任处理，不反复恢复；IMPORT_CONTEXT_REQUIRED：补当前候选和依据；IMPORT_SOURCE_UNKNOWN：缺少可信暂停或决定来源，给出任务页和缺失的恢复范围，请 reviewer 按准确版本确认。原来已有可信恢复批准时可沿用，不能由 Agent 自述用户同意来替代。重复请求保留原 operation/key 查询原回执，任务版本变化须重新核对。
 
 工作单元完成、检查失败、阻塞变化、恢复、交接及交付时，及时用 runner progress 回报已完成/尝试的事实、实际结果、具体 next；此上报是当前工作说明，不冒充交付物。实际成果仍通过原 runner submit 与真实文件/验收结论形成。心跳不算进展，长时间无成果不代表宿主 Agent 已退出。
+
+## 排队归属（外部队列与 AEL 的协作标记）
+
+排队归属只说明「某执行者已把当前待执行责任放进自己的队列、尚未领取」。它不创建 Attempt、租约或进度，不改变任务修订、定义、计划、候选或检查结果；实际执行、编译、测试与队列排序仍由外部 Agent/Bot 负责。记录保存在 Server，所有客户端读取同一份。
+
+```sh
+# 入队：只有返回成功回执才算取得安排；失败或 AGENT_OPERATION_PENDING 时不能假定已安排
+./ael runner queue --runner RUNNER --task TASK --operation-id OP --idempotency-key KEY [--scope runner|executor] [--expected-version absent|VERSION] --json
+# 准备执行：重新读取，再按常规 runner claim 领取；QUEUE_RESERVED/NOT_RUNNABLE/TERMINAL 等拒绝时跳过并移除本地队列项
+./ael runner queue-list --runner RUNNER --task TASK --json
+# 主动移出尚未开始的任务
+./ael runner queue-release --holder RUNNER --task TASK --expected-version VERSION [--reason TEXT] --operation-id OP --idempotency-key KEY --json
+# 转交尚未开始的任务（持有者账号或项目管理员；原持有者无需在线）
+./ael runner queue-transfer --holder RUNNER --task TASK --expected-version VERSION --to TARGET_RUNNER --reason TEXT --operation-id OP --idempotency-key KEY --json
+# 查询：--state unassigned|queued|started|claimable；带 --runner 时 claimable 按该 runner 计算
+./ael runner queue-list --runner RUNNER --state claimable --json
+```
+
+- `--scope runner`（默认）只允许该 runner 领取；`executor` 允许同一执行者账号下的任一 runner 领取（多工作槽的 Bot）。Bot 与本地 Codex 必须使用不同执行者账号，否则 executor 范围无法区分二者。
+- 再次 `runner queue` 携带当前 `--expected-version` 用于 Bot 重启后的同步刷新；版本不符返回 `QUEUE_VERSION_CONFLICT`，应重新读取。
+- 他人持有有效安排时普通领取返回 `QUEUE_RESERVED`；任务已开始时释放/转交返回 `QUEUE_STARTED`，此时只能走上文显式工作区交接。
+- 暂停、取消、完成、步骤/定义/计划/候选变化或领取开始后，安排自动失效并记事件 `remote_queue_cleared`。
+- 超时或断网：用原命令或 `runner retry --pending FILE` 以同一幂等键查询/重放，不换键重做。长时间没有更新只说明等待时长，不说明 Bot 已停止。

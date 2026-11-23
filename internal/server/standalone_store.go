@@ -406,6 +406,22 @@ func (s *Standalone) token(secret string) (standalonePrincipal, error) {
 	return p, err
 }
 
+// queueMember resolves another account's current project role and name.
+func (s *Standalone) queueMember(project string) func(string) (string, string) {
+	return func(user string) (string, string) {
+		var admin int
+		var name, role string
+		if s.store.DB.QueryRow("SELECT username,admin FROM server_users WHERE id=?", user).Scan(&name, &admin) != nil {
+			return "", ""
+		}
+		if admin == 1 {
+			return "admin", name
+		}
+		_ = s.store.DB.QueryRow("SELECT role FROM server_members WHERE project_id=? AND user_id=?", project, user).Scan(&role)
+		return role, name
+	}
+}
+
 func (s *Standalone) role(p standalonePrincipal, project string) (string, error) {
 	if p.ProjectID != "" && p.ProjectID != project {
 		return "", sql.ErrNoRows

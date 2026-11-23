@@ -775,3 +775,15 @@ dialog.wb-dialog.action-dialog .wb-dialog-frame { display: flex; }
 .wb-report-long { font-size: 12px; color: #8a91a3; }
 /* The evidence drawer sits above the sticky topbar so its close control stays reachable. */
 .detail-page aside.artifact-panel, aside.artifact-panel { z-index: 60; }
+
+/* Queue ownership: neutral collaboration marker, never the running/success tone. */
+.wb-queue { margin-top: 14px; padding: 13px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--nav); font-size: 14px; }
+.wb-queue-head { display: flex; align-items: flex-start; gap: 10px; }
+.wb-queue-head strong { display: block; }
+.wb-queue-head p, .wb-queue-note { margin: 2px 0 0; color: var(--muted); }
+.wb-queue-note { margin-top: 8px; }
+.wb-queue .actions { margin-top: 10px; }
+.wb-queue-form { display: grid; gap: 10px; margin-top: 12px; }
+.wb-queue-form label { display: grid; gap: 4px; color: var(--muted); }
+.wb-queue-form select, .wb-queue-form input { min-width: 0; width: 100%; }
+.wb-queue .wb-banner { margin: 10px 0 0; }

@@ -14,6 +14,9 @@ type Query struct {
 	Type    string
 	Parent  string
 	Days    int
+	// Assign filters by collaboration marker: unassigned, queued, claimable
+	// or runner:ID (queue holder or current executor).
+	Assign string
 }
 type Page struct {
 	Items   []Next         `json:"items"`

@@ -23,12 +23,16 @@ const viewAlias: Record<string, string> = { all: '', done: 'completed', review: 
 const board = computed(() => route.value.query.get('board') ?? viewAlias[route.value.query.get('view') || 'all'] ?? '');
 const q = computed(() => route.value.query.get('q') || '');
 const type = computed(() => route.value.query.get('type') || '');
+// Queue ownership filter (remote only): unassigned, queued, claimable or runner:ID.
+const assign = computed(() => (remoteProject.value && route.value.query.get('assign')) || '');
+const runners = ref<Record<string, string>>({});
+const assignees = computed(() => (data.value.assignees || []).map((id: string) => ({ id, name: runners.value[id] || id })));
 const offset = computed(() => Number(route.value.query.get('offset') || 0));
 const search = ref(q.value);
 const tabs = [['', '未完成', 'unfinished'], ['active', '推进中', 'active'], ['pending', '待处理', 'pending'], ['review', '待确认', 'review'], ['completed', '已完成', 'completed'], ['cancelled', '已取消', 'cancelled']] as const;
 const moreViews = [['human', '待人工验收'], ['blocked', '受阻'], ['repair', '待修复'], ['issues', '关系待核对'], ['all', '全部记录']] as const;
 const types = ['feature', 'bug', 'improvement', 'refactor', 'docs', 'chore', 'research', 'test', 'qa', 'verify', 'epic'];
-const isDefault = computed(() => !board.value && !q.value && !type.value);
+const isDefault = computed(() => !board.value && !q.value && !type.value && !assign.value);
 
 const pendingTargets = ref(pendingReviews(info.value.project || ''));
 watch(() => info.value.project, (project) => { pendingTargets.value = pendingReviews(project || ''); }, { immediate: true });
@@ -47,7 +51,7 @@ const opened = computed(() => (route.value.query.get('open') || '').split(',').f
 let generation = 0; const childSequences: Record<string, number> = {};
 const childOffset = (id: string) => Number(route.value.query.get('c_' + id) || 0);
 const shownChildren = (row: any) => opened.value.includes(row.task.id) || (!!q.value && row.matches > 0);
-function query(extra: Record<string, unknown> = {}) { return params({ view: 'workbench', limit: 20, board: board.value, q: q.value, type: type.value, days: ['completed', 'all'].includes(board.value) ? route.value.query.get('days') || 30 : 0, ...extra }); }
+function query(extra: Record<string, unknown> = {}) { return params({ view: 'workbench', limit: 20, board: board.value, q: q.value, type: type.value, assign: assign.value, days: ['completed', 'all'].includes(board.value) ? route.value.query.get('days') || 30 : 0, ...extra }); }
 function filter(values: Record<string, string | undefined>) { const clear: Record<string, undefined> = { view: undefined }; route.value.query.forEach((_v, key) => { if (key.startsWith('c_')) clear[key] = undefined; }); setQuery({ ...clear, offset: undefined, open: undefined, ...values }); }
 async function refreshChildren() { await Promise.all((data.value.items || []).filter(shownChildren).map((row: any) => children(row.task.id, childOffset(row.task.id)))); }
 async function load(quiet = false) { await r.load(() => api('/api/tasks?' + query({ offset: offset.value })), quiet); await refreshChildren(); }
@@ -62,6 +66,7 @@ async function children(id: string, at = 0) {
   finally { if (gen === generation && childSequences[id] === requestID) childBusy.value[id] = false; }
 }
 function toggle(id: string) { const open = opened.value.includes(id) ? opened.value.filter((x) => x !== id) : [...opened.value, id]; setQuery({ open: open.join(',') || undefined }); }
+async function loadRunners() { if (!remoteProject.value) return; try { runners.value = Object.fromEntries(((await api('/api/runners')).items || []).map((r: any) => [r.id, r.alias])); } catch { /* names fall back to runner IDs */ } }
 async function extras(quiet = false) { pendingTargets.value = pendingReviews(info.value.project || ''); await Promise.all([recent.load(() => api('/api/tasks?' + params({ compact: 1, board: 'completed', days: 0, limit: 3 })), quiet), todo.load(() => api('/api/attention?human=1'), quiet)]); }
 function saved() { pendingTargets.value = pendingReviews(info.value.project || ''); void load(true); void extras(true); }
 watch(() => route.value.key, () => { generation++; search.value = q.value; void load(); });
@@ -69,7 +74,7 @@ watch(refreshRevision, () => { void load(); void extras(); });
 let debounce: ReturnType<typeof setTimeout>;
 function input() { clearTimeout(debounce); const value = search.value; debounce = setTimeout(() => filter({ q: value || undefined }), 220); }
 let timer: ReturnType<typeof setInterval>;
-onMounted(() => { void load(); void extras(); timer = setInterval(() => { void load(true); void extras(true); }, 10000); });
+onMounted(() => { void load(); void extras(); void loadRunners(); timer = setInterval(() => { void load(true); void extras(true); }, 10000); });
 onUnmounted(() => { generation++; clearInterval(timer); clearTimeout(debounce); });
 
 const projectLabel = computed(() => remoteProject.value?.id || info.value.project?.split('/').filter(Boolean).pop() || '当前项目');
@@ -132,6 +137,7 @@ const emptyKind = computed(() => data.value.project_total === 0 && isDefault.val
         <label class="wb-inline-search"><AppIcon name="search" /><span class="visually-hidden">搜索任务</span><input v-model="search" type="search" placeholder="搜索任务" @input="input" /></label>
         <select class="wb-filter-select" aria-label="任务类型" :value="type" @change="filter({ type: ($event.target as HTMLSelectElement).value || undefined })"><option value="">所有类型</option><option v-for="kind in types" :key="kind" :value="kind">{{ label(kind) }}</option></select>
         <select class="wb-filter-select" aria-label="更多视图" :value="moreViews.some(([v]) => v === board) ? board : ''" @change="filter({ board: ($event.target as HTMLSelectElement).value || undefined })"><option value="">更多视图</option><option v-for="[value, title] in moreViews" :key="value" :value="value">{{ title }}{{ value === 'issues' ? `（${data.anomalies}）` : '' }}</option></select>
+        <select v-if="remoteProject" class="wb-filter-select" aria-label="排队安排" :value="assign" @change="filter({ assign: ($event.target as HTMLSelectElement).value || undefined })"><option value="">全部安排</option><option value="unassigned">未安排</option><option value="queued">排队中</option><option value="claimable">可接手</option><option v-for="a in assignees" :key="a.id" :value="'runner:' + a.id">执行者：{{ a.name }}</option></select>
         <select v-if="['completed', 'all'].includes(board)" class="wb-filter-select" aria-label="完成时间" :value="route.query.get('days') || '30'" @change="filter({ days: ($event.target as HTMLSelectElement).value })"><option value="7">最近 7 天</option><option value="30">最近 30 天</option><option value="0">全部历史</option></select>
       </div>
     </div>
@@ -150,7 +156,7 @@ const emptyKind = computed(() => data.value.project_total === 0 && isDefault.val
             </div>
           </div>
           <div class="wb-row-status"><span class="tag" :class="rowState(row, canJudge).tone">{{ rowState(row, canJudge).label }}</span><span v-if="row.children" class="wb-mini-progress" :aria-label="`已完成 ${row.completed} / ${row.children} 个子任务`"><span class="wb-progress-track"><i v-for="(done, index) in segments(row)" :key="index" :class="{ done }"></i></span><span>{{ row.completed }} / {{ row.children }}</span></span></div>
-          <div class="wb-row-owner"><span class="avatar" :class="{ gray: workOwner(row.task, canJudge, currentUser, row).gray }">{{ workOwner(row.task, canJudge, currentUser, row).mark }}</span><span>{{ workOwner(row.task, canJudge, currentUser, row).name }}</span></div>
+          <div class="wb-row-owner" :title="row.task.assignment === 'unassigned' ? 'AEL 未记录排队安排；其他系统是否安排未知' : row.task.assignment === 'queued' ? '已排队，尚未领取开始' : undefined"><span class="avatar" :class="{ gray: workOwner(row.task, canJudge, currentUser, row).gray }">{{ workOwner(row.task, canJudge, currentUser, row).mark }}</span><span>{{ workOwner(row.task, canJudge, currentUser, row).name }}</span></div>
           <a class="icon-button wb-row-open" :href="taskHref(row.task.id)" :aria-label="'查看 ' + row.task.title"><AppIcon name="chevron-right" /></a>
         </div>
         <div v-if="row.children && shownChildren(row)" class="wb-row-children">

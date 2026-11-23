@@ -78,33 +78,33 @@ func ReviewAccess(n Next, c Check) CheckAccess {
 }
 
 type TaskSummary struct {
-	RecoveryAction       string                    `json:"recovery_action,omitempty"`
-	Health               *WorkHealth               `json:"health,omitempty"`
-	Epic                 *EpicSummary              `json:"epic,omitempty"`
-	Parent               string                    `json:"parent,omitempty"`
-	Children             int                       `json:"children"`
-	ID                   string                    `json:"id"`
-	Title                string                    `json:"title"`
-	Type                 string                    `json:"type"`
-	Board                string                    `json:"board"`
-	Step                 string                    `json:"step"`
-	Action               string                    `json:"next_action"`
-	Reasons              []string                  `json:"blocking_reasons"`
-	Executors            []string                  `json:"executors"`
-	Running              int                       `json:"running"`
-	WaitingChecks        int                       `json:"waiting_checks"`
-	LastResult           string                    `json:"last_result"`
-	Next                 string                    `json:"next"`
-	Activity             *time.Time                `json:"activity_at"`
-	Completed            *time.Time                `json:"completed_at"`
-	Historical           bool                      `json:"historical"`
-	Recovery             string                    `json:"recovery"`
-	Blocker              string                    `json:"blocker_reason"`
-	NeedsHistoryReview   bool                      `json:"needs_history_review"`
+	RecoveryAction     string       `json:"recovery_action,omitempty"`
+	Health             *WorkHealth  `json:"health,omitempty"`
+	Epic               *EpicSummary `json:"epic,omitempty"`
+	Parent             string       `json:"parent,omitempty"`
+	Children           int          `json:"children"`
+	ID                 string       `json:"id"`
+	Title              string       `json:"title"`
+	Type               string       `json:"type"`
+	Board              string       `json:"board"`
+	Step               string       `json:"step"`
+	Action             string       `json:"next_action"`
+	Reasons            []string     `json:"blocking_reasons"`
+	Executors          []string     `json:"executors"`
+	Running            int          `json:"running"`
+	WaitingChecks      int          `json:"waiting_checks"`
+	LastResult         string       `json:"last_result"`
+	Next               string       `json:"next"`
+	Activity           *time.Time   `json:"activity_at"`
+	Completed          *time.Time   `json:"completed_at"`
+	Historical         bool         `json:"historical"`
+	Recovery           string       `json:"recovery"`
+	Blocker            string       `json:"blocker_reason"`
+	NeedsHistoryReview bool         `json:"needs_history_review"`
 	// Imported marks a record carried by an authority history import; its
 	// ledger lets an authorized executor reconcile the restore hold.
-	Imported bool `json:"imported,omitempty"`
-	Paused   bool `json:"paused,omitempty"`
+	Imported             bool                      `json:"imported,omitempty"`
+	Paused               bool                      `json:"paused,omitempty"`
 	RequiresTaskDecision bool                      `json:"requires_task_decision"`
 	Checks               CheckSummary              `json:"checks"`
 	ManualReviews        []PendingHumanReview      `json:"manual_reviews"`
@@ -112,6 +112,14 @@ type TaskSummary struct {
 	HumanReviewCount     int                       `json:"human_review_count"`
 	ReviewNoteState      string                    `json:"review_note_state,omitempty"`
 	CurrentRuns          map[string]CheckExecution `json:"-"`
+	// Remote collaboration marker, independent from Step/Board: unassigned
+	// (AEL holds no record), queued, or started (an Attempt holds it).
+	Assignment string       `json:"assignment,omitempty"`
+	Queue      *QueueRecord `json:"queue,omitempty"`
+	// Claimable: unassigned and the current facts allow an ordinary claim.
+	Claimable bool `json:"claimable,omitempty"`
+	// Runnable ignores the queue marker; claim still re-checks everything.
+	Runnable bool `json:"runnable,omitempty"`
 }
 
 func (s *Service) Summarize(n Next) (TaskSummary, error) {
@@ -317,6 +325,11 @@ func (s *Service) summarize(n Next, includeEpic bool) (TaskSummary, error) {
 	}
 	if r.LastResult == "" {
 		r.LastResult = "尚未提交工作结果"
+	}
+	if s.RemoteAuthority {
+		if err := s.queueSummary(t, &r); err != nil {
+			return r, err
+		}
 	}
 	return r, nil
 }

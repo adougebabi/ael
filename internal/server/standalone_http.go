@@ -454,7 +454,7 @@ func (h *standaloneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			h.remoteArtifacts(w, r, p, method, parts[0], parts[2:])
 			return
 		}
-		if len(parts) >= 2 && (parts[1] == "repositories" || parts[1] == "candidates" || parts[1] == "observations" || parts[1] == "contexts" || parts[1] == "portable-operations" || parts[1] == "runners") {
+		if len(parts) >= 2 && (parts[1] == "repositories" || parts[1] == "candidates" || parts[1] == "observations" || parts[1] == "contexts" || parts[1] == "portable-operations" || parts[1] == "runners" || parts[1] == "queue") {
 			h.remotePortable(w, r, p, parts[0], parts[1], parts[2:])
 			return
 		}

@@ -236,7 +236,7 @@ func (p *portableStore) claimRunner(principal standalonePrincipal, role, runnerI
 		if err != nil {
 			return nil, err
 		}
-		task, attempt, err := p.service.RemoteClaimTx(tx, core.RemoteClaimInput{TaskID: taskID, ParentID: input.ParentID, ExpectedRevision: input.ExpectedRevision, Runner: runnerID, Workspace: workspace, Candidate: candidateID, Token: token, Basis: basis, ReviewerOnly: role == "reviewer"})
+		task, attempt, err := p.service.RemoteClaimTx(tx, core.RemoteClaimInput{TaskID: taskID, ParentID: input.ParentID, ExpectedRevision: input.ExpectedRevision, Runner: runnerID, Actor: principal.UserID, Workspace: workspace, Candidate: candidateID, Token: token, Basis: basis, ReviewerOnly: role == "reviewer"})
 		if err != nil {
 			return nil, err
 		}

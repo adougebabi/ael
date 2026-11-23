@@ -54,7 +54,29 @@ func remoteAgentCommand(cmd string, a args, config, project string, binding remo
 	if action == "retry" {
 		return retryAgentOperation(a, config, project, binding)
 	}
+	if action == "queue-list" {
+		query := url.Values{}
+		for _, key := range []string{"runner", "state", "task"} {
+			if value := a.get(key, ""); value != "" {
+				query.Set(key, value)
+			}
+		}
+		path := "/queue"
+		if len(query) > 0 {
+			path += "?" + query.Encode()
+		}
+		response, err := agentCommunicationCall(config, project, binding, http.MethodGet, path, nil)
+		if err != nil {
+			return nil, err
+		}
+		return remoteOutput(response), nil
+	}
 	runner := a.get("runner", "")
+	if action == "queue-release" || action == "queue-transfer" {
+		// The path names the current holder; the caller's own session runner
+		// is not involved, so an admin or the receiving agent can act on it.
+		runner = a.get("holder", "")
+	}
 	var lease agentUploadLease
 	var leaseReceipt map[string]any
 	if a.get("lease-file", "") != "" {
@@ -71,7 +93,7 @@ func remoteAgentCommand(cmd string, a args, config, project string, binding remo
 		}
 	}
 	if action != "register" && (runner == "" || strings.ContainsAny(runner, "/\\?#\r\n")) {
-		return nil, core.Error("AGENT_REQUEST_INVALID", "provide --runner ID")
+		return nil, core.Error("AGENT_REQUEST_INVALID", "provide --runner ID (or --holder for queue release/transfer)")
 	}
 	path := "/runners/" + url.PathEscape(runner)
 	method := http.MethodPost
@@ -89,6 +111,13 @@ func remoteAgentCommand(cmd string, a args, config, project string, binding remo
 			return nil, core.Error("AGENT_REQUEST_INVALID", "provide --idempotency-key")
 		}
 		method, path = http.MethodGet, path+"/operations/"+url.PathEscape(a.get("idempotency-key", ""))
+	case "queue", "queue-release", "queue-transfer":
+		body, err := queueRequest(a, action)
+		if err != nil {
+			return nil, err
+		}
+		path += "/" + action
+		payload = body
 	case "register", "claim", "heartbeat", "progress", "observe", "submit", "interrupt", "recover":
 		if action == "claim" && a.get("out", "") == "" {
 			return nil, core.Error("AGENT_REQUEST_INVALID", "claim requires --out NEW_PRIVATE_FILE for the lease; response output omits credentials")
@@ -171,4 +200,36 @@ func redactAgentSecrets(value any) {
 			redactAgentSecrets(child)
 		}
 	}
+}
+
+// queueRequest builds a queue marker request from flags (no secrets) or the
+// same fields in a private --file. The CLI keeps a pending operation record so
+// an unknown result is resolved by runner retry, never assumed accepted.
+func queueRequest(a args, action string) (map[string]any, error) {
+	body := map[string]any{}
+	if a.get("file", "") != "" {
+		if err := readAgentRequest(a.get("file", ""), &body); err != nil {
+			return nil, err
+		}
+	}
+	for flag, field := range map[string]string{"task": "task_id", "expected-version": "expected_version", "scope": "scope", "to": "to_runner", "to-scope": "to_scope", "reason": "reason", "operation-id": "operation_id", "idempotency-key": "idempotency_key"} {
+		if value := a.get(flag, ""); value != "" {
+			body[field] = value
+		}
+	}
+	if action == "queue" && body["expected_version"] == nil {
+		body["expected_version"] = "absent"
+	}
+	if body["operation_id"] == nil && body["idempotency_key"] != nil {
+		body["operation_id"] = body["idempotency_key"]
+	}
+	for _, field := range []string{"task_id", "expected_version", "idempotency_key"} {
+		if value, _ := body[field].(string); value == "" {
+			return nil, core.Error("AGENT_REQUEST_INVALID", "provide --task, --expected-version and --idempotency-key")
+		}
+	}
+	if action == "queue-transfer" && (body["to_runner"] == nil || body["reason"] == nil) {
+		return nil, core.Error("AGENT_REQUEST_INVALID", "queue-transfer requires --to RUNNER and --reason")
+	}
+	return body, nil
 }

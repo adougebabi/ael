@@ -63,7 +63,11 @@ func save(tx *store.Tx, t *Task) error {
 		completed = t.Completed.Format(time.RFC3339Nano)
 	}
 	_, e = tx.Exec("INSERT INTO tasks(id,body,status,step,updated,completed) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body,status=excluded.status,step=excluded.step,updated=excluded.updated,completed=excluded.completed", t.Definition.ID, string(b), t.Status, t.Step, t.Updated.Format(time.RFC3339Nano), completed)
-	return e
+	if e != nil {
+		return e
+	}
+	// A queue marker never outlives the pending responsibility it named.
+	return reconcileQueueTx(tx, t)
 }
 func (s *Service) active() error {
 	if _, e := os.Lstat(filepath.Join(s.Root, ".ael/tool-update.lock")); e == nil {

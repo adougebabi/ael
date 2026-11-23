@@ -159,3 +159,7 @@ POST 路径依次为 `/api/v1/projects/PROJECT/findings/ID/decisions`、`/repair
 `project connect` 保存最小绑定及 API/Skill 协议要求，可用 `--install-entry` 同时安装受管轻入口。已有绑定用 `update --project PATH`，遗留离线受管入口须显式 `--migrate-entry`。项目保留 launcher、AGENTS 受管块、Skill、绑定和协议 manifest，机器级 CLI 在多个兼容项目间复用。旧二进制/锁保持可访问，Local project.yaml 的数据权威切换继续独立处理。
 
 `version --check --project PATH` 同时展示当前 CLI、项目入口和 Server 版本。旧 Server 未提供版本时标为 unreported。旧绑定的缺省 API/Skill 为 1，明确不兼容的会话声明和 Server 协议在请求前拒绝，离线缓存继续显示历史/非权威。`upgrade --source TRUSTED_JSON --version EXACT --prefix DIR --check` 核对指定安装，正式升级走成熟签名、文件哈希、内包与 executable 协议校验，项目入口不因兼容机器升级而重写。完整操作见 updating.md。
+
+## 排队归属
+
+外部 Bot 已把任务放入内部队列但尚未领取时，可用 `runner queue` 在 Server 登记「排队中」，用 `runner queue-release` / `runner queue-transfer` 释放或转交尚未开始的安排，用 `runner queue-list --state unassigned|queued|claimable` 查询。登记不创建 Attempt、租约或进度，不改变任务修订；他人持有有效安排时普通 claim 返回 `QUEUE_RESERVED`，持有者领取后安排转为既有 Attempt。HTTP 接口为 POST `/api/v1/projects/ID/runners/RUNNER/queue|queue-release|queue-transfer` 与 GET `/api/v1/projects/ID/queue`。命令与 Bot 接入位置见 [远程 Agent 协议](../assets/skills/ael-work/references/remote-agent.md)「排队归属」；验收见 `scripts/queue_ownership_acceptance.py`。

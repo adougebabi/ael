@@ -117,7 +117,7 @@ func prepareRemoteToolCommand(cmd string, a args, raw []string, binding remote.B
 	if err = validateToolSession(session, profile, root, binding); err != nil {
 		return nil, true, err
 	}
-	runnerWrite := strings.HasPrefix(cmd, "runner ") && cmd != "runner show" && cmd != "runner next" && cmd != "runner receipt"
+	runnerWrite := strings.HasPrefix(cmd, "runner ") && cmd != "runner show" && cmd != "runner next" && cmd != "runner receipt" && cmd != "runner queue-list"
 	if runner != "" && session.Runner == "" && (runnerWrite || cmd == "artifact upload") {
 		return nil, true, core.Error("SESSION_RUNNER_BINDING_REQUIRED", "bind this session to its own idle runner using session start before runner communication")
 	}
