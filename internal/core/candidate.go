@@ -108,7 +108,7 @@ func captureCandidate(root string) (candidateSnapshot, error) {
 			}
 		}
 		if d.IsDir() {
-			if d.Name() == ".git" || d.Name() == "node_modules" || rel == ".ael/work-items" || rel == ".ael/outcomes" || rel == ".ael/records" || rel == ".ael/deleted" || rel == ".ael/imports" || rel == ".ael/bin" || rel == ".ael/tool-update.lock" {
+			if d.Name() == ".git" || d.Name() == "node_modules" || rel == ".ael/work-items" || rel == ".ael/outcomes" || rel == ".ael/records" || rel == ".ael/deleted" || rel == ".ael/imports" || rel == ".ael/clone-runtime" || rel == ".ael/bin" || rel == ".ael/tool-update.lock" {
 				skipped = append(skipped, filepath.ToSlash(rel))
 				return filepath.SkipDir
 			}

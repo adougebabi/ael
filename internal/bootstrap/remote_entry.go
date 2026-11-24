@@ -153,7 +153,7 @@ func remoteEntryTargets(root string, owned map[string]string) (map[string][]byte
 		}
 		targets[".agents/skills/ael-work/"+name] = body
 	}
-	targets[".claude/skills/ael-work/SKILL.md"] = []byte("---\nname: ael-work\ndescription: Continue authorized AEL project engineering work or an explicitly requested AEL task.\n---\n\nFor an authorized AEL engineering request, run `./ael session show --session HOST_SESSION_ID --json` and read the returned frozen `session.skill_path`. Prepare a missing tool session with `./ael session start --session HOST_SESSION_ID --runner RUNNER --json`, then read its frozen Skill. After compaction or resume, first run `./ael recovery check --session HOST_SESSION_ID --json`. Ordinary discussion and review follow the user request directly.\n")
+	targets[".claude/skills/ael-work/SKILL.md"] = []byte("---\nname: ael-work\ndescription: Continue authorized AEL project engineering work or an explicitly requested AEL task.\n---\n\nHandle isolated mechanical formatting and typo corrections directly unless the user requests tracking. In portable clones omit --runner and use the registered checkout identity. For an authorized tracked engineering request, run `./ael session show --session HOST_SESSION_ID --json` and read the returned frozen `session.skill_path`. Prepare a missing tool session with `./ael session start --session HOST_SESSION_ID --runner RUNNER --json`, then read its frozen Skill. After compaction or resume, first run `./ael recovery check --session HOST_SESSION_ID --json`. Ordinary discussion and review follow the user request directly.\n")
 	for path, body := range targets {
 		manifest.Assets[path] = store.Hash(body)
 	}
@@ -213,7 +213,7 @@ func UpdateRemoteEntry(root string, dry, migrate bool, expectedBindingHash strin
 		return result, core.Error("REMOTE_BINDING_CHANGED", "project binding changed after validation")
 	}
 	if _, err = os.Lstat(filepath.Join(root, ".ael/project.yaml")); err == nil {
-		if err = VerifyTransferredCheckout(root); err != nil {
+		if err = VerifyRemoteEntryCheckout(root); err != nil {
 			return result, err
 		}
 	} else if !os.IsNotExist(err) {
@@ -391,4 +391,23 @@ func remoteManagedBlock(root, filename string) (string, error) {
 		return "", core.Error("ASSET_CONFLICT", "invalid managed block in "+filename)
 	}
 	return text[start : finish+len(end)], nil
+}
+
+// A clone of a previously transferred project can carry the old Local files
+// without carrying a Local runtime. An existing runtime still requires proof
+// that the original authority was frozen.
+func VerifyRemoteEntryCheckout(root string) error {
+	db, err := projectReadDB(root)
+	if err != nil {
+		return err
+	}
+	if db != nil {
+		db.Close()
+		return VerifyTransferredCheckout(root)
+	}
+	var manifest RemoteEntryManifest
+	if err := readEntryJSON(root, ".ael/remote-assets.json", &manifest); err != nil {
+		return core.Error("LOCAL_PROJECT_EXISTS", "managed remote entry or verified Local transfer required")
+	}
+	return manifest.validate()
 }

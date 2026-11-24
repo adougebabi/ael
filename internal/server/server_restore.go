@@ -45,6 +45,9 @@ func prepareRestoredData(stage, sourceRoot, target string) error {
 		if _, err := tx.Exec("DELETE FROM server_sessions"); err != nil {
 			return err
 		}
+		if _, err := tx.Exec("DELETE FROM server_clone_grants"); err != nil {
+			return err
+		}
 		_, err := tx.Exec("UPDATE server_tokens SET revoked=1")
 		return err
 	}); err != nil {

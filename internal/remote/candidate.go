@@ -52,10 +52,10 @@ var portableDigest = regexp.MustCompile(`^[0-9a-f]{64}$`)
 var portableCommit = regexp.MustCompile(`^([0-9a-f]{40}|[0-9a-f]{64})$`)
 
 func portableRuntimePath(path string) bool {
-	if path == ".ael/remote.json" || path == ".ael/knowledge-sources.json" || path == ".ael/tool-update.lock" {
+	if path == ".ael/runner-access.json" || path == ".ael/remote.json" || path == ".ael/knowledge-sources.json" || path == ".ael/tool-update.lock" {
 		return true
 	}
-	for _, prefix := range []string{".ael/work-items/", ".ael/outcomes/", ".ael/records/", ".ael/deleted/", ".ael/imports/", ".ael/bin/", ".ael/tool-update.lock/"} {
+	for _, prefix := range []string{".ael/work-items/", ".ael/outcomes/", ".ael/records/", ".ael/deleted/", ".ael/imports/", ".ael/clone-runtime/", ".ael/bin/", ".ael/tool-update.lock/"} {
 		if strings.HasPrefix(path, prefix) {
 			return true
 		}

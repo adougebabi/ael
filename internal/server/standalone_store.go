@@ -167,6 +167,7 @@ CREATE TABLE IF NOT EXISTS server_users(id TEXT PRIMARY KEY, username TEXT NOT N
 CREATE TABLE IF NOT EXISTS server_projects(id TEXT PRIMARY KEY, name TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS server_members(project_id TEXT NOT NULL REFERENCES server_projects(id), user_id TEXT NOT NULL REFERENCES server_users(id), role TEXT NOT NULL, PRIMARY KEY(project_id,user_id));
 CREATE TABLE IF NOT EXISTS server_sessions(secret_hash BLOB PRIMARY KEY, user_id TEXT NOT NULL REFERENCES server_users(id), csrf_hash BLOB NOT NULL, expires INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS server_clone_grants(secret_hash BLOB PRIMARY KEY, project_id TEXT NOT NULL REFERENCES server_projects(id));
 CREATE TABLE IF NOT EXISTS server_tokens(id TEXT PRIMARY KEY, secret_hash BLOB NOT NULL UNIQUE, user_id TEXT NOT NULL REFERENCES server_users(id), project_id TEXT NOT NULL REFERENCES server_projects(id), label TEXT NOT NULL, revoked INTEGER NOT NULL DEFAULT 0);`)
 	if err != nil {
 		db.Close()

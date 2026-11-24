@@ -38,6 +38,14 @@ func TestAgentClaimReceiptIsDirectLeaseAndRetainsClaimRevision(t *testing.T) {
 	if err != nil || !updated.LeaseUntil.After(lease.LeaseUntil) || updated.ExpectedRevision != lease.ExpectedRevision {
 		t.Fatalf("heartbeat lost immutable claim or renewal: %+v %v", updated, err)
 	}
+	heartbeat["lease_until"] = "2030-01-01T00:00:00Z"
+	if err := updateAgentLease(path, saved, heartbeat); err != nil {
+		t.Fatal(err)
+	}
+	latest, _, err := readAgentLease(path)
+	if err != nil || !latest.LeaseUntil.Equal(updated.LeaseUntil) {
+		t.Fatal("late heartbeat shortened lease", err)
+	}
 	redactAgentSecrets(receipt)
 	public, _ := json.Marshal(receipt)
 	if strings.Contains(string(public), "private-token") {

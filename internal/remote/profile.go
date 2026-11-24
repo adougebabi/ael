@@ -414,3 +414,21 @@ func checkConnectLocal(root string, verifyLocal func() error) error {
 	}
 	return nil
 }
+
+// CloneStateDirectory holds machine-private enrollment receipts, outside Git.
+func CloneStateDirectory(config, root string) (string, error) {
+	config, err := outsideCheckout(config, root)
+	if err != nil {
+		return "", err
+	}
+	for _, dir := range []string{config, filepath.Join(config, "clone-runners")} {
+		if err = os.MkdirAll(dir, 0700); err != nil {
+			return "", err
+		}
+		info, err := os.Lstat(dir)
+		if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 || securityfs.NoACL(dir) != nil {
+			return "", errors.New("REMOTE_CONFIG_PERMISSIONS: clone runner directory must be private")
+		}
+	}
+	return filepath.Join(config, "clone-runners"), nil
+}

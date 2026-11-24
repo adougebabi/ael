@@ -60,6 +60,10 @@ func runnerHeartbeatDeadlineGuarded(cfg remoteRunnerConfig, config, project stri
 	if err != nil {
 		return time.Time{}, err
 	}
+	return heartbeatDeadline(started, response, lease.AttemptID, lease.Fence)
+}
+
+func heartbeatDeadline(started time.Time, response map[string]any, attemptID string, expectedFence int) (time.Time, error) {
 	fence, ok := response["fence"].(json.Number)
 	if !ok {
 		return time.Time{}, core.Error("REMOTE_RESPONSE_INVALID", "heartbeat fence missing")
@@ -72,7 +76,7 @@ func runnerHeartbeatDeadlineGuarded(cfg remoteRunnerConfig, config, project stri
 	}
 	issued, issuedErr := time.Parse(time.RFC3339Nano, issuedText)
 	until, untilErr := time.Parse(time.RFC3339Nano, untilText)
-	if err != nil || fenceValue != int64(lease.Fence) || response["attempt_id"] != lease.AttemptID || !issuedOK || !untilOK || issuedErr != nil || untilErr != nil || !until.After(issued) {
+	if err != nil || fenceValue != int64(expectedFence) || response["attempt_id"] != attemptID || !issuedOK || !untilOK || issuedErr != nil || untilErr != nil || !until.After(issued) {
 		return time.Time{}, core.Error("REMOTE_RESPONSE_INVALID", "heartbeat lease interval or identity invalid")
 	}
 	deadline := started.Add(until.Sub(issued))

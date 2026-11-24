@@ -67,6 +67,9 @@ func recoveryHook(a args) (any, error) {
 		return nil, err
 	}
 	a.Flags["session"] = event.Session
+	if _, err = ensureCloneRunner(a, root, &binding); err != nil {
+		return nil, err
+	}
 	path, profile, _, err := recoveryLocation(a, config, root, binding)
 	if err != nil {
 		return nil, err

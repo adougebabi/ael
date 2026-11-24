@@ -5,6 +5,7 @@ import (
 	"ael/internal/store"
 	"encoding/json"
 	"fmt"
+	"time"
 )
 
 // A claim receipt is also a lease file. Keep the original nested receipt so
@@ -83,6 +84,27 @@ func updateAgentLease(path string, receipt, heartbeat map[string]any) error {
 	if heartbeat["attempt_id"] != receipt["attempt_id"] || fmt.Sprint(heartbeat["fence"]) != fmt.Sprint(receipt["fence"]) || heartbeat["lease_until"] == nil {
 		return core.Error("AGENT_LEASE_INVALID", "heartbeat receipt does not match lease")
 	}
+	unlock, err := lockAgentOperation(path)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	current, latest, err := readAgentLease(path)
+	if err != nil {
+		return err
+	}
+	if current.AttemptID != receipt["attempt_id"] || current.Token != receipt["token"] || fmt.Sprint(current.Fence) != fmt.Sprint(receipt["fence"]) {
+		return core.Error("AGENT_LEASE_INVALID", "claim receipt was replaced")
+	}
+	value, _ := heartbeat["lease_until"].(string)
+	until, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return core.Error("AGENT_LEASE_INVALID", "invalid lease deadline")
+	}
+	if !until.After(current.LeaseUntil) {
+		return nil
+	}
+	receipt = latest
 	receipt["lease_until"] = heartbeat["lease_until"]
 	if attempt, ok := receipt["attempt"].(map[string]any); ok {
 		attempt["lease_until"] = heartbeat["lease_until"]

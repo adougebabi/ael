@@ -191,7 +191,15 @@ func (h *standaloneHandler) authenticate(r *http.Request) (standalonePrincipal, 
 		if !strings.HasPrefix(auth, "Bearer ") {
 			return standalonePrincipal{}, "", errors.New("AUTH_REQUIRED")
 		}
-		p, err := h.server.token(strings.TrimPrefix(auth, "Bearer "))
+		secret := strings.TrimPrefix(auth, "Bearer ")
+		if strings.HasPrefix(secret, "join_") {
+			var project string
+			if err := h.server.store.DB.QueryRow("SELECT project_id FROM server_clone_grants WHERE secret_hash=?", standaloneHash(secret)).Scan(&project); err != nil || r.Method != http.MethodPost || r.URL.Path != "/api/v1/projects/"+project+"/clone-enroll" {
+				return standalonePrincipal{}, "", errors.New("AUTH_REQUIRED")
+			}
+			return standalonePrincipal{ProjectID: project}, "clone", nil
+		}
+		p, err := h.server.token(secret)
 		return p, "token", err
 	}
 	cookie, err := r.Cookie("ael_session")
@@ -233,7 +241,7 @@ func (h *standaloneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			standaloneFail(w, 503, "SERVER_MAINTENANCE")
 			return
 		}
-		info := map[string]any{"maintenance": state.publicNotice(), "mode": "server", "protocol": 1, "skill_protocol": 1, "cli_output_protocol": 1, "version": h.version, "build": h.build, "minimum_client_version": h.minimumClient, "protocol_range": map[string]int{"api_min": 1, "api_max": 1, "skill_min": 1, "skill_max": 1}, "capabilities": []string{"client_releases", "onboarding", "login", "projects", "project_roles", "revocable_tokens", "remote_tasks", "remote_plans", "operation_receipts", "artifacts", "portable_candidates", "portable_contexts", "remote_runners", "findings", "authority_imports", "remote_integration", "remote_failure_review"}}
+		info := map[string]any{"maintenance": state.publicNotice(), "mode": "server", "protocol": 1, "skill_protocol": 1, "cli_output_protocol": 1, "version": h.version, "build": h.build, "minimum_client_version": h.minimumClient, "protocol_range": map[string]int{"api_min": 1, "api_max": 1, "skill_min": 1, "skill_max": 1}, "capabilities": []string{"clone_runners", "client_releases", "onboarding", "login", "projects", "project_roles", "revocable_tokens", "remote_tasks", "remote_plans", "operation_receipts", "artifacts", "portable_candidates", "portable_contexts", "remote_runners", "findings", "authority_imports", "remote_integration", "remote_failure_review"}}
 		clientRelease := h.clientRelease(r.URL.Query().Get("platform"), r.URL.Query().Get("updates") == "1")
 		info["client_release"] = clientRelease
 		if clientRelease["available"] == true {
@@ -426,6 +434,10 @@ func (h *standaloneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.HasPrefix(r.URL.Path, "/api/v1/projects/") {
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v1/projects/"), "/")
+		if len(parts) == 2 && (parts[1] == "clone-grants" || parts[1] == "clone-enroll") {
+			h.cloneAccess(w, r, p, method, parts[0], parts[1])
+			return
+		}
 		if len(parts) == 2 && parts[1] == "onboarding" {
 			h.onboardingConfiguration(w, r, p, parts[0])
 			return

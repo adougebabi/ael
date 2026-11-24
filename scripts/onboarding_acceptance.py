@@ -107,7 +107,7 @@ def api(method, path, payload=None):
 def initialize(name, *choice, credential=password + "\n", username="owner", ok=True, url=None):
     root = out / ("project-" + name)
     root.mkdir(exist_ok=True)
-    argv = ["init", "--server", url or base, "--project", root, "--config-dir", out / ("config-" + name),
+    argv = ["init", "--machine-only", "--server", url or base, "--project", root, "--config-dir", out / ("config-" + name),
             "--profile", "central", "--prefix", out / "install", "--from", archive,
             "--host", "none", "--update-policy", "notify", *choice]
     if username:
@@ -119,7 +119,7 @@ def interactive_init(name, responses, ok):
     root = out / ("project-" + name)
     root.mkdir()
     master, slave = pty.openpty()
-    process = subprocess.Popen([str(binary), "init", "--project", str(root), "--config-dir", str(out / ("config-" + name)),
+    process = subprocess.Popen([str(binary), "init", "--machine-only", "--project", str(root), "--config-dir", str(out / ("config-" + name)),
                                 "--prefix", str(out / "install"), "--from", str(archive), "--host", "none",
                                 "--update-policy", "notify", "--json"], stdin=slave, stdout=slave, stderr=slave, env=env, cwd=root)
     os.close(slave)

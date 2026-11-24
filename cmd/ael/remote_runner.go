@@ -3,6 +3,7 @@ package main
 import (
 	"ael/internal/bootstrap"
 	"ael/internal/core"
+	"ael/internal/process"
 	"ael/internal/remote"
 	"ael/internal/store"
 	"crypto/rand"
@@ -14,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -32,7 +34,32 @@ func runnerCall(config, project string, binding remote.Binding, method, path str
 // Remote managed execution is retired. The runner protocol now describes an
 // externally operated Agent client; it never enters the historical loop.
 func remoteRunnerCommand(cmd string, a args, config, project string, binding remote.Binding) (any, error) {
-	return remoteAgentCommand(cmd, a, config, project, binding)
+	ownerPID := a.get("owner-pid", os.Getenv("AEL_RUNNER_OWNER_PID"))
+	if ownerPID == "" || (cmd != "runner claim" && (cmd != "runner retry" || a.get("out", "") == "")) {
+		return remoteAgentCommand(cmd, a, config, project, binding)
+	}
+	pid, err := strconv.Atoi(ownerPID)
+	if err != nil {
+		return nil, core.Error("OWNER_IDENTITY_REQUIRED", "provide a persistent owner PID")
+	}
+	identity, err := process.Identity(pid)
+	if err != nil {
+		return nil, err
+	}
+	value, err := remoteAgentCommand(cmd, a, config, project, binding)
+	if err != nil {
+		return nil, err
+	}
+	result, ok := value.(remoteOutput)
+	if !ok || result["lease_file"] == nil {
+		return value, nil
+	}
+	keeper, err := launchRemoteKeeper(a, config, project, identity, ownerPID)
+	if err != nil {
+		return nil, fmt.Errorf("claim is saved in %s; resume renewal with runner keepalive: %w", a.get("out", ""), err)
+	}
+	result["keeper_pid"] = keeper
+	return result, nil
 }
 
 func verifyRegisteredRunner(cfg remoteRunnerConfig, config, project string, binding remote.Binding) error {

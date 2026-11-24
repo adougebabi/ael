@@ -45,6 +45,9 @@ func versionCommand(a args) (any, error) {
 		return result, nil
 	}
 
+	if _, err = ensureCloneRunner(a, root, &binding); err != nil {
+		return nil, err
+	}
 	if err = remote.CheckClientProtocols(binding); err != nil {
 		return nil, err
 	}

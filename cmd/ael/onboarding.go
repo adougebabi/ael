@@ -25,6 +25,7 @@ import (
 )
 
 type onboardingIntent struct {
+	CloneGrant  string `json:"clone_grant,omitempty"`
 	Server      string `json:"server"`
 	Profile     string `json:"profile"`
 	Checkout    string `json:"checkout"`
@@ -61,10 +62,13 @@ func initCommand(a args) (any, error) {
 	if !remoteRequested {
 		return bootstrap.InitProject(root, a.has("dry-run"), false, a.get("bundle-dir", ""))
 	}
-	allowed := []string{"project", "server", "profile", "remote-project", "create", "username", "password-stdin", "token-stdin", "config-dir", "ca-file", "prefix", "from", "bundle-dir", "host", "update-policy", "pin-version", "release-source", "dry-run", "json", "verbose", "no-color"}
+	allowed := []string{"machine-only", "repository", "project", "server", "profile", "remote-project", "create", "username", "password-stdin", "token-stdin", "config-dir", "ca-file", "prefix", "from", "bundle-dir", "host", "update-policy", "pin-version", "release-source", "dry-run", "json", "verbose", "no-color"}
 	for flag, value := range a.Flags {
 		if !slices.Contains(allowed, flag) {
 			return nil, core.Error("UNKNOWN_FLAG", flag)
+		}
+		if booleanFlag(flag) && value != "true" && value != "false" {
+			return nil, core.Error("INVALID_FLAG_VALUE", flag)
 		}
 		if !booleanFlag(flag) && value == "true" {
 			return nil, core.Error("FLAG_VALUE_REQUIRED", flag)
@@ -85,7 +89,7 @@ func initCommand(a args) (any, error) {
 		if !exists {
 			return nil, err
 		}
-		if err = bootstrap.VerifyTransferredCheckout(root); err != nil {
+		if err = bootstrap.VerifyRemoteEntryCheckout(root); err != nil {
 			return nil, err
 		}
 		transferred = true
@@ -130,8 +134,22 @@ func initCommand(a args) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	if !a.has("machine-only") && !slices.Contains(meta.Capabilities, "clone_runners") {
+		return nil, core.Error("CLONE_SERVER_UPDATE_REQUIRED", "update AEL Server for clone enrollment, or select --machine-only for a legacy client")
+	}
 	username := a.get("username", "")
-	if profileErr != nil && !a.has("token-stdin") && username == "" && interactive {
+	needCloneAdmin := false
+	if !a.has("machine-only") {
+		_, accessErr := readCloneAccess(root)
+		needCloneAdmin = os.IsNotExist(accessErr)
+		if accessErr != nil && !needCloneAdmin {
+			return nil, accessErr
+		}
+		if needCloneAdmin && username == "" && (!interactive || a.has("token-stdin")) {
+			return nil, core.Error("CLONE_ADMIN_REQUIRED", "supply --username and administrator credentials for initial repository enrollment; legacy machine profiles use --machine-only")
+		}
+	}
+	if (profileErr != nil || needCloneAdmin) && !a.has("token-stdin") && username == "" && interactive {
 		username, err = initPrompt(reader, "Server 用户名")
 		if err != nil {
 			return nil, err
@@ -181,6 +199,24 @@ func initCommand(a args) (any, error) {
 		}
 		if createName != "" && project["name"] != createName {
 			return nil, core.Error("REMOTE_BINDING_EXISTS", "checkout is already connected to a different project")
+		}
+		// A server restore revokes the old machine token. An administrator can
+		// restore clone access without reviving that token or old runner identities.
+		if !a.has("machine-only") && username != "" && profileErr == nil {
+			if access, readErr := readCloneAccess(root); readErr == nil && access.Project == projectID && access.URL == origin && access.CA == authority && a.get("repository", access.Repository) == access.Repository {
+				check, err := newServerSession(profile)
+				if err != nil {
+					return nil, err
+				}
+				_, tokenErr := check.call(http.MethodGet, "/api/v1/projects/"+projectID, nil)
+				check.close()
+				if tokenErr != nil && strings.HasPrefix(tokenErr.Error(), "AUTH_REQUIRED:") {
+					if _, err = session.call(http.MethodPost, "/api/v1/projects/"+projectID+"/clone-grants", map[string]string{"grant": access.Grant}); err != nil {
+						return nil, err
+					}
+					return map[string]any{"project_id": projectID, "clone_ready": true, "status": "clone_enrollment_restored", "machine_profile": "revoked"}, nil
+				}
+			}
 		}
 		createName = ""
 	}
@@ -259,11 +295,17 @@ func initCommand(a args) (any, error) {
 			return nil, err
 		}
 	}
+	if !a.has("machine-only") && intent.CloneGrant == "" {
+		intent.CloneGrant, err = cloneSecret("join_")
+		if err != nil {
+			return nil, err
+		}
+	}
 	raw, _ := json.Marshal(intent)
 	if err = store.Atomic(intentPath, raw, 0600); err != nil {
 		return nil, err
 	}
-	needsGrant := username != "" && !exists
+	needsGrant := username != ""
 	if needsGrant && profileErr == nil {
 		tokenSession, err := newServerSession(profile)
 		if err != nil {
@@ -292,7 +334,7 @@ func initCommand(a args) (any, error) {
 		}
 	}
 	if transferred {
-		binding, err = remote.ConnectTransferred(config, root, profileName, intent.ProjectID, nil, func() error { return bootstrap.VerifyTransferredCheckout(root) })
+		binding, err = remote.ConnectTransferred(config, root, profileName, intent.ProjectID, nil, func() error { return bootstrap.VerifyRemoteEntryCheckout(root) })
 	} else {
 		binding, err = remote.Connect(config, root, profileName, intent.ProjectID, nil)
 	}
@@ -302,6 +344,14 @@ func initCommand(a args) (any, error) {
 	result, err := finishRemoteInit(a, config, root, binding, meta, reader, interactive)
 	if err != nil {
 		return nil, core.Error("INIT_LOCAL_SETUP_PENDING", "Server project "+intent.ProjectID+" is saved; retry the same init after resolving "+err.Error())
+	}
+	if !a.has("machine-only") {
+		if err = publishCloneAccess(a, session, root, config, binding, profile, intent.CloneGrant); err != nil {
+			return nil, fmt.Errorf("CLONE_SETUP_PENDING: %w", err)
+		}
+		report := result.(map[string]any)
+		report["clone_ready"] = true
+		report["next_action"] = "commit the project entry, .ael/clone-runtime and .ael/runner-access.json; fresh clones register on first use"
 	}
 	if err = os.Remove(intentPath); err != nil {
 		return nil, err

@@ -110,6 +110,10 @@ func remoteCommand(cmd string, a args, binding remote.Binding) (any, error) {
 		"finding show":       {"finding"},
 		"doctor":             {}, "task list": {"parent", "limit", "offset", "days", "query", "board"},
 		"task show": {"task"}, "task plan": {"task"}, "next": {"task"}, "task tree": {"task"}, "task progress": {"task"},
+		"finding review":        {"finding", "file", "username", "password-stdin"},
+		"task confirm":          {"task", "file", "username", "password-stdin"},
+		"task review":           {"file", "username", "password-stdin"},
+		"runner keepalive":      {"owner-pid", "lease-file", "runner"},
 		"task integrate":        {"task", "context", "impact-artifact", "expected-revision", "operation-id", "idempotency-key"},
 		"task reconcile-import": {"task", "context", "reason", "start", "expected-revision", "operation-id", "idempotency-key"},
 		"task review-failure":   {"task", "file", "expected-revision", "operation-id", "idempotency-key"},
@@ -125,10 +129,10 @@ func remoteCommand(cmd string, a args, binding remote.Binding) (any, error) {
 		"knowledge index": {}, "context publish": {"task", "observation", "share-source", "expected-revision", "operation-id", "idempotency-key"},
 		"context show":         {"context", "task"},
 		"context record-check": {"context", "task", "check", "artifact", "expected-revision", "operation-id", "idempotency-key"},
-		"runner retry":         {"pending", "out"},
+		"runner retry":         {"pending", "out", "owner-pid"},
 		"runner recover":       {"runner", "file"},
 		"runner register":      {"file", "operation-id", "idempotency-key"},
-		"runner claim":         {"runner", "file", "out"},
+		"runner claim":         {"runner", "file", "out", "owner-pid"},
 		"runner heartbeat":     {"runner", "file", "lease-file"}, "runner progress": {"runner", "file", "lease-file"},
 		"runner observe": {"runner", "file", "repository", "lease-file"}, "runner submit": {"runner", "file", "lease-file", "repository", "artifacts-dir", "dry-run", "status", "summary", "method", "exit-code", "inputs", "candidate", "operation-id", "idempotency-key"},
 		"runner interrupt": {"runner", "file", "lease-file"}, "runner show": {"runner"},
@@ -174,6 +178,12 @@ func remoteCommand(cmd string, a args, binding remote.Binding) (any, error) {
 		return nil, err
 	}
 	project, id := a.get("project", "."), a.get("task", "")
+	if cmd == "task confirm" || cmd == "task review" || cmd == "finding review" {
+		return remoteDecision(cmd, a, config, project, binding)
+	}
+	if cmd == "runner keepalive" {
+		return remoteKeepalive(a, config, project, binding)
+	}
 	if strings.HasPrefix(cmd, "session ") {
 		return remoteSessionCommand(cmd, a, config, project, binding)
 	}

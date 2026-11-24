@@ -28,7 +28,7 @@ func prepareRemoteToolCommand(cmd string, a args, raw []string, binding remote.B
 		}
 		runner, _ = request["id"].(string)
 	}
-	if cmd == "artifact upload" && a.get("lease-file", "") != "" {
+	if (cmd == "artifact upload" || cmd == "runner keepalive") && a.get("lease-file", "") != "" {
 		var lease agentUploadLease
 		if err = readAgentRequest(a.get("lease-file", ""), &lease); err != nil {
 			return nil, true, err

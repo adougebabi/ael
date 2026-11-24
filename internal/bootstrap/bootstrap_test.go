@@ -68,7 +68,7 @@ func TestInitInstallsRequestRoutingBeforeWorkflow(t *testing.T) {
 				"review-only", "even when saved to a file",
 				"do not run AEL commands or create tasks", "project iteration, bug fix, or other engineering change",
 				"If the request later becomes an authorized engineering change", "If the user explicitly requests an AEL command or an AEL task",
-				"apply its FEEDBACK routing before starting the regular workflow",
+				"fix and verify directly without starting a session or creating a task", "apply its FEEDBACK routing before starting the regular workflow",
 			},
 		},
 		{

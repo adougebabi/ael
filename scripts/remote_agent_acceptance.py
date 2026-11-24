@@ -233,7 +233,10 @@ try:
         context = client("a", "context", "publish", "--task", task_id, "--observation", observed["id"], "--expected-revision", revision, "--operation-id", key+"-pub", "--idempotency-key", key+"-pub")
         client("a", "context", "show", "--context", context["id"])
         claim_path = out / f"claim-{iteration}.json"
-        claimed = request("claim", {"task_id":task_id, "parent_id":"epic", "context_id":context["id"], "expected_revision":revision}, out=claim_path)
+        keeper_flags = {"owner-pid": os.getpid()} if iteration == 0 else {}
+        claimed = request("claim", {"task_id":task_id, "parent_id":"epic", "context_id":context["id"], "expected_revision":revision}, out=claim_path, **keeper_flags)
+        if keeper_flags:
+            assert claimed["keeper_pid"] > 1
         assert "token" not in claimed["attempt"]
         private = json.loads(claim_path.read_text())
         attempt = private["attempt"]
@@ -472,6 +475,26 @@ try:
     assert "ARTIFACT_REQUIRED" in missing and "runtime:report.json" in missing
     blocked = inline_submit(lease_path, "Specialized report is not available for this check.", status="blocked")
     assert blocked["next"]["task"]["evidence"][-1]["result"] == "blocked" and blocked["next"]["task"]["status"] == "open"
+    # A reviewer can record a chat decision against the same candidate as the
+    # panel and retry it without generating a second human observation.
+    new_task({"id": "chat-review", "title": "Choose drawer behavior", "type": "bug", "goal": "verified", "acceptance": ["behavior accepted"],
+              "checks": [{"id": "choice", "kind": "review", "method": "human", "covers": ["behavior accepted"], "required": True}]})
+    state = client("b", "task", "show", "--task", "chat-review")
+    for step in ("define", "analysis", "execute"):
+        if state["current_step"] == step:
+            lease_path, _, _ = claim_unit("chat-review")
+            inline_submit(lease_path, "Verified the fixture output and prepared the selected drawer behavior.")
+            state = client("b", "task", "show", "--task", "chat-review")
+    decision = out / "chat-decision.json"
+    decision.write_text(json.dumps({"action": "review_result", "id": "chat-review", "unit": "choice", "result": "pass",
+                                    "reason": "Reviewed and accepted the drawer behavior.", "candidate": state["task"]["candidate"],
+                                    "revision": state["definition_revision"], "plan_revision": state["plan_revision"], "request_key": "chat-choice"}))
+    decision.chmod(0o600)
+    review_args = ["task", "review", "--username", "owner", "--password-stdin", "--file", decision]
+    first = client("b", *review_args, input_text="fixture-admin-password\n")
+    assert client("b", *review_args, input_text="fixture-admin-password\n") == first
+    state = client("b", "task", "show", "--task", "chat-review")
+    assert [item["source"] for item in state["task"]["evidence"]] == ["human:owner"]
     # Revoking write capability does not turn an old receipt into new authority.
     api("POST", "/api/v1/projects/shared/members", {"username":"writer", "role":"reader"}, expected=201)
     client("a", "runner", "submit", "--runner", "agent-a", "--file", replay_file, *[part for name,value in submit_flags.items() for part in ("--"+name,str(value))])
