@@ -237,6 +237,20 @@ AEL_TEST_URL=http://127.0.0.1:7332 AEL_TEST_PROJECT=/tmp/ael-p7-workspace AEL_MI
 
 截图与浏览器报告默认在 `/tmp/ael-browser-results`，不进入业务 Git。确定性测试执行器明确标记为 fixture，不代表真实 Codex 或生产发布。
 
+### 前端模拟场景（不启动 AEL 服务）
+
+```sh
+npm --prefix web run dev:mock          # http://localhost:5173/?scenario=failed
+npx --prefix web playwright test -c web/playwright.mock.config.ts   # 场景交互回归
+```
+
+只在 Vite `mock` 模式下启用：拦截 `/api/*`，用 `web/src/mock/fixtures/captured.json`（由 `scripts/web_mock_capture.py` 从真实本机服务录制）驱动正式页面；未覆盖的接口返回 501 `MOCK_UNHANDLED` 并显示在右下角“模拟数据”栏，不会转发到任何真实服务。`?scenario=<id>` 直接进入场景（列表见 `web/src/mock/scenarios.ts`，如 `queued`、`running`、`failed`、`mixed-calls`、`step-passed-open`、`long`、`load-error`、`check-detail`），切换或“恢复初始场景”会清理本页的会话存储。`npm run dev` 与生产构建不包含模拟代码。接口结构变化后重新录制：
+
+```sh
+go build -o /path/to/ael ./cmd/ael
+python3 scripts/web_mock_capture.py --binary /path/to/ael --bundle-binary dist/ael-linux-arm64 --out NEW_EMPTY_DIR
+```
+
 ## 通用工程流程协议 v1（0.1.4）
 
 唯一流程正文在 `assets/skills/ael-work/references/workflow.md`；初始化与 update 安装同一版本到 `.agents/skills/ael-work/references/`。短 AGENTS 入口引导宿主按需读取。`./ael help` 维护准确的可执行命令和结果结构；详细命令契约随 Skill 安装。

@@ -181,12 +181,12 @@ test("统一远程工作台保持责任、证据、导航和项目隔离", async
   await switchProject(page, "Dashboard shared");
   await page.getByRole("link", { name: "Dashboard peer", exact: true }).click();
   await page.getByLabel("更多任务操作").click();
-  await page.getByRole("button", { name: "暂缓", exact: true }).click();
+  await page.getByRole("menuitem", { name: "暂缓", exact: true }).click();
   await page.getByRole("dialog").getByRole("textbox").fill("pause collaboration only");
   await page.getByRole("button", { name: "确认暂缓任务", exact: true }).click();
   await expect.poll(async () => (await (await page.request.get(fixture.url + "/api/v1/projects/shared/tasks/dashboard-peer")).json()).task.paused).toBe(true);
   await page.getByLabel("更多任务操作").click();
-  await page.getByRole("button", { name: "取消任务", exact: true }).click();
+  await page.getByRole("menuitem", { name: "取消任务", exact: true }).click();
   await page.getByRole("dialog").getByRole("textbox").fill("cancel collaboration only");
   await page.getByRole("button", { name: "确认取消任务", exact: true }).click();
   await expect(page.getByText("任务已取消，保留已有结果", { exact: true })).toBeVisible({ timeout: 15000 });

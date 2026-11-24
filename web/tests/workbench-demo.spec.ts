@@ -115,8 +115,8 @@ test("切片2 工作台与详情：父子进度、状态区分、筛选空态与
   const after = await task(page, "child-memory");
   expect(after.status).toBe(before.status);
   expect(JSON.stringify(after.attempts || [])).toBe(JSON.stringify(before.attempts || []));
-  await page.locator(".wb-task-more summary").click();
-  await page.getByRole("button", { name: "暂缓任务" }).click();
+  await page.getByRole("button", { name: "更多任务操作" }).click();
+  await page.getByRole("menuitem", { name: "暂缓任务" }).click();
   let dialog = page.getByRole("dialog");
   await dialog.locator("textarea").first().fill("等待接口约定");
   await dialog.locator("button.primary").last().click();
@@ -130,9 +130,10 @@ test("切片2 工作台与详情：父子进度、状态区分、筛选空态与
 
   page = await open(browser, "observer");
   await go(page, "tasks/child-memory");
-  await page.locator(".wb-task-more summary").click();
-  await expect(page.getByRole("button", { name: "暂缓任务" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "取消任务" })).toHaveCount(0);
+  await page.getByRole("button", { name: "更多任务操作" }).click();
+  await expect(page.getByRole("menu", { name: "更多任务操作" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "暂缓任务" })).toHaveCount(0);
+  await expect(page.getByRole("menuitem", { name: "取消任务" })).toHaveCount(0);
   await go(page, "tasks");
   await expect(page.locator('.wb-task-row[data-task="account-menu"] .tag')).toHaveText("待验收");
   await page.context().close();

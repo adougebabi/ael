@@ -39,20 +39,22 @@ import ActionDialog from "../components/ActionDialog.vue";
 import ManualReviewDialog from "../components/ManualReviewDialog.vue";
 import MarkdownBody from "../components/MarkdownBody.vue";
 import AppIcon from "../components/AppIcon.vue";
+import MenuPopover from "../components/MenuPopover.vue";
 import ScopeSummary from "../components/ScopeSummary.vue";
 import CopyButton from "../components/CopyButton.vue";
 import TaskRelations from "../components/TaskRelations.vue";
 import ReviewPanel from "../components/ReviewPanel.vue";
 import TaskResults from "../components/TaskResults.vue";
 import DeliverySummary from "../components/DeliverySummary.vue";
-import MaterialBody from "../components/MaterialBody.vue";
-import { readFailure } from "../reading";
+import MaterialPreview from "../components/MaterialPreview.vue";
+import TaskDiagnostics from "../components/TaskDiagnostics.vue";
+import { stuckAt } from "../diagnostics";
 import { checkReading, evidenceSource } from "../checks";
 import { submittedImplementation } from "../results";
 import CheckDetail from "../components/CheckDetail.vue";
 import StepBar from "../components/StepBar.vue";
 import QueueOwnership from "../components/QueueOwnership.vue";
-import { candidateMaterials, isImage } from "../materials";
+import { candidateMaterials, isImage, type Material } from "../materials";
 import TaskChildren from "../components/TaskChildren.vue";
 import EpicOverview from "../components/EpicOverview.vue";
 import FindingPanel from "../components/FindingPanel.vue";
@@ -78,18 +80,10 @@ function selectSection(id: string) {
   setQuery({ section: id, check: undefined, finding: undefined });
 }
 const basis = ref<any>(null),
-  events = ref<any[]>([]),
-  eventsLoaded = ref(false),
   basisError = ref(""),
   basisLoading = ref(false);
-const attachments = useObjectReader<any>(),
-  basisReader = useObjectReader<any>(),
+const basisReader = useObjectReader<any>(),
   contextReader = useObjectReader<any>();
-const {
-  data: artifact,
-  error: artifactError,
-  loading: artifactLoading,
-} = attachments;
 const {
   data: reading,
   error: readingError,
@@ -117,7 +111,6 @@ const needsRootReview = computed(() => t.value?.paused && ["review_required", "b
 const manualCheck = ref<string | null>(null);
 const pendingReviewCheck = ref<string | null>(null);
 const workFormOpen = ref(false);
-const taskMenu = ref<HTMLDetailsElement>();
 const availableHumanChecks = computed(() =>
   (t.value?.definition.checks || []).filter((c: any) => n.value?.check_access?.[c.id]?.can_review),
 );
@@ -139,7 +132,7 @@ const claimed = ref<any>(null),
   });
 const advancedResult = ref('{"status":"pass","summary":"","artifacts":[]}'),
   deliveryRef = ref("");
-const pendingSubmission = ref<any>(null), storageWarning = ref(""), technicalOpen = ref(false);
+const pendingSubmission = ref<any>(null), storageWarning = ref("");
 const emptyResult = () => ({ status: "pass", summary: "", artifacts: "", failure_class: "", knowledge_status: "unchanged", knowledge_reason: "", knowledge_artifacts: "", return_to: "" });
 const claimKey = (id: string) => "ael-dashboard-claim-v1:" + id;
 function saveClaim(id: string, attempt: any, draft = result.value, pending = pendingSubmission.value) {
@@ -228,13 +221,6 @@ async function extras() {
       if (id === props.id) basisLoading.value = false;
     }
   }
-  if (section.value === "execution" && !eventsLoaded.value && (technicalOpen.value || rawSection.value === "technical")) {
-    const v = await api("/api/events?" + params({ id }));
-    if (id === props.id) {
-      events.value = v;
-      eventsLoaded.value = true;
-    }
-  }
 }
 async function load(quiet = false) {
   const id = props.id;
@@ -246,6 +232,12 @@ async function load(quiet = false) {
   if (requestedReview && n.value?.task?.definition?.id === id) {
     if (n.value.check_access?.[requestedReview]?.can_review || requestedReview === pendingReviewCheck.value) manualCheck.value = requestedReview;
     setQuery({ review: undefined });
+  }
+  // ?detail=<check> opens that check's detail dialog directly.
+  const requestedDetail = route.value.query.get("detail");
+  if (requestedDetail && n.value?.task?.definition?.id === id) {
+    detailCheck.value = n.value.task.definition.checks?.find((c: any) => c.id === requestedDetail) || null;
+    setQuery({ detail: undefined });
   }
   const legacyTarget = rawSection.value === "basis" && !n.value?.summary?.requires_task_decision
     ? "task-basis"
@@ -267,17 +259,6 @@ async function load(quiet = false) {
     await nextTick();
     requestAnimationFrame(() => document.getElementById("task-check-" + requestedCheck)?.scrollIntoView({ block: "start" }));
   }
-  if (remoteProject.value && artifact.value?.ref) {
-    const ref = artifact.value.ref;
-    try {
-      const metadata = await api("/api/artifact-status?" + params({ task: artifactTask.value, ref }));
-      if (artifact.value?.ref === ref && (metadata.task_id !== artifactTask.value || metadata.status !== "finalized" || metadata.sha256 !== artifact.value.sha256)) {
-        attachments.clear(); artifactError.value = "证据原件已清理或不可用。";
-      }
-    } catch (e) {
-      if (artifact.value?.ref === ref) { attachments.clear(); artifactError.value = String(e); }
-    }
-  }
   try {
     await extras();
   } catch (e) {
@@ -292,9 +273,6 @@ watch(
     basis.value = null;
     basisError.value = "";
     basisLoading.value = false;
-    events.value = [];
-    eventsLoaded.value = false;
-    attachments.clear();
     basisReader.clear();
     contextReader.clear();
     receiptReader.clear();
@@ -304,7 +282,6 @@ watch(
     importedKey = "";
     pendingSubmission.value = null;
     result.value = emptyResult();
-    technicalOpen.value = false;
     manualCheck.value = null;
     pendingReviewCheck.value = null;
     checkOpen.value = {};
@@ -314,18 +291,19 @@ watch(
   },
 );
 watch(section, () => {
-  attachments.clear();
   basisReader.clear();
   load(true);
 });
 watch([rawSection, () => route.value.query.get("check"), () => route.value.query.get("finding")], () => {
-  if (rawSection.value === "technical") technicalOpen.value = true;
   void load(true);
 });
-watch(refreshRevision, () => load());
+// The shell's refresh button re-reads the task; say whether that worked.
+watch(refreshRevision, async () => {
+  await load();
+  toast(error.value ? "刷新失败，页面仍显示 " + (last.value || "之前") + " 读取的内容" : "已重新读取任务状态");
+});
 watch(() => info.value.project, (project) => { pendingReviewCheck.value = pendingReviewForTask(project || "", props.id); });
 onMounted(() => {
-  if (rawSection.value === "technical") technicalOpen.value = true;
   load();
   timer = setInterval(() => {
     if (!busy.value && !op.value) load(true);
@@ -428,7 +406,6 @@ async function copyTaskHandoff() {
   toast(await copyText(text) ? "已复制接续要求；复制不会启动或领取任务" : "浏览器未允许复制，请在任务信息中手动复制");
 }
 async function copyTaskInfo() {
-  if (taskMenu.value?.open) { taskMenu.value.open = false; taskMenu.value.querySelector<HTMLElement>("summary")?.focus(); }
   const project = remoteProject.value ? remoteProject.value.name + "（" + remoteProject.value.id + "）" : info.value.project || "本地项目";
   toast(await copyText(`${t.value?.definition?.title || props.id}\n任务：${props.id}\n项目：${project}\n当前：${headState.value.label}`) ? "已复制任务信息" : "浏览器未允许复制");
 }
@@ -463,16 +440,8 @@ function openTaskReview() {
   workFormOpen.value = false;
   manualCheck.value = pendingReviewCheck.value !== null ? pendingReviewCheck.value : availableHumanChecks.value.length === 1 ? availableHumanChecks.value[0].id : "";
 }
-function openReviewFromMenu() {
- if(taskMenu.value){taskMenu.value.open=false;taskMenu.value.querySelector<HTMLElement>('summary')?.focus();}
- openTaskReview();
-}
 function closeReview() { manualCheck.value = null; pendingReviewCheck.value = pendingReviewForTask(info.value.project || "", props.id); }
 function reviewSaved(_result?: string, message?: string) { if (message) toast(message); pendingReviewCheck.value = pendingReviewForTask(info.value.project || "", props.id); void load(true); }
-function technicalToggle(event: Event) {
-  technicalOpen.value = (event.target as HTMLDetailsElement).open;
-  if (technicalOpen.value && !eventsLoaded.value) void load(true);
-}
 async function showWorkForm() {
   selectSection("overview");
   await nextTick();
@@ -499,50 +468,11 @@ const decisionEvidence = computed(() => {
     item.definition_revision === confirmation.definition_revision && item.plan_revision === confirmation.plan_revision
   );
 });
-const work = computed(() => {
-  const task = t.value;
-  const attempts = new Map<string, any>((task?.attempts || []).map((a: any) => [a.id, a]));
-  const approvals = (task?.approvals || []).map((approval: any, index: number) => ({
-    id: "approval:" + index, title: ({ plan: "方案决定", revision: "修订决定", delivery: "交付决定", restore: "历史恢复核对" } as Record<string, string>)[approval.kind] || "版本决定",
-    status: approval.decision === "approve" ? "已批准" : approval.decision === "adjust" ? "要求调整" : "已否决",
-    actor: approval.actor, summary: approval.reason, at: approval.at, outputs: [], outcome: false,
-  }));
-  const eventNames: Record<string, string> = {
-    work_progress: "交付物进展", paused: "任务暂缓", resumed: "任务恢复", review_resumed: "人工检查恢复",
-    cancelled: "任务取消", definition_revised: "任务定义修订", confirmation: "历史决定记录",
-    human_review_recorded: "记录人工意见", human_review_confirmed: "确认人工意见适用版本",
-    interrupted: "责任中断", remote_interrupted: "远程责任中断", remote_responsibility_recovered: "责任恢复或交接",
-  };
-  const activities = (n.value?.activity || [])
-    .filter((event: any) => event.kind !== "confirmation" || event.historical || !approvals.length)
-    .map((event: any) => {
-      const attempt = attempts.get(event.attempt);
-      const title = event.kind === "submitted"
-        ? event.check ? "检查 · " + event.check : label(attempt?.unit || "工作结果")
-        : eventNames[event.kind] || label(event.kind);
-      return {
-        id: "event:" + event.id, title, status: event.status ? label(event.status) : "",
-        actor: event.actor || attempt?.executor, summary: event.summary || (event.kind === "confirmation" ? "历史决定不代表当前授权。" : event.kind === "cancelled" ? task?.result : ""),
-        at: event.at, outputs: event.artifacts || [], check: event.check, next: event.next,
-        prior: event.kind === "submitted" && attempt && (attempt.candidate_version !== task.candidate || attempt.definition_revision !== task.definition.definition_revision || attempt.plan_revision !== task.plan.revision),
-        historical: event.historical, outcome: ["submitted", "work_progress"].includes(event.kind) && !event.historical && event.evidence_changed !== false && (event.check || ["execute","integrate"].includes(attempt?.unit) || event.kind === "work_progress"),
-      };
-    });
-  if (task?.completed && (task.status === "completed" || (task.status === "cancelled" && !activities.some((item: any) => item.title === "任务取消")))) {
-    activities.push({
-      id: "delivery", title: task.status === "completed" ? (task.historical ? "历史完成记录" : task.delivery?.status === "success" && task.delivery.candidate === task.candidate ? "交付回执" : "完成结果") : task.historical ? "历史任务取消" : "任务取消",
-      status: "", summary: label(task.result), at: task.completed, historical: task.historical,
-      outputs: task.delivery?.artifact ? [task.delivery.artifact] : [], outcome: !task.historical,
-    });
-  }
-  return [...approvals, ...activities].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
-});
-const workOutcomes = computed(() => work.value.filter((item) => item.outcome));
+const deleteBlocked = computed(() => !!t.value?.attempts?.some((a: any) => ["running", "interrupted"].includes(a.status)));
+const stuck = computed(() => stuckAt(n.value));
 const currentResponsibilities = computed(() => (t.value?.attempts || []).filter((attempt: any) =>
   t.value?.status === "open" && attempt.status === "running" && Date.parse(attempt.lease_until) > Date.now()
 ));
-const historyLimit = ref(12);
-watch(() => props.id, () => { historyLimit.value = 12; });
 watch(
   () =>
     JSON.stringify([
@@ -595,11 +525,6 @@ function start(action: string, title: string, extra: any = {}) {
       : "";
   if (action === "edit")
     edit.value = JSON.stringify(t.value.definition, null, 2);
-}
-function startFromMenu(action: string, title: string) {
-  taskMenu.value?.removeAttribute("open");
-  taskMenu.value?.querySelector("summary")?.focus();
-  start(action, title);
 }
 async function reloadConfirmation() {
   const current = op.value;
@@ -777,68 +702,26 @@ async function readReceipt() {
     ref,
   }));
 }
-let artifactTrigger: HTMLElement | null = null;
-const artifactClose = ref<HTMLButtonElement>();
-const artifactTask = ref(props.id);
 const artifactNames = ref<Record<string,string>>({});
 function artifactName(ref:string) { return artifactNames.value[ref] || (remoteProject.value ? '附件原件' : ref.split('/').pop() || ref); }
-
-const drawerRef = ref('');
 const detailCheck = ref<any>(null);
-const drawerMaterial = computed(() => {
-  const ref = drawerRef.value; if (!ref) return null;
+// Evidence and outputs open in the shared MaterialPreview dialog: it owns
+// loading, focus, Esc/backdrop closing and returning focus to the trigger.
+const preview = ref<{ material: Material; relations: any[] } | null>(null);
+function openArtifact(ref: string, sourceTask = props.id) {
   const o = reviewObjects.value.find((x: any) => x.id === ref);
-  return { ref, task: artifactTask.value, name: artifact.value?.filename || o?.filename || artifactName(ref), mime: o?.mime || (artifact.value?.image ? 'image/png' : ''), size: o?.size, sha256: o?.sha256 || artifact.value?.sha256, source: o?.source || artifact.value?.source, candidate: o?.candidate || artifact.value?.candidate, at: o?.created_at, status: o?.status };
-});
-// Other objects with the same recorded content keep their own relations.
-const drawerRelations = computed(() => {
-  const m = drawerMaterial.value; if (!m) return [];
-  const same = reviewObjects.value.filter((o: any) => o.id === m.ref || (m.sha256 && o.sha256 === m.sha256 && o.size === m.size));
-  return same.map((o: any) => ({ ref: o.id, name: o.filename, label: o.source === 'knowledge snapshot' ? '执行输入（规范快照）' : o.attempt_id ? '提交记录 ' + o.attempt_id.slice(0, 12) : o.source || '附件', at: o.created_at, candidate: o.candidate || undefined }));
-});
-const drawerCheckRecord = computed(() => {
-  let v: any; try { v = JSON.parse(artifact.value?.body || ''); } catch { return null; }
-  const record = v && typeof v.check === 'string' ? n.value?.current_checks?.[v.check] : null;
-  if (!record) return null;
-  const refs = new Set([drawerRef.value, ...drawerRelations.value.map((r: any) => r.ref)]);
-  return { check: v.check, result: record.result, at: record.at, candidate: record.candidate, references: (record.artifacts || []).some((r: string) => refs.has(r)) };
-});
-function closeArtifact() {
-  drawerRef.value = '';
-  attachments.clear();
-  artifactTrigger?.focus({ preventScroll: true });
-}
-async function openArtifact(ref: string, sourceTask = props.id) {
-  const id = sourceTask;artifactTask.value=id;drawerRef.value=ref;
-  artifactTrigger = document.activeElement as HTMLElement;
-  const pending = attachments.read(async () => {
-    if (remoteProject.value) return api("/api/artifact?" + params({ task: id, ref }));
-    if (/\.(png|jpe?g)$/i.test(ref)) {
-      const blob = await api(
-        "/api/artifact?" + params({ task: id, ref, format: "image" }),
-        undefined,
-        "blob",
-      );
-      const image = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result));
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-      return { ref, image };
-    } else
-      return {
-        ref,
-        body: await api(
-          "/api/artifact?" + params({ task: id, ref }),
-          undefined,
-          true,
-        ),
-      };
-  });
-  await nextTick();
-  artifactClose.value?.focus({ preventScroll: true });
-  await pending;
+  const attempt = sourceTask === props.id ? t.value?.attempts?.find((a: any) => a.outputs?.includes(ref)) : undefined;
+  const candidate = o?.candidate || attempt?.candidate_version || '';
+  const evidence = sourceTask === props.id && [...(t.value?.evidence || []), ...(t.value?.evidence_history || [])].some((e: any) => e.artifacts?.includes(ref) || e.diagnostic_artifacts?.includes(ref));
+  const material: Material = {
+    id: ref, ref, task: sourceTask, name: o?.filename || (sourceTask === props.id ? artifactName(ref) : ref.split('/').pop() || ref), mime: o?.mime || '',
+    size: o?.size, at: o?.created_at || attempt?.ended, source: o?.source, candidate, sha256: o?.sha256, status: o?.status,
+    state: !candidate ? 'unknown' : candidate === t.value?.candidate ? 'current' : 'historical', role: evidence ? 'evidence' : 'output',
+  };
+  // Other objects with the same recorded content keep their own relations.
+  const relations = o ? reviewObjects.value.filter((x: any) => x.id === ref || (o.sha256 && x.sha256 === o.sha256 && x.size === o.size))
+    .map((x: any) => ({ ref: x.id, name: x.filename, label: x.source === 'knowledge snapshot' ? '执行输入（规范快照）' : x.attempt_id ? '提交记录 ' + x.attempt_id.slice(0, 12) : x.source || '附件', at: x.created_at, candidate: x.candidate || undefined })) : [];
+  preview.value = { material, relations };
 }
 async function readBasis(k: any) {
   const b = t.value.applicable_knowledge?.find((b: any) => b.id === k.id);
@@ -947,7 +830,7 @@ function checkReason(c: any) {
           <div class="wb-detail-actions">
             <button v-if="primaryKind && !n.summary.requires_task_decision" class="primary" :disabled="busy" @click="primaryAction">{{ primaryLabels[primaryKind] }}</button>
             <button v-if="t.status === 'open'" @click="copyTaskHandoff"><AppIcon name="copy" />复制给 Agent</button>
-            <details ref="taskMenu" class="task-more wb-task-more"><summary class="icon-button" aria-label="更多任务操作" title="更多任务操作"><AppIcon name="more" /></summary><div class="wb-popover task-menu" role="menu"><button v-if="showReviewEntry" :disabled="busy" @click="openReviewFromMenu"><AppIcon name="user" />记录人工意见</button><button @click="copyTaskInfo"><AppIcon name="copy" />复制任务信息</button><a :href="taskHref(id, 'technical')"><AppIcon name="terminal" />查看技术详情</a><button v-if="t.status === 'open' && !t.paused && (!remoteProject || ['admin','executor'].includes(remoteProject.role))" :disabled="busy" @click="startFromMenu('pause', '暂缓任务')"><AppIcon name="pause" />暂缓任务</button><button v-if="t.status === 'open' && !remoteProject" :disabled="busy" @click="startFromMenu('edit', '修订任务定义')"><AppIcon name="file" />编辑任务定义</button><a :href="href('/evolution', { q: t.definition.title })"><AppIcon name="evolution" />查看相关演进</a><button v-if="t.status === 'open' && (!remoteProject || ['admin','executor'].includes(remoteProject.role))" :disabled="busy" class="danger" @click="startFromMenu('cancel', '取消任务')"><AppIcon name="x" />取消任务</button></div></details>
+            <MenuPopover label="更多任务操作" menu-id="task-menu" menu-class="task-menu" trigger-class="icon-button" trigger-title="更多任务操作"><template #trigger><AppIcon name="more" /></template><button role="menuitem" v-if="showReviewEntry" :disabled="busy" @click="openTaskReview"><AppIcon name="user" />记录人工意见</button><button role="menuitem" @click="copyTaskInfo"><AppIcon name="copy" />复制任务信息</button><a role="menuitem" :href="taskHref(id, 'technical')"><AppIcon name="terminal" />查看技术详情</a><button role="menuitem" v-if="t.status === 'open' && !t.paused && (!remoteProject || ['admin','executor'].includes(remoteProject.role))" :disabled="busy" @click="start('pause', '暂缓任务')"><AppIcon name="pause" />暂缓任务</button><button role="menuitem" v-if="t.status === 'open' && !remoteProject" :disabled="busy" @click="start('edit', '修订任务定义')"><AppIcon name="file" />编辑任务定义</button><a role="menuitem" :href="href('/evolution', { q: t.definition.title })"><AppIcon name="evolution" />查看相关演进</a><hr /><button role="menuitem" v-if="t.status === 'open' && (!remoteProject || ['admin','executor'].includes(remoteProject.role))" :disabled="busy" class="danger" @click="start('cancel', '取消任务')"><AppIcon name="x" />取消任务</button><button role="menuitem" class="danger" :disabled="busy || deleteBlocked" :title="deleteBlocked ? '有正在执行或未核实停止的执行，暂不能删除' : undefined" @click="start('delete', '永久删除任务')"><AppIcon name="trash" />永久删除任务</button></MenuPopover>
           </div>
         </div>
       </header>
@@ -990,6 +873,8 @@ function checkReason(c: any) {
           </div>
         </section>
           <p v-if="currentBlocker" class="wb-situation-extra">解除条件：{{ currentBlocker.recovery ? blockerText(currentBlocker.recovery, false) : '尚未记录' }}；恢复位置：{{ currentBlocker.resume_at ? label(currentBlocker.resume_at) : '尚未记录' }}</p>
+          <div v-if="stuck && !currentBlocker" class="wb-situation-stuck" role="note"><p><strong>最近失败于 {{ stuck.step }}</strong><template v-if="stuck.summary"> · {{ stuck.summary.length > 200 ? stuck.summary.slice(0, 200) + '…' : stuck.summary }}</template></p><div class="actions"><button v-for="ref in stuck.outputs.slice(0, 1)" :key="ref" class="small" @click="openArtifact(ref)"><AppIcon :name="/\.log$/.test(ref) ? 'terminal' : 'file'" />{{ /\.log$/.test(ref) ? '查看失败日志' : '查看输出 ' + artifactName(ref) }}</button><a class="text-button" :href="href('/tasks/' + encodeURIComponent(id), { section: 'execution', attempt: stuck.id })">在执行诊断中查看</a></div></div>
+          <a v-else-if="stuck" class="text-button wb-situation-link" :href="href('/tasks/' + encodeURIComponent(id), { section: 'execution', attempt: stuck.id })">在执行诊断中查看受阻的执行</a>
           <p v-if="reviewState" class="wb-situation-extra review-note-status">{{ reviewState }}</p>
           <div class="actions"><button v-if="n.summary.needs_history_review" @click="selectSection('execution')">查看相关历史资料</button><button v-if="showReviewEntry && (pendingReviewCheck!==null || reviewState)" :disabled="busy" @click="openTaskReview">{{ reviewState || pendingReviewCheck!==null?'查看人工意见与记录':'记录人工意见' }}</button></div>
           <details v-if="unownedRunning && !remoteProject"><summary>当前接手无法继续？</summary><p>当前标签页没有原责任凭据。若原执行确已停止，可按原规则核实并恢复。</p><button @click="start('resume','恢复无法继续的接手')">核实并恢复接手</button></details>
@@ -1230,8 +1115,14 @@ function checkReason(c: any) {
               {{ busy ? "正在提交…" : pendingSubmission ? "原样重试提交" : "提交并查看下一步" }}
             </button>
           </form>
+          <details class="wb-disclosure">
+            <summary>改用完整步骤结果 JSON 提交</summary>
+            <p class="secondary">当前已领取工作的完整 StepResult；仍经过原协议、授权、候选和修订校验。</p>
+            <label>完整步骤结果 JSON<textarea v-model="advancedResult" rows="8" spellcheck="false"></textarea></label>
+            <button :disabled="busy" @click="submit(true)">{{ busy ? "正在提交…" : "提交完整步骤结果" }}</button>
+          </details>
         </details>
-        <details id="delivery-result" class="source-detail delivery-detail">
+        <details v-if="t.status !== 'open' || t.delivery || t.knowledge_outcome" id="delivery-result" class="source-detail delivery-detail">
           <summary>交付、规范处理与后续工作</summary>
           <p>
             实际结果：{{ label(t.result || "尚未交付") }}；{{
@@ -1326,139 +1217,12 @@ function checkReason(c: any) {
           </article>
         </section>
         <div v-if="remoteProject && section === 'checks'" id="task-findings" tabindex="-1"><FindingPanel :task-id="id" @artifact="openArtifact" /></div>
-        <section v-if="section === 'execution'" class="wb-content-section" aria-labelledby="activity-title">
-          <div class="wb-section-header"><h2 id="activity-title">执行记录</h2><span class="muted">只展示有意义的工作进展</span></div>
-          <p v-if="!workOutcomes.length" class="muted wb-small-note">{{ t.attempts?.length ? '已有协作记录，尚无已提交的工程成果。' : '尚无已提交的工程成果。' }}</p>
-          <div class="wb-timeline">
-            <article v-for="item in work.slice(0, historyLimit)" :key="item.id" class="wb-timeline-event">
-              <span class="wb-event-icon" :class="{ blocked: /受阻|失败|阻塞/.test(item.status + item.title) }"><AppIcon :name="item.id.startsWith('approval:') ? 'branch' : /受阻|失败|阻塞/.test(item.status + item.title) ? 'alert' : item.outcome ? 'tick' : 'clock'" /></span>
-              <div class="wb-event-body">
-                <h3>{{ item.title }}<span v-if="item.status" class="tag" :class="/通过|成功/.test(item.status) ? 'done' : /受阻|失败/.test(item.status) ? 'amber' : ''">{{ item.status }}</span><span v-if="item.historical" class="tag">历史记录</span></h3>
-                <p v-if="item.summary">{{ blockerText(item.summary, false) }}</p>
-                <p v-if="item.next">当时记录的下一步：{{ blockerText(item.next) }}</p>
-                <span class="wb-event-meta">{{ stamp(item.at) }}<template v-if="item.actor"> · {{ item.actor }}</template></span>
-                <div v-if="item.outputs.length || item.check" class="wb-event-actions">
-                  <a v-if="item.check" class="text-button" :href="taskHref(id, 'checks', item.check)">查看对应检查</a>
-                  <button v-for="ref in item.outputs" :key="ref" class="small" @click="openArtifact(ref)"><AppIcon name="file" />{{ item.historical && !remoteProject ? '读取现存引用' : '查看产物' }} {{ artifactName(ref) }}</button>
-                </div>
-              </div>
-            </article>
-            <div v-if="!work.length" class="wb-empty"><h3>暂无执行记录</h3><p>后续具体进展会在这里保留。</p></div>
-          </div>
-          <button v-if="work.length > historyLimit" @click="historyLimit += 12">查看更多执行记录</button>
-          <p v-if="n.activity_truncated" class="muted wb-small-note">显示最近 100 条记录，更早的内容可在技术记录中查询。</p>
-        </section>
+        <TaskDiagnostics v-if="section === 'execution'" :key="'diag-' + id" :snapshot="n" :state-label="headState.label" :names="artifactNames" :remote="!!remoteProject" @artifact="openArtifact" />
         <section v-if="section === 'execution' && currentResponsibilities.length" class="wb-content-section" aria-labelledby="responsibility-title">
           <div class="wb-section-header"><h2 id="responsibility-title">当前责任</h2><span class="muted">执行者上报记录，不代表本机进程实时在线</span></div>
           <div class="wb-subtask-list"><div v-for="item in currentResponsibilities" :key="item.id" class="wb-subtask-item"><span class="avatar gray">A</span><div class="wb-subtask-text"><strong class="wb-resp-name">{{ n.collaboration?.find((c: any) => c.attempt === item.id)?.alias || item.executor }}</strong><p class="wb-subtask-sub">{{ label(item.unit) }}<template v-if="item.last_contact"> · 最近上报 {{ relativeShort(item.last_contact) }}</template></p></div></div></div>
         </section>
         <ImportedHistory v-if="section === 'execution' && remoteProject && t.legacy?.authority_import" :key="props.id + t.legacy.authority_import" :task-id="props.id" :import-id="t.legacy.authority_import" :task="t" @artifact="openArtifact" />
-        <details v-if="section === 'execution'" class="technical source-detail content-section" :open="technicalOpen" @toggle="technicalToggle"><summary>展开责任、候选与原始事件</summary>
-        <section v-if="remoteProject && n.collaboration?.length && section === 'execution'" aria-label="执行者协作状态" class="content-section">
-        <h2>执行者与最近上报</h2>
-        <dl v-for="item in n.collaboration" :key="item.attempt">
-          <dt>{{ item.alias || item.runner }} · {{ item.unit }}</dt><dd>责任记录 {{ item.attempt }} · Agent 会话未声明 · 客户端 {{ item.runner }} · 声明设备 {{ item.machine || '未声明' }} · 检出 {{ item.checkout || '未声明' }} · 工作区 {{ item.workspace || '未声明' }}</dd>
-          <dd>最后联系 {{ stamp(item.last_contact) }} · {{ item.connection_state === 'lost' ? '已失联' : '最近上报' }} · {{ responsibilityNames[item.responsibility_state] || '责任状态待核对' }} · 宿主进程状态未知</dd>
-          <dd v-if="item.stage">上报阶段 {{ item.stage }}</dd><dd>受检候选 {{ item.candidate || '尚未固定' }}</dd>
-        </dl>
-      </section>
-        <details v-if="claimed">
-          <summary>高级协议结果提交</summary>
-          <p>
-            当前已领取工作的完整
-            StepResult；仍经过原协议、授权、候选和修订校验。
-          </p>
-          <label
-            >完整步骤结果 JSON<textarea
-              v-model="advancedResult"
-              rows="8"
-              spellcheck="false"
-            ></textarea></label
-          ><button :disabled="busy" @click="submit(true)">
-            提交完整步骤结果
-          </button>
-        </details>
-        <h2>执行计划</h2><ol class="plan"><li v-for="step in t.plan.steps" :key="step" :class="{ current: step === t.current_step }">{{ label(step) }}<span v-if="step === t.current_step"> · 当前节点</span></li></ol><small>计划修订 {{ t.plan.revision }} · 计划节点不代表完成百分比</small>
-        <dl class="facts">
-          <div
-            v-for="[key, value] in Object.entries({
-              任务: t.definition.id,
-              定义修订: n.definition_revision,
-              计划修订: n.plan_revision,
-              候选: t.candidate,
-              原始下一动作: n.next_action,
-              原始来源: t.definition.source,
-            })"
-          >
-            <dt>{{ key }}</dt>
-            <dd>{{ value || "未记录" }}</dd>
-          </div>
-        </dl>
-        <details>
-          <summary>Attempt、租约与交付记录</summary>
-          <pre>{{
-            JSON.stringify(
-              {
-                current_attempts: currentResponsibilities,
-                historical_attempts: t.attempts?.filter((a: any) => !currentResponsibilities.some((b: any) => a.id === b.id)),
-                blocker: t.blocker,
-                failure_cycles: t.failure_cycles,
-                delivery: t.delivery,
-                history: t.history,
-              },
-              null,
-              2,
-            )
-          }}</pre>
-        </details>
-        <p v-if="technicalOpen && !eventsLoaded && !error" role="status" class="loading">
-          正在读取任务技术记录…
-        </p>
-        <details v-if="eventsLoaded">
-          <summary>原始事件（{{ events.length }} 条）</summary>
-          <article v-for="e in events" class="record-row">
-            <strong>{{ e.kind }}</strong> · {{ stamp(e.at) }}
-            <pre>{{ JSON.stringify(e.body, null, 2) }}</pre>
-          </article>
-        </details>
-        <details>
-          <summary>完整定义与规范指纹</summary>
-          <pre>{{
-            JSON.stringify(
-              {
-                definition: t.definition,
-                basis: t.applicable_knowledge,
-                policy: t.policy_hash,
-              },
-              null,
-              2,
-            )
-          }}</pre>
-        </details>
-        <CopyButton label="复制诊断摘要" :value="JSON.stringify({ task: t.definition.id, current_step: t.current_step, next_action: n.next_action, definition_revision: n.definition_revision, plan_revision: n.plan_revision, candidate: t.candidate, event_count: events.length }, null, 2)" />
-        <div class="actions">
-          <button
-            :disabled="busy || t.status !== 'open'"
-            @click="start('edit', '修订任务定义')"
-          >
-            编辑任务定义</button
-          ><button
-            class="danger-text"
-            :disabled="
-              busy ||
-              t.attempts?.some((a: any) =>
-                ['running', 'interrupted'].includes(a.status),
-              )
-            "
-            @click="start('delete', '永久删除任务')"
-          >
-            永久删除任务
-          </button>
-        </div>
-        <p class="secondary">
-          活动或未核实停止的执行会阻止删除；入向依赖与引用仍由内核保护。
-        </p>
-      </details>
       </section>
       </div>
       </div>
@@ -1488,14 +1252,7 @@ function checkReason(c: any) {
       </div>
     </template>
     <CheckDetail v-if="detailCheck && n" :snapshot="n" :check="detailCheck" :objects="reviewObjects" @close="detailCheck = null" />
-    <aside v-if="artifact || artifactError || artifactLoading" class="artifact-panel" aria-label="证据原件" @keydown.esc.stop="closeArtifact">
-      <div class="section-heading">
-        <h2>证据原件</h2>
-        <button ref="artifactClose" @click="closeArtifact">关闭证据</button>
-      </div>
-      <MaterialBody v-if="drawerMaterial" :material="drawerMaterial" :value="artifact" :loading="artifactLoading" :failure="artifactError ? readFailure(artifactError) : ''" :failure-detail="artifactError && readFailure(artifactError) === 'error' ? artifactError : ''" :pending="['open', 'uploading', 'pending'].includes(drawerMaterial.status || '')" :check-record="drawerCheckRecord" :current-candidate="t?.candidate" :relations="drawerRelations" :task-title="artifactTask === id ? t?.definition?.title : artifactTask" image-alt="任务验收证据原件" @retry="attachments.retry" />
-      <a v-if="artifact?.download" class="button" :href="artifact.download" download>下载原件</a>
-    </aside>
+    <MaterialPreview v-if="preview" :material="preview.material" :relations="preview.relations" :checks="n?.current_checks" :current-candidate="t?.candidate" :task-title="preview.material.task === id ? t?.definition?.title : preview.material.task" @close="preview = null" />
     <ActionDialog
       v-if="op"
       :title="op.title"

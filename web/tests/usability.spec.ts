@@ -577,8 +577,8 @@ test("A12a 创建、接手、暂缓、恢复、检查、取消与删除均写入
     page.getByRole("heading", { level: 1, name: title }),
   ).toBeVisible();
   await expect(page.locator("h1 img")).toHaveCount(0);
-  await page.locator(".task-more > summary").click();
-  await page.getByRole("button", { name: "暂缓", exact: true }).click();
+  await page.getByRole("button", { name: "更多任务操作" }).click();
+  await page.getByRole("menuitem", { name: "暂缓", exact: true }).click();
   await confirmDialog(page, "隔离浏览器暂停验证");
   await expect(page.locator(".conclusion")).toContainText("隔离浏览器暂停验证");
   await page.locator(".result-banner").getByRole("button", { name: "恢复任务", exact: true }).click();
@@ -633,8 +633,8 @@ test("A12a 创建、接手、暂缓、恢复、检查、取消与删除均写入
     acceptance: ["保留取消理由"],
   });
   await goto(page, "single", "/tasks/" + id);
-  await page.locator(".task-more > summary").click();
-  await page.getByRole("button", { name: "取消任务", exact: true }).click();
+  await page.getByRole("button", { name: "更多任务操作" }).click();
+  await page.getByRole("menuitem", { name: "取消任务", exact: true }).click();
   await confirmDialog(page, "浏览器隔离取消记录");
   await expect(page.locator(".conclusion")).toContainText("浏览器隔离取消记录");
   await page.getByRole("button", { name: "执行记录", exact: true }).click();
@@ -828,14 +828,14 @@ test("A13 深路由刷新、键盘焦点和多尺寸无全页溢出", async ({
   context,
 }) => {
   await goto(page, "many", "/tasks/failed-check");
-  await page.locator(".task-more > summary").click();
-  await page.getByRole("button", { name: "暂缓", exact: true }).click();
+  await page.getByRole("button", { name: "更多任务操作" }).click();
+  await page.getByRole("menuitem", { name: "暂缓", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
   await expect(
-    page.locator(".task-more > summary"),
+    page.getByRole("button", { name: "更多任务操作" }),
   ).toBeFocused();
   for (const viewport of [
     { width: 1480, height: 1000 },
@@ -1598,7 +1598,7 @@ test("A28 详情长范围可完整展开，概览可阅读实际提供版本", a
   await goal.getByText("查看完整范围（9 项）", { exact: true }).click();
   await expect(goal.locator(".scope-details li")).toHaveCount(9);
   await expect(goal.locator(".scope-details li").last()).toHaveText(scope[8]);
-  await expect(page.locator(".task-more > summary")).toBeVisible();
+  await expect(page.getByRole("button", { name: "更多任务操作" })).toBeVisible();
   await goto(page, "many", "/tasks/verified-change");
   const basis = page.locator("#task-basis");
   await expect(basis.locator(".basis-title-button")).toHaveCount(2);

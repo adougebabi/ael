@@ -220,8 +220,8 @@ test("无候选的任务级意见不用选附件或比较图片", async ({ page 
   page.on("request", request => {
     if (request.url().includes("dashboard/review-evidence")) listedEvidence = true;
   });
-  await page.locator(".task-more > summary").click();
-  await page.getByRole("button", { name: "记录人工意见", exact: true }).click();
+  await page.getByRole("button", { name: "更多任务操作" }).click();
+  await page.getByRole("menuitem", { name: "记录人工意见", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("尚未生成验收候选");
   await expect(dialog.getByText("对照基准与实际截图（可选）")).toHaveCount(0);
