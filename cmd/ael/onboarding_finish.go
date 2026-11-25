@@ -45,27 +45,38 @@ func finishRemoteInit(a args, config, root string, binding remote.Binding, meta 
 	if err != nil || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))) {
 		return nil, core.Error("INIT_SHARED_INSTALL_REQUIRED", "Remote CLI installation must be outside the project checkout")
 	}
-	options := bootstrap.UpdateOptions{Prefix: prefix, From: a.get("from", a.get("bundle-dir", "")), DryRun: true}
-	preview, err := bootstrap.Upgrade(options)
-	if err != nil {
-		return nil, err
-	}
-	if preview.Available.Version != bootstrap.Version || preview.Available.Build != bootstrap.Build {
-		return nil, core.Error("INIT_CLI_SOURCE_MISMATCH", "run init from the same client package selected for machine installation")
-	}
-	options.DryRun = false
-	options.TargetVersion = bootstrap.Version
-	installation, err := bootstrap.Upgrade(options)
-	if err != nil {
-		return nil, err
+	var installation bootstrap.UpdateReport
+	if a.has("project-only") {
+		if err = bootstrap.InstallProjectOnlyRuntime(root, a.get("from", a.get("bundle-dir", ""))); err != nil {
+			return nil, err
+		}
+		installation.Available.Version = bootstrap.Version
+	} else {
+		options := bootstrap.UpdateOptions{Prefix: prefix, From: a.get("from", a.get("bundle-dir", "")), DryRun: true}
+		preview, err := bootstrap.Upgrade(options)
+		if err != nil {
+			return nil, err
+		}
+		if preview.Available.Version != bootstrap.Version || preview.Available.Build != bootstrap.Build {
+			return nil, core.Error("INIT_CLI_SOURCE_MISMATCH", "run init from the same client package selected for machine installation")
+		}
+		options.DryRun = false
+		options.TargetVersion = bootstrap.Version
+		installation, err = bootstrap.Upgrade(options)
+		if err != nil {
+			return nil, err
+		}
 	}
 	entry, err := installRemoteEntry(root, false, false)
 	if err != nil {
 		return nil, err
 	}
-	mapping, err := bootstrap.BindRemoteClient(root, installation.Target, config)
-	if err != nil {
-		return nil, err
+	mapping := ""
+	if installation.Target != "" {
+		mapping, err = bootstrap.BindRemoteClient(root, installation.Target, config)
+		if err != nil {
+			return nil, err
+		}
 	}
 	policy, err := initUpdatePolicy(a, prefix, reader, interactive)
 	if err != nil {
@@ -131,6 +142,9 @@ func finishRemoteInit(a args, config, root string, binding remote.Binding, meta 
 	}
 	data, _ := json.Marshal(configuration)
 	if err = store.Atomic(cachePath, data, 0600); err != nil {
+		return nil, err
+	}
+	if err = os.MkdirAll(filepath.Join(prefix, "share/ael"), 0700); err != nil {
 		return nil, err
 	}
 	machineID, err := initMachineID(prefix)

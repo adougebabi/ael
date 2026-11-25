@@ -16,6 +16,8 @@ from pathlib import Path
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--source", required=True, type=Path)
 parser.add_argument("--bundle", required=True, type=Path)
+parser.add_argument("--project-only", action="store_true")
+parser.add_argument("--upgrade-bundle", type=Path, help="exercise machine upgrade and portable project update before cloning")
 args = parser.parse_args()
 source, bundle = args.source.resolve(), args.bundle.resolve()
 arch = {"arm64": "arm64", "aarch64": "arm64", "x86_64": "amd64", "amd64": "amd64"}[platform.machine().lower()]
@@ -50,7 +52,8 @@ with tempfile.TemporaryDirectory(prefix="ael-clone-runner-") as tmp:
         raise RuntimeError("fixture source already has a live clone grant; use a pre-initialization revision")
     data = tmp / "server"
     run([cli, "server", "bootstrap", "--data-dir", data, "--username", "owner", "--password-stdin"], secret=password+"\n")
-    with subprocess.Popen([cli, "server", "start", "--data-dir", data, "--addr", "127.0.0.1:0", "--json"],
+    server_cli = args.upgrade_bundle.resolve() / cli.name if args.upgrade_bundle else cli
+    with subprocess.Popen([server_cli, "server", "start", "--data-dir", data, "--addr", "127.0.0.1:0", "--json"],
                           env=environment("server"), cwd=tmp, stdout=subprocess.PIPE, text=True) as server:
         try:
             base = json.loads(server.stdout.readline())["url"]
@@ -68,10 +71,44 @@ with tempfile.TemporaryDirectory(prefix="ael-clone-runner-") as tmp:
                 choice = ["--create", "Clone verification"]
             init = [cli, "init", "--server", base, *choice, "--username", "owner",
                     "--password-stdin", "--from", bundle, "--host", "none", "--update-policy", "notify", "--json"]
+            if args.project_only:
+                init.append("--project-only")
             result = json.loads(run(init, cwd=seed, secret=password+"\n"))
             assert result["clone_ready"]
             descriptor = json.loads((seed / ".ael/runner-access.json").read_text())
             assert descriptor["url"] == base
+            target_version = result["cli_version"]
+            if args.upgrade_bundle:
+                grant = (seed / ".ael/runner-access.json").read_bytes()
+                runtime_lock = seed / ".ael/clone-runtime/toolchain.lock"
+                previous_lock = runtime_lock.read_bytes()
+                previous_version = result["cli_version"]
+                if args.project_only:
+                    assert not result["cli_installation"]
+                    assert json.loads(run(["./ael", "init", "--json"], seed))["clone_ready"]
+                    check = subprocess.run(["./ael","doctor","--json"], cwd=seed, env=environment("setup"), capture_output=True, text=True, check=True)
+                    assert json.loads(check.stdout)["online"] and "upgrade" in check.stderr, check.stderr
+                    pinned = json.loads(run(["./ael", "session", "start", "--session", "before-upgrade", "--json"], seed))
+                    assert Path(pinned["session"]["cli"]["executable"]).is_relative_to(seed / ".ael/clone-runtime")
+                    assert not (Path(environment("setup")["HOME"]) / ".local/bin/ael").exists()
+                upgrade = json.loads(run(["./ael", "upgrade", "--from", args.upgrade_bundle.resolve(), "--json"], seed))
+                target_version = upgrade["available"]["version"]
+                if args.project_only:
+                    assert json.loads(run(["./ael", "version", "--json"], seed))["version"] == target_version
+                    assert json.loads(run(["./ael", "version", "--session", "before-upgrade", "--json"], seed))["version"] == previous_version
+                    assert json.loads((seed / ".ael/remote-assets.json").read_text())["version"] == previous_version
+                    update = ["./ael", "update"]
+                else:
+                    assert runtime_lock.read_bytes() == previous_lock
+                    update = [upgrade["target"], "update", "--project", seed]
+                lock_before_preview = runtime_lock.read_bytes()
+                preview = json.loads(run([*update, "--dry-run", "--json"], seed))
+                assert preview["status"] == "preview" and runtime_lock.read_bytes() == lock_before_preview
+                applied = json.loads(run([*update, "--json"], seed))
+                assert applied["status"] == "updated"
+                assert runtime_lock.read_text().splitlines()[0] == "version " + target_version
+                assert (seed / ".ael/runner-access.json").read_bytes() == grant
+                assert json.loads(run(["./ael", "update", "--json"], seed))["status"] == "up_to_date"
             git("add", "-A", cwd=seed)
             git("-c", "user.name=AEL Fixture", "-c", "user.email=ael@localhost", "commit", "-qm", "Initialize clone runners", cwd=seed)
 
@@ -80,6 +117,7 @@ with tempfile.TemporaryDirectory(prefix="ael-clone-runner-") as tmp:
                 git("clone", "--quiet", "--no-local", str(seed), str(path))
                 def command(*argv):
                     return json.loads(run(["./ael", *argv, "--json"], path, environment(name)))
+                assert command("version")["version"] == target_version
                 with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
                     doctors = list(pool.map(lambda _: command("doctor"), range(2)))
                 runner = doctors[0]["runner"]
@@ -99,6 +137,8 @@ with tempfile.TemporaryDirectory(prefix="ael-clone-runner-") as tmp:
             assert replacement["id"] not in (first["id"], second["id"])
             session = command("session", "start", "--session", "acceptance")
             assert session["session"]["runner"] == first["id"]
+            assert Path(session["session"]["cli"]["executable"]).is_relative_to(tmp / "runner-a/.ael/clone-runtime")
+            assert not (Path(environment("runner-a")["HOME"]) / ".local/share/ael/clients").exists()
             task = "clone-verification"
             definition = tmp / "definition.json"
             definition.write_text(json.dumps({"id":task,"title":"Inspect the project README from a fresh checkout","scope":["README.md"],"type":"bug","goal":"verified","acceptance":["works"]}))

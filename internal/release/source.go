@@ -3,6 +3,7 @@ package release
 import (
 	"ael/internal/core"
 	"ael/internal/store"
+	"ael/packaging"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -75,12 +76,20 @@ func (source Source) Fingerprint() (string, error) {
 	return store.Hash(raw), nil
 }
 
+func OfficialSource() (Source, error) { return decodeSource(packaging.OfficialClientSource, "") }
+
 func ReadSource(path string) (Source, error) {
 	var source Source
 	raw, err := readLocal(path, 64<<10)
 	if err != nil {
 		return source, err
 	}
+	return decodeSource(raw, path)
+}
+
+func decodeSource(raw []byte, path string) (Source, error) {
+	var source Source
+	var err error
 	if len(raw) > 64<<10 {
 		return source, core.Error("RELEASE_SOURCE_INVALID", "source exceeds 64 KiB")
 	}

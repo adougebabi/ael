@@ -7,7 +7,7 @@ import (
 )
 
 func remoteEntryCommand(a args) (any, error) {
-	allowed := map[string]bool{"project": true, "dry-run": true, "migrate-entry": true, "json": true, "verbose": true, "no-color": true}
+	allowed := map[string]bool{"prefix": true, "project": true, "dry-run": true, "migrate-entry": true, "json": true, "verbose": true, "no-color": true}
 	for flag, value := range a.Flags {
 		if !allowed[flag] {
 			return nil, core.Error("UNKNOWN_FLAG", flag)
@@ -20,7 +20,12 @@ func remoteEntryCommand(a args) (any, error) {
 			return nil, core.Error("FLAG_VALUE_REQUIRED", flag)
 		}
 	}
-	return installRemoteEntry(a.get("project", "."), a.has("dry-run"), a.has("migrate-entry"))
+	root := a.get("project", ".")
+	_, _, hash, err := remote.ReadBindingSnapshot(root)
+	if err != nil {
+		return nil, err
+	}
+	return bootstrap.UpdateRemoteProject(root, a.has("dry-run"), a.has("migrate-entry"), hash, a.get("prefix", ""))
 }
 
 func installRemoteEntry(root string, dry, migrate bool) (bootstrap.UpdateReport, error) {

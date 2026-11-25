@@ -43,6 +43,9 @@ func CheckClientProtocols(binding Binding) error {
 	return nil
 }
 
+// ObserveMetadata reports successful metadata reads to a CLI without another HTTP request.
+var ObserveMetadata func(ServerMetadata)
+
 func Metadata(client *http.Client, profile Profile) (ServerMetadata, error) {
 	return metadata(client, profile, false)
 }
@@ -90,6 +93,9 @@ func metadata(client *http.Client, profile Profile, updates bool) (ServerMetadat
 		if maximum, ok := meta.ProtocolRange[kind+"_max"]; ok && maximum < 1 {
 			return meta, errors.New("REMOTE_PROTOCOL_UNSUPPORTED: Server protocol range excludes this client")
 		}
+	}
+	if ObserveMetadata != nil {
+		ObserveMetadata(meta)
 	}
 	return meta, nil
 }

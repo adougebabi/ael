@@ -55,8 +55,10 @@ func publishCloneAccess(a args, session *serverSession, root, config string, b r
 	if err != nil {
 		return err
 	}
-	if err = bootstrap.InstallCloneRuntime(root, prefix); err != nil {
-		return err
+	if !a.has("project-only") {
+		if err = bootstrap.InstallCloneRuntime(root, prefix); err != nil {
+			return err
+		}
 	}
 	previous, err := readCloneAccess(root)
 	if err == nil {

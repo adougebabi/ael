@@ -190,6 +190,15 @@ func remoteEntryTargets(root string, owned map[string]string) (map[string][]byte
 // Its journal gives interrupted file updates the same hash/conflict semantics as
 // the existing Local outbox, while Remote mode never opens a Local task database.
 func UpdateRemoteEntry(root string, dry, migrate bool, expectedBindingHash string) (UpdateReport, error) {
+	return updateRemoteEntry(root, dry, migrate, expectedBindingHash, nil)
+}
+
+// UpdateRemoteProject also refreshes a portable checkout from the machine installation.
+func UpdateRemoteProject(root string, dry, migrate bool, hash, prefix string) (UpdateReport, error) {
+	return updateRemoteEntry(root, dry, migrate, hash, &prefix)
+}
+
+func updateRemoteEntry(root string, dry, migrate bool, expectedBindingHash string, prefix *string) (UpdateReport, error) {
 	result := UpdateReport{Operation: "update", Files: []string{}, Warnings: []string{"Remote entry update is for subsequent sessions; active Agents keep their acquired instructions", "existing offline binaries and locks remain in place"}, RestartRequired: true}
 	root, err := Canonical(root)
 	if err != nil {
@@ -267,6 +276,63 @@ func UpdateRemoteEntry(root string, dry, migrate bool, expectedBindingHash strin
 	if err != nil {
 		return result, err
 	}
+	if prior.Version != "" {
+		if err := rejectDowngrade(prior.Version, Version); err != nil {
+			return result, err
+		}
+	}
+	if version, err := CloneRuntimeVersion(root); err == nil {
+		if err = rejectDowngrade(version, Version); err != nil {
+			return result, err
+		}
+	} else if !os.IsNotExist(err) {
+		return result, err
+	}
+	var runtimeBundle *Bundle
+	if prefix != nil && !RunningProjectRuntime(root) {
+		_, err := readEntryBytes(root, ".ael/runner-access.json", 2<<20)
+		if err != nil && !os.IsNotExist(err) {
+			return result, err
+		}
+		if err == nil {
+			previous, err := CloneRuntimeVersion(root)
+			if err != nil {
+				return result, err
+			}
+			location, err := InstallationPrefix(*prefix)
+			if err != nil {
+				return result, err
+			}
+			b, err := installedCloneBundle(location)
+			if err != nil {
+				return result, err
+			}
+			if err = checkCloneReplacement(root, previous, b); err != nil {
+				return result, err
+			}
+			runtimeBundle = &b
+			notice, err := os.ReadFile(filepath.Join(b.Root, b.Notice))
+			if err != nil {
+				return result, err
+			}
+			if store.Hash(notice) != b.NoticeSHA256 {
+				return result, core.Error("CLONE_BUNDLE_MISMATCH", "notice checksum changed")
+			}
+			targets[".ael/clone-runtime/toolchain.lock"] = projectLock(b)
+			targets[".ael/clone-runtime/THIRD_PARTY_NOTICES.txt"] = notice
+			// These generated files predate entry-manifest ownership. The old
+			// lock remains the selector until the new binaries have been verified.
+			for _, name := range []string{".ael/clone-runtime/toolchain.lock", ".ael/clone-runtime/THIRD_PARTY_NOTICES.txt"} {
+				raw, err := readEntryBytes(root, name, 2<<20)
+				if err != nil && !os.IsNotExist(err) {
+					return result, err
+				}
+				if err == nil {
+					owned[name] = store.Hash(raw)
+				}
+			}
+		}
+	}
 	intent := remoteEntryIntent{Version: Version, BindingHash: bindingHash, Before: map[string]string{}, Targets: targets}
 	if recovering {
 		if len(pending.Targets) != len(targets) {
@@ -309,6 +375,14 @@ func UpdateRemoteEntry(root string, dry, migrate bool, expectedBindingHash strin
 	if len(previewIntent) > remoteEntryJournalLimit {
 		return result, core.Error("REMOTE_ENTRY_INVALID", "entry update exceeds its readable journal limit")
 	}
+	if runtimeBundle != nil {
+		added, err := copyCloneBinaries(root, *runtimeBundle, dry)
+		if err != nil {
+			return result, err
+		}
+		changed = changed || len(added) > 0
+		result.Files = append(result.Files, added...)
+	}
 	if dry {
 		result.Status = "preview"
 		return result, nil
@@ -345,7 +419,11 @@ func UpdateRemoteEntry(root string, dry, migrate bool, expectedBindingHash strin
 		}
 	}
 	// Commit the owned manifest after every visible asset has reached its target.
-	paths := append([]string{}, result.Files...)
+	paths := make([]string, 0, len(intent.Targets))
+	for path := range intent.Targets {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
 	sort.SliceStable(paths, func(i, j int) bool {
 		return paths[i] != ".ael/remote-assets.json" && paths[j] == ".ael/remote-assets.json"
 	})

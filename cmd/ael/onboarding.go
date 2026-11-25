@@ -62,7 +62,7 @@ func initCommand(a args) (any, error) {
 	if !remoteRequested {
 		return bootstrap.InitProject(root, a.has("dry-run"), false, a.get("bundle-dir", ""))
 	}
-	allowed := []string{"machine-only", "repository", "project", "server", "profile", "remote-project", "create", "username", "password-stdin", "token-stdin", "config-dir", "ca-file", "prefix", "from", "bundle-dir", "host", "update-policy", "pin-version", "release-source", "dry-run", "json", "verbose", "no-color"}
+	allowed := []string{"project-only", "machine-only", "repository", "project", "server", "profile", "remote-project", "create", "username", "password-stdin", "token-stdin", "config-dir", "ca-file", "prefix", "from", "bundle-dir", "host", "update-policy", "pin-version", "release-source", "dry-run", "json", "verbose", "no-color"}
 	for flag, value := range a.Flags {
 		if !slices.Contains(allowed, flag) {
 			return nil, core.Error("UNKNOWN_FLAG", flag)
@@ -72,6 +72,28 @@ func initCommand(a args) (any, error) {
 		}
 		if !booleanFlag(flag) && value == "true" {
 			return nil, core.Error("FLAG_VALUE_REQUIRED", flag)
+		}
+	}
+	if a.has("project-only") && a.has("machine-only") {
+		return nil, core.Error("INIT_SCOPE_CONFLICT", "choose one installation scope")
+	}
+	if exists && len(a.Words) == 1 && !a.has("dry-run") {
+		reuse := true
+		for key := range a.Flags {
+			switch key {
+			case "project", "config-dir", "json", "verbose", "no-color":
+			default:
+				reuse = false
+			}
+		}
+		if reuse {
+			runner, err := ensureCloneRunner(a, root, &binding)
+			if err != nil {
+				return nil, err
+			}
+			if runner.Registered {
+				return map[string]any{"status": "connected", "clone_ready": true, "project_id": binding.ProjectID, "runner": runner}, nil
+			}
 		}
 	}
 	if a.has("dry-run") {

@@ -210,7 +210,7 @@ func Upgrade(o UpdateOptions) (UpdateReport, error) {
 }
 
 func upgrade(o UpdateOptions) (UpdateReport, error) {
-	r := UpdateReport{Operation: "upgrade", Files: []string{}, Warnings: []string{"local installation only; run update in each initialized project to update its pinned toolchain", "release source is local; no online update endpoint is configured"}}
+	r := UpdateReport{NextAction: "run the upgraded CLI with update --project PATH", Operation: "upgrade", Files: []string{}, Warnings: []string{"local installation only; run update in each initialized project to update its pinned toolchain", "release source is local; no online update endpoint is configured"}}
 	if os.Getenv("AEL_MANAGED_CHILD") == "1" {
 		return r, core.Error("MANAGED_CHILD_FORBIDDEN", "a managed task child cannot replace its host tool")
 	}

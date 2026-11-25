@@ -84,11 +84,31 @@ func checkTaskTools(a args, config, project string, binding remote.Binding) (too
 	if err != nil {
 		return result, err
 	}
-	result.Tool, result.Managed, err = currentClientTool(result.Prefix)
+	policy, err := readClientPolicy(result.Prefix)
 	if err != nil {
 		return result, err
 	}
-	policy, err := readClientPolicy(result.Prefix)
+	_, installationErr := os.Stat(filepath.Join(result.Prefix, "share/ael/installation.json"))
+	if bootstrap.RunningProjectRuntime(project) && (policy.Mode == "notify" || os.IsNotExist(installationErr)) {
+		if policy.Mode == "pinned" && policy.Version != bootstrap.Version {
+			return result, core.Error("CLIENT_VERSION_UNAVAILABLE", "project runtime does not match the pinned client version")
+		}
+		exe, err := os.Executable()
+		if err != nil {
+			return result, err
+		}
+		hash, err := store.HashFile(exe)
+		if err != nil {
+			return result, err
+		}
+		if filepath.Base(filepath.Dir(exe)) != hash {
+			return result, core.Error("CLONE_RUNTIME_MISMATCH", "running project executable differs from its content address")
+		}
+		result.Tool = bootstrap.ClientTool{Executable: exe, SHA256: hash, Version: bootstrap.BinaryVersion{Version: bootstrap.Version, Build: build, APIProtocol: 1, SkillProtocol: 1, OutputProtocol: 1}}
+		result.Status = "project_runtime"
+		return finishToolCompatibility(result)
+	}
+	result.Tool, result.Managed, err = currentClientTool(result.Prefix)
 	if err != nil {
 		return result, err
 	}

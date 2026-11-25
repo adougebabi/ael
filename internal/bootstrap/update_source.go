@@ -39,6 +39,7 @@ type BinaryVersion struct {
 	SkillProtocol  int    `json:"skill_protocol,omitempty"`
 }
 type UpdateReport struct {
+	NextAction        string            `json:"next_action,omitempty"`
 	ContentIntegrity  string            `json:"content_integrity,omitempty"`
 	PublisherIdentity string            `json:"publisher_identity,omitempty"`
 	Operation         string            `json:"operation"`

@@ -4,6 +4,7 @@ import (
 	"ael/internal/bootstrap"
 	"ael/internal/core"
 	"ael/internal/release"
+	"ael/internal/remote"
 	"context"
 	"os"
 	"path/filepath"
@@ -57,17 +58,29 @@ func machineUpgradeCommand(a args) (any, error) {
 			a.Flags["source"] = policy.Source
 		}
 	}
+	useOfficial := false
 	if a.get("source", "") == "" {
-		return bootstrap.Upgrade(options)
+		_, bound, err := remote.ReadBinding(".")
+		useOfficial = from == "" && err == nil && bound
+		if !useOfficial {
+			return bootstrap.Upgrade(options)
+		}
 	}
 	if from != "" {
 		return nil, core.Error("CONFLICTING_SOURCE", "choose --source or --from")
 	}
-	source, err := release.ReadSource(a.get("source", ""))
+	var source release.Source
+	var err error
+	if useOfficial {
+		source, err = release.OfficialSource()
+	} else {
+		source, err = release.ReadSource(a.get("source", ""))
+	}
 	if err != nil {
 		return nil, err
 	}
-	selected, err := source.CheckVersion(context.Background(), "client", runtime.GOOS+"-"+runtime.GOARCH, a.get("channel", "stable"), options.TargetVersion)
+	channel := a.get("channel", "stable")
+	selected, err := source.CheckVersion(context.Background(), "client", runtime.GOOS+"-"+runtime.GOARCH, channel, options.TargetVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -91,6 +104,27 @@ func machineUpgradeCommand(a args) (any, error) {
 		return nil, err
 	}
 	defer os.RemoveAll(stage)
+	if _, e := readCloneAccess("."); e == nil {
+		// The selected platform above may differ from the first one used by
+		// the portable packager. Always stage the exact same signed release.
+		first, err := source.CheckVersion(context.Background(), "client", "darwin-arm64", channel, selected.Manifest.Version)
+		if err != nil {
+			return nil, err
+		}
+		if !first.Available || first.Manifest.Commit != selected.Manifest.Commit || first.Manifest.Build != selected.Manifest.Build {
+			return nil, core.Error("RELEASE_SOURCE_CHANGED", "release changed during selection")
+		}
+		if err = stageSignedDistribution(context.Background(), source, first, channel, stage); err != nil {
+			return nil, err
+		}
+		options.From, options.TargetVersion = stage, selected.Manifest.Version
+		result, err := bootstrap.Upgrade(options)
+		result.Source = source.ReleasesURL
+		if err == nil {
+			result.PublisherIdentity = "verified"
+		}
+		return result, err
+	}
 	archive := filepath.Join(stage, selected.Asset.Path)
 	if err = source.Download(context.Background(), selected, archive); err != nil {
 		return nil, err

@@ -42,9 +42,11 @@ if [ -e "$project_root/.ael/remote.json" ] || [ -L "$project_root/.ael/remote.js
    *) command_name=$argument; break ;;
   esac
  done
- if [ "$command_name" = upgrade ] || [ "$command_name" = client ]; then
-  [ -n "$cli" ] && [ -x "$cli" ] && ! [ "$cli" -ef "$project_root/ael" ] || { echo 'AEL_MACHINE_CLI_REQUIRED: select the shared machine executable' >&2; exit 1; }
-  exec "$cli" "$@"
+ portable=false
+ [ ! -f "$project_root/.ael/runner-access.json" ] || portable=true
+ if { [ "$command_name" = upgrade ] && [ "$portable" = false ]; } || [ "$command_name" = client ]; then
+  if [ -n "$cli" ] && [ -x "$cli" ] && ! [ "$cli" -ef "$project_root/ael" ]; then exec "$cli" "$@"; fi
+  [ -f "$project_root/.ael/runner-access.json" ] || { echo 'AEL_MACHINE_CLI_REQUIRED: select the shared machine executable' >&2; exit 1; }
  fi
  session_id=${AEL_SESSION_ID:-}
  session_value=false
@@ -71,9 +73,10 @@ if [ -e "$project_root/.ael/remote.json" ] || [ -L "$project_root/.ael/remote.js
    export AEL_PINNED_SESSION_FILE="$session_record"
   fi
  fi
- if [ -z "${AEL_PINNED_SESSION_FILE:-}" ] && [ -f "$project_root/.ael/runner-access.json" ] && [ -z "${AEL_CLI:-}" ] && [ -z "${AEL_INSTALL_PREFIX:-}" ]; then
+ if [ "$portable" = true ] && [ -z "${AEL_CLI:-}" ] && { [ -z "${AEL_PINNED_SESSION_FILE:-}" ] || [ "$command_name" = update ] || [ "$command_name" = init ]; }; then
   cli=
  fi
+ if [ "$portable" = true ] && [ "$command_name" = upgrade ]; then cli=; fi
  if [ -n "$cli" ] && [ -x "$cli" ] && ! [ "$cli" -ef "$project_root/ael" ]; then
   for argument in "$@"; do
    case "$argument" in --project|--project=*) exec "$cli" "$@" ;; esac
@@ -118,7 +121,7 @@ for argument in "$@"; do
   *) command_name=$argument; break ;;
  esac
 done
-if [ "$command_name" = upgrade ]; then exec "$binary" "$@"; fi
+if { [ "$command_name" = upgrade ] && [ "${portable:-false}" = false ]; } || [ "$command_name" = client ]; then exec "$binary" "$@"; fi
 for argument in "$@"; do
  case "$argument" in --project|--project=*) exec "$binary" "$@" ;; esac
 done
