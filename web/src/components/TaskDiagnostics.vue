@@ -104,7 +104,7 @@ const summaryText = computed(() => JSON.stringify({
             <dt>执行者</dt><dd>{{ e.executor || "未记录" }} · 开始 {{ stamp(e.started) }}<template v-if="e.ended"> · 结束 {{ stamp(e.ended) }}</template></dd>
             <dt>适用版本</dt><dd>{{ e.candidate ? "候选 " + e.candidate.slice(0, 12) : "候选未记录" }} · {{ e.revisions }}<span v-if="!e.current" class="muted">（不是当前版本）</span></dd>
           </dl>
-          <a v-if="e.unit.startsWith('check:')" class="text-button" :href="taskHref(t.definition.id, 'checks', e.unit.slice(6))">查看对应检查</a>
+          <a v-if="e.unit.startsWith('check:')" class="text-button go" :href="taskHref(t.definition.id, 'checks', e.unit.slice(6))">查看对应检查</a>
           <details class="wb-disclosure"><summary>完整原始记录</summary><div class="wb-disclosure-body"><CopyButton label="复制原始记录" :value="pretty(e.raw)" /><pre class="wb-raw">{{ pretty(e.raw) }}</pre></div></details>
         </div>
       </div>

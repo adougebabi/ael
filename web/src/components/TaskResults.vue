@@ -37,7 +37,7 @@ const done = computed(() => task.value.status === 'completed');
   <section v-if="current.length && !onlyOther" class="wb-content-section" aria-labelledby="results-title">
     <div class="wb-section-header"><h2 id="results-title">{{ done ? '交付结果' : '本次成果' }}</h2><span class="tiny-count">{{ current.length }}</span><span class="muted">材料不等于验收通过</span></div>
     <div class="wb-result-cards"><ResultCard v-for="m in current.slice(0, 4)" :key="m.ref" :material="m" @open="preview = m" /></div>
-    <div v-if="current.length > 4 && remoteProject" class="wb-result-footnote"><a class="text-button" :href="href('/materials', { task: task.definition.id })">查看全部 {{ current.length }} 份成果</a></div>
+    <div v-if="current.length > 4 && remoteProject" class="wb-result-footnote"><a class="text-button go" :href="href('/materials', { task: task.definition.id })">查看全部 {{ current.length }} 份成果</a></div>
   </section>
   <details v-if="other.length" class="content-section" aria-label="历史成果与相关资料">
     <summary>历史成果与相关资料 · {{ other.length }} 份</summary>

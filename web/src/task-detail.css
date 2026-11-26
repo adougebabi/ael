@@ -1,0 +1,370 @@
+/*
+ * Task detail consolidation. Loaded after workbench.css.
+ *
+ * The task detail grew from several generations of styles (style.css legacy
+ * rules, workbench.css tokens, per-component tweaks), which left underlined
+ * bare links, browser-default disclosure triangles and a 10–16px spread of
+ * body text. This layer pins one reading scale and one set of interaction
+ * shapes for everything inside the detail page and its dialogs:
+ *
+ *   section title 16px · sub-heading 14px · body 14px · secondary 13px ·
+ *   meta 12px (floor) · links are colour-only · every disclosure is a chevron.
+ */
+:root {
+  --ink-soft: #4a5163;
+  --text-2: #5f6679;
+  --hover-soft: #f6f7fc;
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 6 6 6-6 6'/%3E%3C/svg%3E");
+}
+
+/* ---------------------------------------------------------------------------
+ * Links: colour carries the affordance, never an underline.
+ * ------------------------------------------------------------------------ */
+a { text-decoration: none; }
+a:hover { color: var(--brand-hover); }
+.text-button:hover:enabled, a.text-button:hover { text-decoration: none; color: var(--brand-hover); }
+button.inline-link { min-height: 0; padding: 0; border: 0; background: none; color: var(--accent); font-size: 13px; font-weight: 500; }
+button.inline-link:hover:enabled { background: none; color: var(--brand-hover); }
+
+.detail-page :where(a:not(.button, .wb-aside-link, .icon-button, .wb-task-title, [role="menuitem"])),
+.cd-dialog :where(a:not(.button)) { color: var(--accent); font-weight: 500; text-decoration: none; transition: color .15s; }
+.detail-page :where(a:not(.button, .wb-aside-link, .icon-button, .wb-task-title, [role="menuitem"])):hover { color: var(--brand-hover); }
+.detail-page a.wb-back-line { color: #8b92a5; font-weight: 400; }
+.detail-page a.wb-back-line:hover { color: var(--ink); }
+/* A text-button that leads somewhere else carries a small arrow. */
+.detail-page .text-button.go::after { content: "→"; font-weight: 400; transition: transform .15s; }
+.detail-page .text-button.go:hover::after { transform: translateX(2px); }
+
+/* ---------------------------------------------------------------------------
+ * Reading scale inside the detail column.
+ * ------------------------------------------------------------------------ */
+.task-detail-main { font-size: 14px; line-height: 1.7; color: var(--ink-soft); }
+.task-detail-main h2,
+.task-detail-main .wb-section-header h2,
+.task-detail-main .wb-content-section > h2,
+.task-detail-main .section-heading h2,
+.task-detail-main .ds-card > h2,
+.task-detail-main .ds-head h2 { font-size: 16px; line-height: 1.5; font-weight: 620; color: var(--ink); letter-spacing: 0; }
+.task-detail-main h3 { font-size: 14px; line-height: 1.55; font-weight: 600; color: var(--ink); }
+.task-detail-main h4 { font-size: 13px; line-height: 1.55; font-weight: 600; color: var(--ink-soft); margin: 0 0 6px; }
+.task-detail-main p,
+.task-detail-main :is(ul, ol):not([class]) > li,
+.task-detail-main dd { font-size: 14px; }
+.task-detail-main small,
+.task-detail-main .secondary,
+.task-detail-main .muted { font-size: 13px; color: var(--muted); }
+.task-detail-main .wb-section-header { align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.task-detail-main .wb-section-header .muted { font-size: 12px; }
+.task-detail-main .wb-section-header .tiny-count { align-self: center; }
+.task-detail-main .section-heading { align-items: baseline; gap: 12px; margin-bottom: 10px; }
+.task-detail-main .section-heading small { font-size: 12px; color: var(--muted); }
+.task-detail-main :is(ul, ol):not([class]) { padding-left: 20px; margin: 6px 0 0; }
+.task-detail-main :is(ul, ol):not([class]) > li + li { margin-top: 4px; }
+.task-detail-main :is(ul, ol):not([class]) > li::marker { color: #a2a7b6; }
+.task-detail-main code { font-size: 12.5px; background: #f3f4f9; border-radius: 4px; padding: 1px 5px; color: var(--ink-soft); }
+.task-detail-main pre { font: 12.5px/1.75 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink-soft); background: #f6f7fb; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin: 10px 0 0; }
+.task-detail-main pre.wb-raw { font-size: 12px; }
+.task-detail-main pre.diag-text { border: 0; background: none; padding: 0; margin: 0; font: inherit; font-size: 13px; line-height: 1.75; }
+.task-detail-main .wb-content-section { margin-bottom: 24px; }
+.task-detail-main .wb-content-section > h2 + p { margin-top: 6px; }
+.task-detail-main .empty { padding: 6px 0; font-size: 13px; }
+.task-detail-main .loading { padding: 6px 0; font-size: 13px; }
+.task-detail-main .alert { font-size: 13px; border-radius: 8px; padding: 10px 14px; margin: 10px 0; }
+.task-detail-main .alert > button { min-height: 28px; padding: 3px 10px; font-size: 13px; }
+
+/* Buttons inside detail content read as one family: 13px, 32px high. */
+.task-detail-main .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.task-detail-main .actions > button:not(.primary):not(.text-button):not(.inline-link),
+.task-detail-main .evidence button,
+.task-detail-main .diag-facts dd > button,
+.task-detail-main .diag-row-meta > button,
+.task-detail-main button.small { min-height: 32px; padding: 5px 11px; font-size: 13px; font-weight: 500; }
+.task-detail-main .actions > button.primary { min-height: 32px; padding: 5px 13px; font-size: 13px; }
+.task-detail-main .evidence button { margin: 0; white-space: normal; text-align: left; }
+.task-detail-main button svg { width: 14px; height: 14px; flex: none; }
+.task-detail-main .text-button { font-size: 13px; }
+
+/* ---------------------------------------------------------------------------
+ * Disclosures: one chevron shape, no browser triangle, no link colour.
+ * ------------------------------------------------------------------------ */
+.detail-page details,
+.cd-dialog details { padding: 0; border: 0; }
+.detail-page details > summary,
+.cd-dialog details > summary {
+  list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px;
+  width: fit-content; max-width: 100%; color: var(--text-2); font-size: 13px; font-weight: 500;
+  line-height: 1.5; border-radius: 6px; transition: color .15s; margin: 0;
+}
+.detail-page details > summary::-webkit-details-marker,
+.cd-dialog details > summary::-webkit-details-marker { display: none; }
+.detail-page details > summary::before,
+.cd-dialog details > summary::before {
+  content: ""; flex: none; width: 12px; height: 12px; background: currentColor; opacity: .55;
+  -webkit-mask: var(--chevron) center / contain no-repeat; mask: var(--chevron) center / contain no-repeat;
+  transition: transform .18s ease; font-size: 0;
+}
+.detail-page details[open] > summary::before,
+.cd-dialog details[open] > summary::before,
+.task-detail-main details.content-section[open] > summary::before,
+.task-detail-main details.source-detail.delivery-detail[open] > summary::before { content: ""; transform: rotate(90deg); }
+.detail-page details > summary:hover,
+.cd-dialog details > summary:hover { color: var(--ink); }
+.detail-page details[open] > summary,
+.cd-dialog details[open] > summary { margin-bottom: 10px; }
+
+/* Top-level sections under the overview: full-width quiet rows. */
+.task-detail-main details.content-section,
+.task-detail-main details.source-detail.delivery-detail,
+.task-detail-main > .overview > details.content-section {
+  border: 0; border-top: 1px solid var(--line); border-radius: 0; background: transparent; box-shadow: none;
+  padding: 0; margin: 0;
+}
+.task-detail-main details.content-section > summary,
+.task-detail-main details.source-detail.delivery-detail > summary {
+  width: 100%; padding: 15px 0; font-size: 14px; color: var(--ink-soft); font-weight: 550; gap: 10px;
+}
+.task-detail-main details.content-section > summary::before,
+.task-detail-main details.source-detail.delivery-detail > summary::before { content: ""; width: 13px; height: 13px; font-size: 0; }
+.task-detail-main details.content-section[open] > summary,
+.task-detail-main details.source-detail.delivery-detail[open] > summary { margin-bottom: 2px; }
+.task-detail-main details.content-section[open],
+.task-detail-main details.source-detail.delivery-detail[open] { padding-bottom: 20px; }
+.task-detail-main details.content-section > :not(summary),
+.task-detail-main details.source-detail.delivery-detail > :not(summary) { margin-left: 23px; }
+.task-detail-main details.source-detail.delivery-detail > p + p { margin-top: 6px; }
+.task-detail-main details.source-detail.delivery-detail > p > button { margin-left: 10px; min-height: 28px; padding: 3px 10px; font-size: 13px; vertical-align: middle; }
+
+/* Nested disclosures inside sections and cards. */
+.task-detail-main details.wb-disclosure { border-top: 1px solid var(--line); padding: 12px 0 0; margin-top: 14px; }
+.task-detail-main details.wb-disclosure > summary { font-size: 13px; }
+.task-detail-main .wb-disclosure-body { padding: 4px 0 0; font-size: 13px; color: var(--text-2); }
+.task-detail-main details.source-detail { margin: 12px 0 0; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; background: #fafbfd; color: var(--text-2); }
+.task-detail-main details.source-detail > summary { font-size: 13px; font-weight: 500; color: var(--text-2); }
+.task-detail-main details.source-detail[open] > summary { margin-bottom: 8px; }
+.task-detail-main details.source-detail p { font-size: 13px; margin: 4px 0 0; }
+.task-detail-main .scope-details { margin-top: 6px; }
+.task-detail-main .scope-details > summary { font-size: 12px; }
+
+/* ---------------------------------------------------------------------------
+ * Overview: situation card, implementation, task description.
+ * ------------------------------------------------------------------------ */
+.wb-situation { padding: 18px 20px; }
+.wb-situation-top { font-size: 15px; color: var(--ink); }
+.wb-situation > p, .wb-situation-more { font-size: 14px; line-height: 1.75; color: var(--text-2); }
+.wb-situation .wb-situation-extra { font-size: 13px; }
+.wb-situation-stuck { margin-top: 14px; padding: 10px 14px; border: 1px solid #f0dcc0; border-left: 3px solid #e3b878; border-radius: 8px; background: #fffbf4; font-size: 13px; line-height: 1.7; }
+.wb-situation-stuck strong { font-weight: 600; }
+.wb-situation-stuck .actions { margin-top: 10px; gap: 12px; }
+.wb-situation-facts { font-size: 14px; gap: 8px 16px; }
+.wb-situation-facts dt { font-size: 13px; }
+.wb-situation-facts dd { color: var(--ink); }
+.wb-situation-link { display: inline-flex; margin-top: 10px; }
+.wb-situation-more > summary { display: block; width: auto; color: var(--text-2); font-size: 14px; font-weight: 400; }
+.wb-situation-more > summary::before { display: none; }
+
+.task-detail-main .fact-full { color: var(--ink-soft); }
+.task-detail-main .overview-review-check { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.task-detail-main .overview-review-check h3 { margin-bottom: 4px; }
+.task-detail-main .overview-review-check small { margin-top: 6px; }
+
+/* Facts grids (task description, basis reading). */
+.task-detail-main dl.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 28px; margin: 14px 0 16px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.task-detail-main .overview .content-section dl.facts dt,
+.task-detail-main dl.facts dt { font-size: 12px; color: var(--muted); margin: 0 0 3px; }
+.task-detail-main .overview .content-section dl.facts dd,
+.task-detail-main dl.facts dd { font-size: 14px; color: var(--ink); margin: 0; }
+.task-detail-main .task-description > p { color: var(--ink-soft); }
+.task-detail-main .task-description > details { margin-top: 10px; }
+.task-detail-main .task-description > h3 { margin-top: 4px; }
+.task-detail-main .task-description .markdown { font-size: 14px; }
+
+/* Task relations: links as compact chips, related tasks as rows. */
+.task-detail-main .related-links { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 10px; }
+.task-detail-main .related-links:empty { display: none; }
+.task-detail-main .related-links a { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--accent-line); border-radius: 6px; background: var(--accent-soft); font-size: 13px; }
+.task-detail-main .related-links a:hover { background: #e6e5fb; }
+.task-detail-main .task-relation-list li { padding-block: 10px; }
+.task-detail-main .task-relation-list li > a:first-child { font-weight: 550; color: var(--ink); }
+.task-detail-main .task-relation-list li > a:first-child:hover { color: var(--accent); }
+.task-detail-main .task-relation-list span { font-size: 12px; }
+.task-detail-main .task-relation-list p { flex-basis: 100%; font-size: 13px; color: var(--text-2); margin: 0; }
+.task-detail-main .task-relation-list small { flex-basis: 100%; font-size: 12px; }
+.task-detail-main .task-relation-list li > a:not(:first-child) { font-size: 13px; }
+.task-detail-main details.content-section section.content-section { padding: 0; border: 0; margin: 0; background: none; }
+.task-detail-main details.content-section section.content-section > .section-heading h2 { font-size: 14px; }
+
+/* Basis list. */
+.task-detail-main .task-basis-list { border-radius: 10px; }
+.task-detail-main .task-basis-list .record-row { padding: 14px 16px; }
+.task-detail-main .task-basis-list .record-row h3 { margin-bottom: 2px; }
+.task-detail-main .basis-title-button { min-height: 0; padding: 0; border: 0; background: none; font-size: 14px; font-weight: 600; color: var(--ink); text-align: left; white-space: normal; }
+.task-detail-main .basis-title-button:hover:enabled { background: none; color: var(--accent); }
+.task-detail-main .task-basis-list .record-row p { font-size: 13px; margin: 2px 0 4px; }
+.task-detail-main .task-basis-list small { font-size: 12px; }
+
+/* Historical results list. */
+.task-detail-main .wb-other-list p { gap: 10px; margin: 0; padding: 8px 0; border-bottom: 1px solid #f0f1f6; font-size: 13px; }
+.task-detail-main .wb-other-list p:last-child { border-bottom: 0; }
+.task-detail-main .wb-other-list .text-button { font-size: 13px; color: var(--ink); font-weight: 500; }
+.task-detail-main .wb-other-list .text-button svg { color: var(--muted); }
+.task-detail-main .wb-other-list .text-button:hover:enabled { color: var(--accent); }
+.task-detail-main .wb-other-list .tag { font-size: 12px; }
+.task-detail-main .wb-other-list .muted { font-size: 12px; }
+
+/* ---------------------------------------------------------------------------
+ * Delivery summary (completed tasks).
+ * ------------------------------------------------------------------------ */
+.task-detail-main .ds-card { padding: 20px 22px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(37, 40, 73, .03); }
+.task-detail-main .ds-card > h2 { margin-bottom: 10px; }
+.task-detail-main .ds-headline { font-size: 18px; margin: 0 0 6px; color: var(--ink); }
+.task-detail-main .ds-headline svg { width: 18px; height: 18px; }
+.task-detail-main .ds-lead { font-size: 14px; color: var(--text-2); margin: 0 0 16px; }
+.task-detail-main .ds-two { gap: 20px 28px; padding-top: 16px; border-top: 1px solid var(--line); }
+.task-detail-main .ds-two h3 { font-size: 13px; color: var(--muted); font-weight: 500; margin: 0 0 4px; }
+.task-detail-main .ds-two h3 ~ h3 { margin-top: 12px; }
+.task-detail-main .ds-text { font-size: 14px; color: var(--ink); margin: 0 0 4px; }
+.task-detail-main .ds-text.muted { font-size: 13px; color: var(--muted); }
+.task-detail-main .ds-actions { margin-top: 18px; }
+.task-detail-main .ds-actions button { min-height: 32px; padding: 5px 12px; font-size: 13px; }
+.task-detail-main .rd-table { font-size: 13px; table-layout: auto; }
+.task-detail-main .rd-table th { font-size: 12px; font-weight: 500; padding: 8px 12px; }
+.task-detail-main .rd-table th:first-child { border-radius: 6px 0 0 6px; }
+.task-detail-main .rd-table th:last-child { border-radius: 0 6px 6px 0; }
+.task-detail-main .rd-table td { padding: 12px; font-size: 13px; color: var(--ink-soft); }
+.task-detail-main .rd-table tr:last-child td { border-bottom: 0; }
+.task-detail-main .rd-table code { font-size: 12px; }
+/* The result column holds free text; give it room instead of 1% width. */
+.task-detail-main .ds-checks td:nth-child(2), .task-detail-main .ds-checks th:nth-child(2) { white-space: nowrap; width: 1%; }
+.task-detail-main .ds-checks td:nth-child(3), .task-detail-main .ds-checks th:nth-child(3) { white-space: normal; width: 38%; min-width: 180px; }
+.task-detail-main .ds-checks .ds-check-link { font-size: 14px; font-weight: 600; color: var(--ink); }
+.task-detail-main .ds-checks .ds-check-link:hover:enabled { color: var(--accent); }
+.task-detail-main .ds-covers { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.task-detail-main .ds-checks td:nth-child(3) .ds-covers { color: var(--text-2); font-size: 13px; }
+.task-detail-main .ds-result { font-size: 13px; font-weight: 550; }
+.task-detail-main .ds-boundary { font-size: 13px; padding: 12px 16px; }
+.task-detail-main .ds-boundary h3 { font-size: 14px; margin: 0 0 4px; }
+.task-detail-main .ds-boundary p, .task-detail-main .ds-boundary li { font-size: 13px; color: var(--text-2); }
+.task-detail-main .ds-head { margin-bottom: 4px; }
+.task-detail-main .ds-head .muted { font-size: 12px; }
+.task-detail-main .ds-material { padding: 12px 0; }
+.task-detail-main .ds-material .rd-icon { width: 36px; height: 36px; border-radius: 9px; }
+.task-detail-main .ds-material .rd-icon svg { width: 17px; height: 17px; }
+.task-detail-main .ds-material-text strong { font-size: 14px; color: var(--ink); }
+.task-detail-main .ds-material-text small { font-size: 12px; }
+.task-detail-main .ds-material .button.ghost { min-height: 30px; padding: 4px 10px; font-size: 13px; color: var(--accent); }
+.task-detail-main .ds-material .button.ghost:hover { background: var(--accent-soft); color: var(--accent); }
+.task-detail-main .ds-relations .rd-table-scroll { margin-top: 4px; }
+.task-detail-main .ds-relations p.muted { font-size: 12px; margin-top: 8px; }
+
+/* ---------------------------------------------------------------------------
+ * Checks tab.
+ * ------------------------------------------------------------------------ */
+.task-detail-main section.check-list { overflow: visible; }
+.task-detail-main section.check-list > .wb-section-header { margin-bottom: 4px; }
+.detail-page .task-detail-main .check-list > .secondary,
+.detail-page .task-detail-main .check-list > .check-criteria { margin-inline: 0; }
+.task-detail-main section.check-list > .secondary { margin: 0 0 12px; font-size: 13px; }
+.task-detail-main .check-criteria { margin: 0 0 14px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.task-detail-main .check-criteria[open] > summary { margin-bottom: 6px; }
+.task-detail-main .check-criteria ol { margin: 0; }
+.task-detail-main .check-criteria li { font-size: 14px; color: var(--ink-soft); }
+.task-detail-main article.check { padding: 16px 18px; border-radius: 10px; }
+.task-detail-main article.check .check-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 12px; align-items: start; }
+.task-detail-main article.check .check-heading { gap: 8px; align-items: center; }
+.task-detail-main article.check .check-heading h3 { font-size: 14px; font-weight: 600; }
+.task-detail-main article.check .check-heading .status { font-size: 12px; padding: 2px 8px; border-radius: 5px; font-weight: 500; }
+.task-detail-main article.check .check-tags { font-size: 12px; color: var(--muted); margin: 4px 0 0; display: block; }
+.task-detail-main article.check .check-main > p:not(.check-tags) { font-size: 13px; margin-top: 6px; color: var(--text-2); }
+.task-detail-main .check-actions { margin: 0; gap: 6px; flex-wrap: nowrap; }
+.task-detail-main .check-actions > button:not(.primary) { min-height: 32px; padding: 5px 11px; font-size: 13px; font-weight: 500; }
+.task-detail-main .check-actions > button.ghost { color: var(--accent); }
+.task-detail-main .check-actions > button.ghost:hover:enabled { background: var(--accent-soft); color: var(--accent); }
+.task-detail-main .check-state-icon { width: 24px; height: 24px; margin-top: 1px; }
+.task-detail-main .check-state-icon svg { width: 14px; height: 14px; }
+.task-detail-main .check-state-icon.pass { background: var(--good-soft); color: var(--good); }
+.task-detail-main .check-state-icon.fail { background: var(--bad-soft); color: var(--bad); }
+.task-detail-main .check-detail { margin: 14px 0 0 36px; padding: 14px 0 0; border-top: 1px solid var(--line); border-radius: 0; background: none; }
+.task-detail-main .check-detail > h4:first-child { margin-top: 0; }
+.task-detail-main .check-detail > ul { margin: 0 0 4px; }
+.task-detail-main .check-detail > ul li { font-size: 14px; color: var(--ink-soft); }
+.task-detail-main .check-detail .evidence { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: #fafbfd; }
+.task-detail-main .check-detail .source-detail .evidence { margin-top: 8px; background: #fff; }
+.task-detail-main .check-detail .evidence h4 { margin: 0 0 4px; font-size: 13px; color: var(--ink); }
+.task-detail-main .check-detail .evidence p { margin: 4px 0 0; font-size: 13px; }
+.task-detail-main .check-detail .evidence .actions { margin-top: 10px; }
+.task-detail-main .check-detail > .secondary { margin-top: 12px; }
+.task-detail-main .check-detail > .actions:empty { display: none; }
+@media (max-width: 760px) {
+  .task-detail-main article.check .check-row { grid-template-columns: 24px minmax(0, 1fr); }
+  .task-detail-main .check-actions { grid-column: 2; flex-wrap: wrap; }
+  .task-detail-main .check-detail { margin-left: 0; }
+  .task-detail-main dl.facts { grid-template-columns: 1fr; }
+}
+
+/* ---------------------------------------------------------------------------
+ * Execution diagnostics.
+ * ------------------------------------------------------------------------ */
+.task-detail-main .diag-task-state { font-size: 13px; }
+.task-detail-main .diag-task-state > span:not(.tag) { font-size: 13px; }
+.task-detail-main .diag-stuck { gap: 4px 12px; }
+.task-detail-main .diag-stuck strong { font-size: 14px; }
+.task-detail-main .diag-stuck span { font-size: 12px; color: #9a7a4f; }
+.task-detail-main .diag-stuck p { font-size: 13px; color: #7a5420; }
+.task-detail-main .diag-sub { font-size: 14px; font-weight: 600; margin: 22px 0 10px; }
+.task-detail-main .diag-row-text strong { font-size: 14px; line-height: 1.5; }
+.task-detail-main .diag-row-text small { font-size: 12px; line-height: 1.6; }
+.task-detail-main .diag-row-body { font-size: 13px; padding: 6px 18px 16px 47px; }
+.task-detail-main .diag-facts { gap: 8px 16px; }
+.task-detail-main .diag-facts dt { font-size: 13px; }
+.task-detail-main .diag-facts dd { font-size: 13px; color: var(--ink-soft); }
+.task-detail-main .diag-row-body > .text-button { margin-top: 2px; }
+.task-detail-main .diag-row.open { background: #fdfdff; }
+.task-detail-main .diag-row.open.tone-fail, .task-detail-main .diag-row.open.tone-warn { background: #fffdfa; }
+.task-detail-main .diag-lifecycle li { font-size: 13px; }
+.task-detail-main .diag-life-title { font-size: 13px; color: var(--ink); }
+.task-detail-main .diag-life-summary { font-size: 13px; }
+.task-detail-main .diag-event-head { font-size: 12px; }
+.task-detail-main .diag-event-head code { background: none; padding: 0; }
+.task-detail-main details.diag-more { margin-top: 16px; }
+
+/* ---------------------------------------------------------------------------
+ * Aside.
+ * ------------------------------------------------------------------------ */
+.wb-aside-title { font-size: 12px; letter-spacing: .3px; }
+.wb-aside-fact { font-size: 12px; margin-bottom: 10px; }
+.wb-aside-fact strong { font-size: 12px; color: var(--ink-soft); }
+button.wb-aside-link, a.wb-aside-link { font-size: 13px; padding: 4px 6px; margin: 0 -6px 4px; border-radius: 6px; width: calc(100% + 12px); justify-content: flex-start; transition: background .15s, color .15s; }
+button.wb-aside-link:hover:enabled, a.wb-aside-link:hover { background: var(--hover-soft); color: var(--accent); }
+.wb-aside-empty { font-size: 13px; }
+
+/* ---------------------------------------------------------------------------
+ * Check detail dialog.
+ * ------------------------------------------------------------------------ */
+.cd-dialog .cd-kicker { font-size: 12px; }
+.cd-dialog .wb-dialog-heading h2 { font-size: 17px; }
+.cd-dialog .wb-dialog-heading .tag { margin-top: 2px; }
+.cd-dialog .wb-dialog-heading .icon-button { margin: -4px -6px 0 0; }
+.cd-dialog .cd-box { padding: 14px 18px; }
+.cd-dialog .cd-box h3 { font-size: 14px; }
+.cd-dialog .cd-box p { font-size: 14px; }
+.cd-dialog .cd-next { font-size: 13px; }
+.cd-dialog .cd-sub { font-size: 14px; margin: 18px 0 8px; }
+.cd-dialog .cd-covers li { font-size: 14px; color: var(--ink-soft); }
+.cd-dialog .cd-covers svg { width: 14px; height: 14px; margin-top: 4px; }
+.cd-dialog .rd-facts { font-size: 13px; }
+.cd-dialog .cd-history { font-size: 13px; }
+.cd-dialog .wb-dialog-footer .muted { font-size: 13px; }
+.cd-dialog .wb-dialog-footer button { min-height: 34px; font-size: 13px; }
+.task-detail-main .task-relation-links { display: flex; gap: 16px; flex-basis: 100%; }
+.task-detail-main .check-detail .related-links { display: inline-flex; margin: 0 0 0 8px; vertical-align: middle; }
+.task-detail-main details.source-detail.delivery-detail { border-radius: 0; color: inherit; }
+.task-detail-main details.source-detail.delivery-detail p { font-size: 14px; color: var(--ink-soft); margin: 0; }
+.task-detail-main details.content-section > .section-heading h2 { font-size: 14px; }
+.task-detail-main .diag-event-head { justify-content: flex-start; gap: 14px; padding: 8px 6px; border-radius: 6px; }
+.task-detail-main .diag-event-head:hover:enabled { background: var(--hover-soft); border: 0; }
+.task-detail-main .diag-event-head code { min-width: 150px; font-size: 12px; color: var(--ink); }
+.task-detail-main .diag-event-head > span { font-size: 12px; color: var(--muted); }
+.task-detail-main .diag-event-head small { font-size: 12px; color: #9aa0b2; }
+.task-detail-main .diag-facts { grid-template-columns: 88px minmax(0, 1fr); }
+.task-detail-main .wb-disclosure-body > .copy-control { display: inline-flex; margin-bottom: 8px; }
+.task-detail-main .wb-disclosure-body > .copy-control button { min-height: 30px; padding: 4px 10px; font-size: 13px; }

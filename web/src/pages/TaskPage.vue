@@ -873,8 +873,8 @@ function checkReason(c: any) {
           </div>
         </section>
           <p v-if="currentBlocker" class="wb-situation-extra">解除条件：{{ currentBlocker.recovery ? blockerText(currentBlocker.recovery, false) : '尚未记录' }}；恢复位置：{{ currentBlocker.resume_at ? label(currentBlocker.resume_at) : '尚未记录' }}</p>
-          <div v-if="stuck && !currentBlocker" class="wb-situation-stuck" role="note"><p><strong>最近失败于 {{ stuck.step }}</strong><template v-if="stuck.summary"> · {{ stuck.summary.length > 200 ? stuck.summary.slice(0, 200) + '…' : stuck.summary }}</template></p><div class="actions"><button v-for="ref in stuck.outputs.slice(0, 1)" :key="ref" class="small" @click="openArtifact(ref)"><AppIcon :name="/\.log$/.test(ref) ? 'terminal' : 'file'" />{{ /\.log$/.test(ref) ? '查看失败日志' : '查看输出 ' + artifactName(ref) }}</button><a class="text-button" :href="href('/tasks/' + encodeURIComponent(id), { section: 'execution', attempt: stuck.id })">在执行诊断中查看</a></div></div>
-          <a v-else-if="stuck" class="text-button wb-situation-link" :href="href('/tasks/' + encodeURIComponent(id), { section: 'execution', attempt: stuck.id })">在执行诊断中查看受阻的执行</a>
+          <div v-if="stuck && !currentBlocker" class="wb-situation-stuck" role="note"><p><strong>最近失败于 {{ stuck.step }}</strong><template v-if="stuck.summary"> · {{ stuck.summary.length > 200 ? stuck.summary.slice(0, 200) + '…' : stuck.summary }}</template></p><div class="actions"><button v-for="ref in stuck.outputs.slice(0, 1)" :key="ref" class="small" @click="openArtifact(ref)"><AppIcon :name="/\.log$/.test(ref) ? 'terminal' : 'file'" />{{ /\.log$/.test(ref) ? '查看失败日志' : '查看输出 ' + artifactName(ref) }}</button><a class="text-button go" :href="href('/tasks/' + encodeURIComponent(id), { section: 'execution', attempt: stuck.id })">在执行诊断中查看</a></div></div>
+          <a v-else-if="stuck" class="text-button go wb-situation-link" :href="href('/tasks/' + encodeURIComponent(id), { section: 'execution', attempt: stuck.id })">在执行诊断中查看受阻的执行</a>
           <p v-if="reviewState" class="wb-situation-extra review-note-status">{{ reviewState }}</p>
           <div class="actions"><button v-if="n.summary.needs_history_review" @click="selectSection('execution')">查看相关历史资料</button><button v-if="showReviewEntry && (pendingReviewCheck!==null || reviewState)" :disabled="busy" @click="openTaskReview">{{ reviewState || pendingReviewCheck!==null?'查看人工意见与记录':'记录人工意见' }}</button></div>
           <details v-if="unownedRunning && !remoteProject"><summary>当前接手无法继续？</summary><p>当前标签页没有原责任凭据。若原执行确已停止，可按原规则核实并恢复。</p><button @click="start('resume','恢复无法继续的接手')">核实并恢复接手</button></details>
@@ -900,7 +900,7 @@ function checkReason(c: any) {
           <article v-for="check in recordedChecks" :key="check.id" class="overview-review-check">
             <h3>{{ check.covers?.join('；') || check.id }} · {{ label(n.current_checks[check.id].result) }}</h3>
             <p v-if="n.current_checks[check.id].reason" class="fact-full">{{ n.current_checks[check.id].reason }}</p>
-            <small>{{ evidenceSource(n.current_checks[check.id]) }} · <a :href="taskHref(id, 'checks', check.id)">查看检查记录</a></small>
+            <small>{{ evidenceSource(n.current_checks[check.id]) }} · <a class="text-button go" :href="taskHref(id, 'checks', check.id)">查看检查记录</a></small>
           </article>
         </section>
         <section v-if="reviewChecks.length" id="overview-review" aria-label="当前人工验收"><ReviewPanel v-for="check in reviewChecks" :key="id + check.id + (t.candidate || '')" :snapshot="n" :check="check" :objects="reviewObjects" @saved="reviewSaved" @advanced="manualCheck = check.id" /></section>
@@ -1179,7 +1179,7 @@ function checkReason(c: any) {
               <h4>本项覆盖条件</h4>
               <ul v-if="c.covers?.length"><li v-for="a in c.covers" :key="a">{{ a }}</li></ul>
               <p v-else class="secondary">定义未声明覆盖条件。</p>
-              <p v-if="t.definition.type === 'epic' && c.affected_tasks?.length">关联排查任务 <template v-for="affected in c.affected_tasks" :key="affected"><a :href="taskHref(affected)">{{ affected }}</a> </template></p>
+              <p v-if="t.definition.type === 'epic' && c.affected_tasks?.length">关联排查任务 <span class="related-links"><a v-for="affected in c.affected_tasks" :key="affected" :href="taskHref(affected)">{{ affected }}</a></span></p>
               <pre v-if="c.command?.length">{{ c.command.join(" ") }}</pre>
               <section v-if="n.current_checks[c.id]" class="evidence">
                 <h4>当前检查结果 · {{ label(n.current_checks[c.id].result) }}</h4>

@@ -2,6 +2,7 @@ import { createApp } from "vue";
 import App from "./App.vue";
 import "./style.css";
 import "./workbench.css";
+import "./task-detail.css";
 import { applyTheme } from "./theme";
 
 async function start() {

@@ -38,12 +38,13 @@ watch(refreshRevision, () => void load(true));
       <li v-for="item in page.data.value.items" :key="item.id">
         <a :href="taskHref(item.id)">{{ item.title }}</a>
         <span>{{ [item.definition_parent && !item.managed_member ? '定义关联子项' : '', item.feedback ? '后续反馈' : '', item.historical ? '历史记录 · 当前未复验' : label(item.status === 'open' ? item.step : item.status)].filter(Boolean).join(' · ') }}</span>
-        <template v-if="item.summary"><p>{{ workPresentation(item.summary).latest || (item.historical ? '历史完成记录，当前未复验' : '尚未回报有效成果') }}</p><p>{{ workPresentation(item.summary).current }}</p><small>{{ checkStatusSummary(item.summary.checks) }}</small><a :href="taskHref(item.id,'execution')">查看工作结果</a><a :href="taskHref(item.id,'checks')">查看检查与证据</a></template>
+        <template v-if="item.summary"><p>{{ workPresentation(item.summary).latest || (item.historical ? '历史完成记录，当前未复验' : '尚未回报有效成果') }}</p><p>{{ workPresentation(item.summary).current }}</p><small>{{ checkStatusSummary(item.summary.checks) }}</small><span class="task-relation-links"><a class="text-button go" :href="taskHref(item.id,'execution')">查看工作结果</a><a class="text-button go" :href="taskHref(item.id,'checks')">查看检查与证据</a></span></template>
       </li>
     </ul>
     <p v-else-if="archived && page.data.value?.total === 0 && !parent && !membership" class="secondary">当前记录没有明确的父子关系。可在执行记录中核对保留的导入资料。</p>
     <Pagination v-if="page.data.value && (page.data.value.total > limit || offset)" :offset="offset" :limit="limit" :total="page.data.value.total" :busy="page.loading.value" name="关联任务" @change="setQuery({ related_offset: $event })" />
   </section>
+  <p v-else-if="page.data.value" class="secondary">当前任务没有记录父子、依赖或反馈关系。</p>
 </template>
 
 <style scoped>
