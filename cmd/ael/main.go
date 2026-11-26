@@ -634,7 +634,7 @@ func startKeeper(s *core.Service, id string, n core.Next, owner int, identity st
 	watcher := process.Command(context.Background(), exe, "lease", "watch", "--project", s.Root, "--task", id, "--attempt", original.ID, "--owner-pid", strconv.Itoa(owner))
 	watcher.Env = append(os.Environ(), "AEL_LEASE_TOKEN="+original.Token, "AEL_LEASE_OWNER_ID="+identity, "AEL_LEASE_READY=1")
 	watcher.Stderr = log
-	if e = launchLeaseWatcher(watcher, reader, writer); e != nil {
+	if e = launchLeaseWatcher(watcher, reader, writer, 5*time.Second, false); e != nil {
 		return failed(e)
 	}
 	n.KeeperPID = watcher.Process.Pid
@@ -642,7 +642,13 @@ func startKeeper(s *core.Service, id string, n core.Next, owner int, identity st
 	return n, nil
 }
 
-func launchLeaseWatcher(watcher *exec.Cmd, reader, writer *os.File) error {
+// launchLeaseWatcher starts a detached renewal process and waits for its
+// readiness marker. With keepOnTimeout a slow first renewal is reported as
+// errKeeperUnconfirmed while the keeper keeps running: it still owns the
+// renewal and stops on its own when the owner exits or the lease is lost.
+var errKeeperUnconfirmed = core.Error("KEEPER_UNCONFIRMED", "keeper is running but its first renewal was not confirmed in time")
+
+func launchLeaseWatcher(watcher *exec.Cmd, reader, writer *os.File, timeout time.Duration, keepOnTimeout bool) error {
 	watcher.ExtraFiles = []*os.File{writer}
 	var e error
 	if e = watcher.Start(); e != nil {
@@ -660,7 +666,10 @@ func launchLeaseWatcher(watcher *exec.Cmd, reader, writer *os.File) error {
 	}()
 	select {
 	case e = <-ready:
-	case <-time.After(5 * time.Second):
+	case <-time.After(timeout):
+		if keepOnTimeout {
+			return errKeeperUnconfirmed
+		}
 		e = core.Error("KEEPER_START_TIMEOUT", "")
 	}
 	if e != nil {

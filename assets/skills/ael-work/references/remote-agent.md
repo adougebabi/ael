@@ -26,7 +26,7 @@ init 默认共用机器级 CLI，支持 `--prefix DIR --from CLIENT_PACKAGE`。�
 
 ### 常规领取与提交
 
-`runner claim --runner RUNNER --file PRIVATE_CLAIM_JSON --out PRIVATE_CLAIM_RECEIPT` 返回的私有文件可直接用于 `--lease-file`。CLI 从中读取任务、领取版本和租约；检查方式可从领取的检查定义取得。有可靠宿主 PID 时，领取时传 `--owner-pid PID`，或由宿主设置 `AEL_RUNNER_OWNER_PID`。CLI 在首个心跳成功后返回 keeper_pid，此后自动续租，宿主退出后停止。对已有回执可单独启动 keepalive。手动 heartbeat 的私有请求只需 operation_id、idempotency_key，成功后更新同一租约文件。
+`runner claim --runner RUNNER --file PRIVATE_CLAIM_JSON --out PRIVATE_CLAIM_RECEIPT` 返回的私有文件可直接用于 `--lease-file`。CLI 从中读取任务、领取版本和租约；检查方式可从领取的检查定义取得。有可靠宿主 PID 时，领取时传 `--owner-pid PID`，或由宿主设置 `AEL_RUNNER_OWNER_PID`。CLI 返回 keeper_pid，此后自动续租，宿主退出后停止。keeper 启动问题不会使已成功的领取失败：首个心跳较慢时返回 `warnings` 中的 `KEEPER_UNCONFIRMED`，keeper 继续在后台续租（日志在 `CLAIM.keeper.log`），可通过租约文件中 lease_until 是否推进确认；keeper 未能启动时返回 `KEEPER_FAILED`，按提示单独运行 `runner keepalive`。对已有回执可单独启动 keepalive。手动 heartbeat 的私有请求只需 operation_id、idempotency_key，成功后更新同一租约文件。
 
 普通实施与分析在 summary 写明改了什么、如何处理、已验证和待验证事项。简单任务一两句即可。完整提交后读取 next_action，继续尚未满足的必需检查。
 

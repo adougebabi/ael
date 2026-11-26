@@ -54,11 +54,15 @@ func remoteRunnerCommand(cmd string, a args, config, project string, binding rem
 	if !ok || result["lease_file"] == nil {
 		return value, nil
 	}
+	// The claim is already accepted and saved; a keeper problem must not turn
+	// it into a failed command with empty stdout.
 	keeper, err := launchRemoteKeeper(a, config, project, identity, ownerPID)
-	if err != nil {
-		return nil, fmt.Errorf("claim is saved in %s; resume renewal with runner keepalive: %w", a.get("out", ""), err)
+	if keeper > 0 {
+		result["keeper_pid"] = keeper
 	}
-	result["keeper_pid"] = keeper
+	if err != nil {
+		keeperWarning(result, a.get("out", ""), ownerPID, err)
+	}
 	return result, nil
 }
 

@@ -5,6 +5,7 @@ import (
 	"ael/internal/process"
 	"ael/internal/remote"
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -48,6 +49,13 @@ func remoteKeepalive(a args, config, project string, binding remote.Binding) (an
 	defer unlock()
 	endpoint := "/runners/" + url.PathEscape(lease.RunnerID) + "/heartbeat"
 	var deadline time.Time
+	// Before the first confirmed renewal there is no local deadline yet; keep
+	// retrying transient failures until the claimed lease would end instead
+	// of giving up on the first slow or dropped request.
+	retryUntil := lease.LeaseUntil
+	if retryUntil.IsZero() || time.Until(retryUntil) < 15*time.Second {
+		retryUntil = time.Now().Add(15 * time.Second)
+	}
 	for {
 		if current, err := process.Identity(pid); err != nil || current != owner {
 			return map[string]string{"status": "owner_stopped"}, nil
@@ -66,7 +74,11 @@ func remoteKeepalive(a args, config, project string, binding remote.Binding) (an
 		started := time.Now()
 		response, err := agentCommunicationCall(config, project, binding, http.MethodPost, endpoint, body)
 		if err != nil {
-			if agentTransient(err) && time.Until(deadline) > time.Second {
+			limit := deadline
+			if limit.IsZero() {
+				limit = retryUntil
+			}
+			if agentTransient(err) && time.Until(limit) > time.Second {
 				time.Sleep(time.Second)
 				continue
 			}
@@ -84,11 +96,10 @@ func remoteKeepalive(a args, config, project string, binding remote.Binding) (an
 			if ready == nil {
 				return nil, core.Error("KEEPER_HANDSHAKE_FAILED", "missing readiness pipe")
 			}
-			_, err := ready.Write([]byte{1})
+			// The launcher may already have stopped waiting; renewal stays
+			// this process's job either way, so a closed pipe is not fatal.
+			_, _ = ready.Write([]byte{1})
 			ready.Close()
-			if err != nil {
-				return nil, err
-			}
 			expectedOwner = ""
 		}
 		time.Sleep(min(time.Until(deadline)/3, 20*time.Second))
@@ -112,10 +123,33 @@ func launchRemoteKeeper(a args, config, project, identity, pid string) (int, err
 	}
 	watcher := process.Command(context.Background(), exe, command...)
 	watcher.Env = append(os.Environ(), "AEL_REMOTE_KEEPER_OWNER="+identity)
-	if err = launchLeaseWatcher(watcher, reader, writer); err != nil {
+	// Keep the keeper's own diagnostics next to the private lease receipt.
+	if log, logErr := os.OpenFile(a.get("out", "")+".keeper.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600); logErr == nil {
+		defer log.Close()
+		watcher.Stderr = log
+	}
+	err = launchLeaseWatcher(watcher, reader, writer, remoteKeeperReadyTimeout, true)
+	if err != nil && err != errKeeperUnconfirmed {
 		return 0, err
 	}
 	keeperPID := watcher.Process.Pid
 	_ = watcher.Process.Release()
-	return keeperPID, nil
+	return keeperPID, err
+}
+
+// The first renewal crosses process start, the tool-session check and one
+// authenticated heartbeat (itself bounded at 5s with retries), so the
+// launcher must allow more than a single request timeout.
+var remoteKeeperReadyTimeout = 20 * time.Second
+
+// keeperWarning reports a renewal problem without hiding a claim that the
+// server already accepted.
+func keeperWarning(result remoteOutput, leaseFile, ownerPID string, err error) {
+	warning := "KEEPER_FAILED: claim saved in " + leaseFile + " but automatic lease renewal did not start (" + err.Error() + "); run: ael runner keepalive --lease-file " + leaseFile + " --owner-pid " + ownerPID
+	if err == errKeeperUnconfirmed {
+		warning = "KEEPER_UNCONFIRMED: keeper is running but its first renewal took longer than " + remoteKeeperReadyTimeout.String() + "; it keeps renewing in the background, see " + leaseFile + ".keeper.log; if lease_until in the lease file stops advancing, run: ael runner keepalive --lease-file " + leaseFile + " --owner-pid " + ownerPID
+	}
+	warnings, _ := result["warnings"].([]any)
+	result["warnings"] = append(warnings, warning)
+	fmt.Fprintln(os.Stderr, "AEL warning · "+warning)
 }
