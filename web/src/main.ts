@@ -5,6 +5,9 @@ import "./workbench.css";
 import { applyTheme } from "./theme";
 
 async function start() {
+  // Mock-scenario mode exists only under `vite --mode mock`; the condition is
+  // a build-time constant, so production and normal dev never include it.
+  if (import.meta.env.MODE === "mock") (await import("./mock")).installMock();
   let standalone = false;
   try {
     const response = await fetch("/api/v1/meta", { cache: "no-store" });

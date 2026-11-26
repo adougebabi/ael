@@ -33,12 +33,11 @@ func (p *portableStore) recoverRunner(principal standalonePrincipal, runnerID st
 		if err := reconcileRunnerAttempts(tx, runnerID); err != nil {
 			return nil, err
 		}
-		var occupied int
-		if err := tx.Row("SELECT count(*) FROM remote_runner_attempts WHERE runner_id=? AND task_id!=? AND state IN ('running','interrupted')", runnerID, input.TaskID).Scan(&occupied); err != nil {
-			return nil, err
-		}
-		if occupied > 0 {
-			return nil, errors.New("RUNNER_WIP")
+		if wip, err := runnerWIPError(tx, runnerID, input.TaskID); err != nil || wip != nil {
+			if err != nil {
+				return nil, err
+			}
+			return nil, wip
 		}
 		if input.Mode == "independent-workspace" {
 			if err := remoteWorkspaceAvailable(tx, repository, workspace); err != nil {

@@ -5,11 +5,12 @@ import WorkspaceApp from "./App.vue";
 import { connectDashboard } from "./remoteDashboard";
 import { navigate, route, href, taskHref } from "./router";
 import AppIcon from "./components/AppIcon.vue";
+import MenuPopover from "./components/MenuPopover.vue";
 import RemoteServicePanel from "./components/RemoteServicePanel.vue";
 import RemoteAccountPanel from "./components/RemoteAccountPanel.vue";
 import ProjectStoragePanel from "./components/ProjectStoragePanel.vue";
 import MaterialsPage from "./pages/MaterialsPage.vue";
-import { refreshRevision, currentUser, notices } from "./api";
+import { refreshRevision, currentUser } from "./api";
 import { stamp, relativeShort } from "./display";
 import { theme, setTheme } from "./theme";
 import { toast, copyText } from "./toast";
@@ -29,16 +30,14 @@ type TaskContext = { status?: string; validity?: string; validity_reasons?: stri
 
 type ClientReport = { client_id: string; actor: string; session_id?: string; runner?: string; cli_version: string; cli_build?: string; skill_version: string; update_policy: string; specification_state: string; hooks?: Record<string, string>; reported_at: string; compatible: boolean };
 const pickerOpen = ref(false), projectSearch = ref("");
-const accountMenu = ref<HTMLElement | null>(null), accountOpen = ref(false);
-const accountTrigger = ref<HTMLButtonElement | null>(null);
-function closeAccount(restoreFocus = false) { accountOpen.value=false;if(restoreFocus) accountTrigger.value?.focus(); }
-async function toggleAccount() { accountOpen.value=!accountOpen.value;pickerOpen.value=false;if(accountOpen.value){await nextTick();accountMenu.value?.querySelector<HTMLElement>(".wb-popover a, .wb-popover button")?.focus();} }
+const accountMenu = ref<InstanceType<typeof MenuPopover> | null>(null);
+function closeAccount() { accountMenu.value?.close(); }
 const ownerRoles: Record<string, string> = { admin: "项目管理员", executor: "执行者", reviewer: "验收者", reader: "只读成员" };
 function connectionText() {
   if (!selected.value) return "";
   return `AEL 项目接入\n项目：${selected.value.name}（${selected.value.id}）\n中心服务：${locationOrigin}\n在已安装 ael 的设备上，于工程目录运行：\nael init --server ${locationOrigin} --remote-project ${selected.value.id}`;
 }
-async function copyConnection() { closeAccount(true); toast(await copyText(connectionText()) ? "已复制项目连接信息" : "浏览器未允许复制，请在项目设置中手动复制"); }
+async function copyConnection() { toast(await copyText(connectionText()) ? "已复制项目连接信息" : "浏览器未允许复制，请在项目设置中手动复制"); }
 async function copyConnectionInfo() { toast(await copyText(connectionText()) ? "已复制接入信息" : "浏览器未允许复制，请手动选择命令"); }
 // Member and token dialogs; the server keeps the only authority over roles.
 const memberDialog = ref<HTMLDialogElement | null>(null), tokenDialog = ref<HTMLDialogElement | null>(null), revokeDialog = ref<HTMLDialogElement | null>(null);
@@ -51,7 +50,7 @@ function closeTokenDialog() { tokenDialog.value?.close(); if (selected.value) de
 async function copyToken() { toast(await copyText(tokenSecret.value) ? "令牌已复制，请保存到安全位置" : "浏览器未允许复制，请手动选择令牌"); }
 async function confirmRevoke(item: Token) { revokeTarget.value = item; await nextTick(); revokeDialog.value?.showModal(); }
 async function doRevoke() { if (!revokeTarget.value) return; await revoke(revokeTarget.value.id); revokeDialog.value?.close(); revokeTarget.value = null; await loadPanel(); }
-function switchTheme() { setTheme(theme.value === "indigo" ? "graphite" : "indigo"); closeAccount(true); }
+function switchTheme() { setTheme(theme.value === "indigo" ? "graphite" : "indigo"); }
 const pickerRoot = ref<HTMLElement | null>(null), pickerInput = ref<HTMLInputElement | null>(null);
 const panelLoading = ref(false), panelError = ref("");
 const projectConfiguration = ref<any>(null), clients = ref<ClientReport[]>([]), serviceInfo = ref<any>(null), serviceInfoAt = ref("");
@@ -65,7 +64,7 @@ const policyNames: Record<string, string> = { notify: "只提示", auto: "自动
 const specificationNames: Record<string, string> = { awaiting_sources: "资料待完善", readable_snapshots_require_checkout_verification: "快照可读，待核对 checkout", checkout_differs_from_server_snapshots: "本机与规范快照有差异", session_prepared: "工具会话已准备" };
 function hookSummary(client: ClientReport) { const states = Object.values(client.hooks || {}); return states.includes("pending_host_trust") ? "Hook 待宿主信任" : states.includes("unsupported_or_unavailable") ? "显式恢复可用" : "未上报 Hook 状态"; }
 async function openPicker() { closeAccount();pickerOpen.value = !pickerOpen.value; if (pickerOpen.value) { projectSearch.value = ""; await nextTick(); pickerInput.value?.focus(); } }
-function closePicker(event: MouseEvent) { if (pickerRoot.value && !pickerRoot.value.contains(event.target as Node)) pickerOpen.value = false;if(accountMenu.value && !accountMenu.value.contains(event.target as Node)) closeAccount(); }
+function closePicker(event: MouseEvent) { if (pickerRoot.value && !pickerRoot.value.contains(event.target as Node)) pickerOpen.value = false;}
 async function chooseProject(id: string) { pickerOpen.value = false; await view(id); }
 async function loadPanel() {
   if (!session.value || !["settings", "service"].includes(panel.value)) return;
@@ -197,7 +196,7 @@ async function refresh() {
 function unreachableProject(id: string) { return "无法打开链接中的项目「" + id + "」：项目不存在、已移除，或当前账号没有访问权限。可以选择下面仍可访问的项目。"; }
 async function copyAccessCheck() {
   const text = "AEL 授权核对\n服务地址：" + location.origin + "\n账号：" + (session.value?.username || "") + "\n当前没有可访问的项目，请服务管理员核对项目成员授权。";
-  try { await navigator.clipboard.writeText(text); notices.value = "已复制授权核对信息。"; } catch { notices.value = "浏览器未允许复制。"; }
+  toast(await copyText(text) ? "已复制授权核对信息" : "浏览器未允许复制，请手动记录服务地址与账号");
 }
 async function restore() {
   try {
@@ -451,18 +450,16 @@ onUnmounted(() => { document.removeEventListener("click", closePicker); if (prev
       <a v-if="session.admin" class="wb-nav-item" :class="{ selected: panel === 'service' }" :href="href('/service')" :aria-current="panel === 'service' ? 'page' : undefined"><AppIcon name="server"/><span>服务管理</span></a>
     </template>
     <template #account>
-      <div ref="accountMenu" class="wb-owner" @keydown.esc.stop.prevent="closeAccount(true)" @focusout="(event) => { if(event.relatedTarget && !accountMenu?.contains(event.relatedTarget as Node)) closeAccount(); }">
-        <button ref="accountTrigger" class="wb-owner-button" aria-label="账户菜单" :aria-expanded="accountOpen" aria-controls="account-options" @click.stop="toggleAccount">
-          <span class="avatar">{{ session.username.slice(0, 1).toUpperCase() }}</span><span><strong>{{ session.username }}</strong><small>{{ ownerRoles[selected.role] || selected.role }}</small></span><span class="spacer"></span><AppIcon name="more" />
-        </button>
-        <div v-if="accountOpen" id="account-options" class="wb-popover owner" role="menu" aria-label="账户操作">
+      <div class="wb-owner">
+        <MenuPopover ref="accountMenu" label="账户菜单" menu-id="account-options" menu-class="owner" trigger-class="wb-owner-button">
+          <template #trigger><span class="avatar">{{ session.username.slice(0, 1).toUpperCase() }}</span><span><strong>{{ session.username }}</strong><small>{{ ownerRoles[selected.role] || selected.role }}</small></span><span class="spacer"></span><AppIcon name="more" /></template>
           <div class="wb-popover-header"><strong>{{ session.username }}</strong><p>{{ ownerRoles[selected.role] || selected.role }}{{ session.admin ? " · 服务管理员" : "" }}</p></div>
-          <a role="menuitem" :href="href('/account')" @click="closeAccount()"><AppIcon name="user" />个人设置</a>
+          <a role="menuitem" :href="href('/account')"><AppIcon name="user" />个人设置</a>
           <button role="menuitem" @click="copyConnection"><AppIcon name="copy" />复制项目连接信息</button>
           <button role="menuitem" @click="switchTheme"><AppIcon name="sun" />{{ theme === "indigo" ? "切换为石墨外观" : "切换为靛蓝外观" }}</button>
           <hr />
-          <button role="menuitem" class="danger" :disabled="busy" @click="logout"><AppIcon name="logout" />{{ busy ? "正在退出…" : "退出登录" }}</button>
-        </div>
+          <button role="menuitem" class="danger" data-keep-open :disabled="busy" @click="logout"><AppIcon name="logout" />{{ busy ? "正在退出…" : "退出登录" }}</button>
+        </MenuPopover>
       </div>
     </template>
     <template #page-actions="{ area }"><a v-if="area === 'materials'" class="button ghost" :href="href('/settings', { section: 'storage' })"><AppIcon name="database" />存储管理</a><a v-else-if="area === 'settings'" class="wb-header-project" :href="href('/settings')"><AppIcon name="folder" />{{ selected.id }}</a><span v-else-if="area === 'service' && session.admin" class="tag">管理员可见</span></template>

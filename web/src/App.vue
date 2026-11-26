@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { api, info, infoError, infoLast, notices, refreshInfo, refreshCurrentView, refreshRevision, remoteProject } from "./api";
 import { pollDashboard, remoteSyncError, remoteSyncAt } from "./remoteDashboard";
 import { route, href } from "./router";
@@ -10,6 +10,7 @@ import KnowledgePage from "./pages/KnowledgePage.vue";
 import EvolutionPage from "./pages/EvolutionPage.vue";
 import SettingsPage from "./pages/SettingsPage.vue";
 import AppIcon from "./components/AppIcon.vue";
+import MenuPopover from "./components/MenuPopover.vue";
 import GlobalSearchDialog from "./components/GlobalSearchDialog.vue";
 import LocalMaterials from "./components/LocalMaterials.vue";
 import SetupGuide from "./components/SetupGuide.vue";
@@ -51,10 +52,6 @@ const attentionLabel = computed(() => (attentionTruncated.value ? "≥" : "") + 
 
 // Local mode has no account; its menu keeps appearance and settings in the
 // same control so the shell looks and behaves the same as remote projects.
-const localMenu = ref(false), localTrigger = ref<HTMLButtonElement | null>(null), localRoot = ref<HTMLElement | null>(null);
-async function toggleLocalMenu() { localMenu.value = !localMenu.value; if (localMenu.value) { await nextTick(); localRoot.value?.querySelector<HTMLElement>(".wb-popover a, .wb-popover button")?.focus(); } }
-function closeLocalMenu(restore = false) { localMenu.value = false; if (restore) localTrigger.value?.focus(); }
-function outside(event: MouseEvent) { if (localRoot.value && !localRoot.value.contains(event.target as Node)) localMenu.value = false; }
 
 function focusMain() { document.getElementById("main-content")?.focus(); }
 function keyboard(e: KeyboardEvent) {
@@ -65,14 +62,14 @@ function keyboard(e: KeyboardEvent) {
   if (e.key === "Escape" && mobileMenu.value) mobileMenu.value = false;
 }
 watch(refreshRevision, () => { if (remoteProject.value) void refreshAttention(); });
-watch(() => route.value.key, () => { mobileMenu.value = false; localMenu.value = false; });
+watch(() => route.value.key, () => { mobileMenu.value = false; });
 let timer: ReturnType<typeof setInterval>;
 onMounted(() => {
   refreshInfo(); refreshAttention(); applyTheme();
-  window.addEventListener("keydown", keyboard); document.addEventListener("click", outside);
+  window.addEventListener("keydown", keyboard);
   timer = setInterval(() => { if (remoteProject.value) void pollDashboard(); else { refreshInfo(); void refreshAttention(); } }, 2000);
 });
-onUnmounted(() => { clearInterval(timer); window.removeEventListener("keydown", keyboard); document.removeEventListener("click", outside); });
+onUnmounted(() => { clearInterval(timer); window.removeEventListener("keydown", keyboard); });
 const navItems = [["tasks", "工作台", "workbench"], ["materials", "资料", "folder"], ["knowledge", "规范与决策", "book"], ["evolution", "项目演进", "evolution"]];
 </script>
 <template>
@@ -106,15 +103,13 @@ const navItems = [["tasks", "工作台", "workbench"], ["materials", "资料", "
         <i></i>{{ infoError ? "连接或数据异常" : remoteProject ? "中心服务 · 已连接" : "本机服务 · v" + (info.service_version || "…") }}
       </div>
       <slot name="account">
-        <div ref="localRoot" class="wb-owner" @keydown.esc.stop.prevent="closeLocalMenu(true)">
-          <button ref="localTrigger" class="wb-owner-button" aria-label="本机菜单" :aria-expanded="localMenu" aria-controls="local-menu" @click.stop="toggleLocalMenu">
-            <span class="avatar">本</span><span><strong>本机</strong><small>本地项目</small></span><span class="spacer"></span><AppIcon name="more" />
-          </button>
-          <div v-if="localMenu" id="local-menu" class="wb-popover owner" role="menu" aria-label="本机菜单">
+        <div class="wb-owner">
+          <MenuPopover label="本机菜单" menu-id="local-menu" menu-class="owner" trigger-class="wb-owner-button">
+            <template #trigger><span class="avatar">本</span><span><strong>本机</strong><small>本地项目</small></span><span class="spacer"></span><AppIcon name="more" /></template>
             <div class="wb-popover-header"><strong>本机</strong><p>本地项目 · v{{ info.service_version || "…" }}</p></div>
-            <a role="menuitem" :href="href('/settings')" @click="closeLocalMenu()"><AppIcon name="settings" />项目设置</a>
+            <a role="menuitem" :href="href('/settings')"><AppIcon name="settings" />项目设置</a>
             <button role="menuitem" @click="setTheme(theme === 'indigo' ? 'graphite' : 'indigo')"><AppIcon name="sun" />{{ theme === "indigo" ? "切换为石墨外观" : "切换为靛蓝外观" }}</button>
-          </div>
+          </MenuPopover>
         </div>
       </slot>
     </div>

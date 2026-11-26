@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -185,12 +186,11 @@ func (p *portableStore) claimRunner(principal standalonePrincipal, role, runnerI
 		if err := reconcileRunnerAttempts(tx, runnerID); err != nil {
 			return nil, err
 		}
-		var active int
-		if err := tx.Row("SELECT count(*) FROM remote_runner_attempts WHERE runner_id=? AND state IN ('running','interrupted')", runnerID).Scan(&active); err != nil {
-			return nil, err
-		}
-		if active > 0 {
-			return nil, errors.New("RUNNER_WIP")
+		if wip, err := runnerWIPError(tx, runnerID, ""); err != nil || wip != nil {
+			if err != nil {
+				return nil, err
+			}
+			return nil, wip
 		}
 		var capabilities []string
 		if json.Unmarshal([]byte(rawCapabilities), &capabilities) != nil {
@@ -226,7 +226,7 @@ func (p *portableStore) claimRunner(principal standalonePrincipal, role, runnerI
 		}
 		var latest string
 		if err := tx.Row("SELECT candidate_id FROM portable_observations WHERE task_id=? ORDER BY rowid DESC LIMIT 1", taskID).Scan(&latest); err != nil || latest != candidateID {
-			return nil, errors.New("CANDIDATE_CHANGED")
+			return nil, core.Error("CANDIDATE_CHANGED", "the context was published for an older observation; publish a context from the latest observed candidate and claim with it")
 		}
 		basis, err := portableContextBasis(tx, input.ContextID, artifacts)
 		if err != nil {
@@ -374,6 +374,12 @@ func (p *portableStore) nextRunner(principal standalonePrincipal, runnerID, pare
 			return err
 		}
 		if active {
+			if wip, err := runnerWIPError(tx, runnerID, ""); err != nil || wip != nil {
+				if err != nil {
+					return err
+				}
+				return wip
+			}
 			return errors.New("RUNNER_WIP")
 		}
 		result, err = p.service.RemoteWorkChoiceTx(tx, core.WorkRequest{Parent: parentID, Runner: runnerID, Workspace: workspace, Capabilities: capabilities})
@@ -512,4 +518,61 @@ func remoteResponsibilityState(task core.Task, attempt core.Attempt) (string, st
 		return connection, "interrupted"
 	}
 	return connection, "active"
+}
+
+// runnerWIPError names the unfinished units that keep a runner busy, so the
+// Agent can finish, interrupt or recover the right attempt without searching
+// every task. It returns nil when no other attempt occupies the runner.
+func runnerWIPError(tx *store.Tx, runnerID, exceptTask string) (error, error) {
+	rows, err := tx.Conn.QueryContext(stdcontext.Background(), "SELECT attempt_id,task_id,state FROM remote_runner_attempts WHERE runner_id=? AND task_id!=? AND state IN ('running','interrupted') ORDER BY rowid", runnerID, exceptTask)
+	if err != nil {
+		return nil, err
+	}
+	type entry struct{ attempt, task, state string }
+	var entries []entry
+	for rows.Next() {
+		var item entry
+		if err = rows.Scan(&item.attempt, &item.task, &item.state); err != nil {
+			break
+		}
+		entries = append(entries, item)
+	}
+	if err == nil {
+		err = rows.Err()
+	}
+	_ = rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	if len(entries) == 0 {
+		return nil, nil
+	}
+	parts := []string{}
+	for i, item := range entries {
+		if i == 3 {
+			parts = append(parts, fmt.Sprintf("and %d more", len(entries)-3))
+			break
+		}
+		unit := ""
+		if task, loadErr := artifactTask(tx, item.task); loadErr == nil {
+			for _, attempt := range task.Attempts {
+				if attempt.ID == item.attempt {
+					unit = attempt.Unit
+					break
+				}
+			}
+		}
+		if unit == "" {
+			unit = "unknown"
+		}
+		parts = append(parts, fmt.Sprintf("task %s attempt %s unit %s (%s)", item.task, item.attempt, unit, item.state))
+	}
+	detail := "runner is occupied by " + strings.Join(parts, "; ") + "; submit, interrupt or recover it before claiming new work"
+	if len(detail) > 500 {
+		detail = fmt.Sprintf("runner is occupied by task %s attempt %s; submit, interrupt or recover it before claiming new work", entries[0].task, entries[0].attempt)
+	}
+	if len(detail) > 500 || strings.ContainsAny(detail, "\r\n\x00") {
+		return errors.New("RUNNER_WIP"), nil
+	}
+	return core.Error("RUNNER_WIP", detail), nil
 }

@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "vue-tsc --noEmit && vite build",
+    "dev": "vite",
+    "dev:mock": "vite --mode mock",
     "test:e2e": "playwright test",
     "test:usability": "playwright test --config=playwright.usability.config.ts"
   },

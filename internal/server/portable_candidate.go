@@ -204,7 +204,7 @@ func portableError(w http.ResponseWriter, err error) {
 		standaloneFail(w, http.StatusInternalServerError, "CANDIDATE_STORAGE_ERROR")
 		return
 	}
-	if detail != "" && len(detail) <= 500 && !strings.ContainsAny(detail, "\r\n\x00") && (code == "KNOWLEDGE_MISSING" || code == "KNOWLEDGE_CONFLICT" || code == "CONTEXT_SOURCE_MISMATCH" || code == "REVISION_CONFLICT" || code == "CANDIDATE_CHANGED" || code == "ARTIFACT_REQUIRED" || code == "RUNNER_INVALID" || strings.HasPrefix(code, "QUEUE_")) {
+	if detail != "" && len(detail) <= 500 && !strings.ContainsAny(detail, "\r\n\x00") && (code == "KNOWLEDGE_MISSING" || code == "KNOWLEDGE_CONFLICT" || code == "CONTEXT_SOURCE_MISMATCH" || code == "REVISION_CONFLICT" || code == "CANDIDATE_CHANGED" || code == "ARTIFACT_REQUIRED" || code == "RUNNER_INVALID" || code == "RUNNER_WIP" || strings.HasPrefix(code, "QUEUE_")) {
 		standaloneReply(w, status, map[string]string{"code": code, "error": code, "detail": detail})
 		return
 	}
