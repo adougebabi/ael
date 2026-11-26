@@ -177,7 +177,7 @@ func protectAssignedWork(tx *store.Tx, task *Task, executor string) error {
 		if err != nil {
 			return err
 		}
-		return Error("RUNNER_WIP", "an unfinished parent-scope assignment must be completed or released first")
+		return Error("RUNNER_WIP", "unfinished parent-scope assignment task "+a.Task+" (runner "+a.Runner+", parent "+a.Parent+") must be completed or released first")
 	}
 	if task.EpicMembership == nil {
 		return nil
@@ -211,7 +211,7 @@ func protectAssignedWork(tx *store.Tx, task *Task, executor string) error {
 				continue
 			}
 			if attempt.Executor == executor || (other.EpicMembership != nil && other.EpicMembership.Parent == task.EpicMembership.Parent) {
-				return Error("RUNNER_WIP", "another unfinished attempt requires explicit parent-scope coordination")
+				return Error("RUNNER_WIP", "unfinished attempt "+attempt.ID+" on task "+other.Definition.ID+" unit "+attempt.Unit+" ("+attempt.Status+") requires explicit parent-scope coordination")
 			}
 		}
 	}

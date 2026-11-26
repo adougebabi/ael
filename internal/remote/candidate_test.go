@@ -352,3 +352,45 @@ func TestPortableCandidateTracksStagedExecutableMode(t *testing.T) {
 		t.Fatalf("restored index did not restore identity: %v", err)
 	}
 }
+
+func TestUncommittedPathsReportsWorkingTreeChanges(t *testing.T) {
+	a, _ := candidateRepos(t)
+	if paths, err := UncommittedPaths(a); err != nil || len(paths) != 0 {
+		t.Fatalf("clean checkout reported changes: %v %v", paths, err)
+	}
+	before, err := CapturePortableCandidate(a, "repo-one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(a, "app.txt"), []byte("changed\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(a, "new file.txt"), []byte("new\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(a, "ignored.log"), []byte("log\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	paths, err := UncommittedPaths(a)
+	if err != nil || strings.Join(paths, ",") != "app.txt,new file.txt" {
+		t.Fatalf("unexpected uncommitted paths: %q %v", paths, err)
+	}
+	dirty, err := CapturePortableCandidate(a, "repo-one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixtureGit(t, a, "add", "--", "app.txt", "new file.txt")
+	fixtureGit(t, a, "commit", "-m", "commit the execute changes")
+	committed, err := CapturePortableCandidate(a, "repo-one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// This is why the execute-step warning exists: committing the same
+	// bytes yields a different candidate than the one that was submitted.
+	if committed.ID == dirty.ID || dirty.ID == before.ID {
+		t.Fatalf("candidate identity unexpectedly stable across commit: before=%s dirty=%s committed=%s", before.ID, dirty.ID, committed.ID)
+	}
+	if paths, err = UncommittedPaths(a); err != nil || len(paths) != 0 {
+		t.Fatalf("committed checkout reported changes: %v %v", paths, err)
+	}
+}

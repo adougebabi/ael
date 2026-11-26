@@ -54,6 +54,10 @@ func TestRemoteRunnerClaimIsOwnedFencedAndIdempotent(t *testing.T) {
 	if w := standaloneRequest(t, f.h, "POST", endpoint, claim, nil, "", f.other, "", "1"); w.Code != http.StatusNotFound {
 		t.Fatalf("cross-project claim: %d", w.Code)
 	}
+	second := map[string]any{"task_id": "task", "context_id": contextID, "expected_revision": f.revision, "operation_id": "claim-again", "idempotency_key": "claim-again"}
+	if w := standaloneRequest(t, f.h, "POST", endpoint, second, nil, "", f.uploader, "", "1"); w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), "RUNNER_WIP") || !strings.Contains(w.Body.String(), attempt["id"].(string)) || !strings.Contains(w.Body.String(), "unit "+attempt["unit"].(string)) {
+		t.Fatalf("RUNNER_WIP did not name the occupying unit: %d %s", w.Code, w.Body.String())
+	}
 	heartbeat := map[string]any{"task_id": "task", "attempt_id": attempt["id"], "token": attempt["token"], "fence": attempt["fence"], "operation_id": "beat", "idempotency_key": "beat"}
 	standaloneJSON(t, standaloneRequest(t, f.h, "POST", "/api/v1/projects/shared/runners/runner-a/heartbeat", heartbeat, nil, "", f.uploader, "", "1"), http.StatusOK)
 	runnerView := standaloneJSON(t, standaloneRequest(t, f.h, "GET", "/api/v1/projects/shared/runners/runner-a", nil, nil, "", f.uploader, "", ""), http.StatusOK)
@@ -262,6 +266,15 @@ func TestRemoteRunnerSubmitsFinalizedAttemptThroughTaskStateMachine(t *testing.T
 				t.Fatal(err)
 			}
 			verifyRevision := core.RemoteRevision(verifyTask)
+			// A verify claim on a different (for example later committed)
+			// candidate must tell the Agent how to return to execute itself.
+			mismatch := service.Store.Write(func(tx *store.Tx) error {
+				_, _, err := service.RemoteClaimTx(tx, core.RemoteClaimInput{TaskID: taskID, ExpectedRevision: verifyRevision, Runner: "runner-a", Workspace: "workspace-a", Candidate: strings.Repeat("b", 64), Token: "fixture-mismatch"})
+				return err
+			})
+			if mismatch == nil || !strings.HasPrefix(mismatch.Error(), "CANDIDATE_CHANGED: ") || !strings.Contains(mismatch.Error(), "--return-to execute --expected-revision "+verifyRevision) || !strings.Contains(mismatch.Error(), candidate.ID[:12]) || len(strings.TrimPrefix(mismatch.Error(), "CANDIDATE_CHANGED: ")) > 500 {
+				t.Fatalf("verify candidate mismatch lacked recovery detail: %v", mismatch)
+			}
 			verifyObservation := map[string]any{"task_id": taskID, "expected_revision": verifyRevision, "checkout_id": "checkout-a", "workspace_id": "workspace-a", "runner_id": "runner-a", "candidate": candidate, "operation_id": "verify-observe", "idempotency_key": "verify-observe"}
 			verifySeen := standaloneJSON(t, standaloneRequest(t, f.h, "POST", "/api/v1/projects/shared/candidates", verifyObservation, nil, "", f.uploader, "", "1"), http.StatusCreated)
 			verifyContext := "context-verify"

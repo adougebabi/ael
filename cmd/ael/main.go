@@ -35,6 +35,13 @@ func main() {
 	}
 	if v != nil {
 		if e = writeOutput(os.Stdout, v, options.has("json"), options.has("verbose")); e != nil {
+			// The server-side write already succeeded; only the report was
+			// lost. Point at the durable receipt instead of implying failure.
+			if result, ok := v.(remoteOutput); ok {
+				if lease, _ := result["lease_file"].(string); lease != "" {
+					e = core.Error("OUTPUT_WRITE_FAILED", "claim accepted and lease saved at "+lease+"; read that file instead of stdout ("+e.Error()+")")
+				}
+			}
 			_ = writeError(os.Stderr, e, options.has("json"))
 			os.Exit(1)
 		}

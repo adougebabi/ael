@@ -461,3 +461,27 @@ func ComparePortableCandidates(before, after PortableCandidate) PortableDiff {
 	sort.Strings(result.Paths)
 	return result
 }
+
+// UncommittedPaths lists working-tree changes relative to HEAD, including
+// untracked files that are not ignored. A candidate captured with such
+// changes cannot be recreated from a commit: committing, amending or
+// stashing them afterwards produces a different candidate ID.
+func UncommittedPaths(root string) ([]string, error) {
+	out, err := portableGit(root, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+	if err != nil {
+		return nil, errors.New("CANDIDATE_GIT_UNAVAILABLE: cannot read working tree status")
+	}
+	paths := []string{}
+	records := strings.Split(string(out), "\x00")
+	for i := 0; i < len(records); i++ {
+		record := records[i]
+		if len(record) < 4 {
+			continue
+		}
+		paths = append(paths, record[3:])
+		if record[0] == 'R' || record[0] == 'C' {
+			i++ // the rename/copy source follows as its own record
+		}
+	}
+	return paths, nil
+}

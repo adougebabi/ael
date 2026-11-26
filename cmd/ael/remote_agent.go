@@ -4,6 +4,7 @@ import (
 	"ael/internal/core"
 	"ael/internal/remote"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -177,7 +178,9 @@ func remoteAgentCommand(cmd string, a args, config, project string, binding remo
 		for _, artifact := range plan.Artifacts {
 			files = append(files, map[string]any{"path": artifact.Path, "size": len(artifact.Data), "mime": artifact.MIME})
 		}
-		return map[string]any{"status": "ready", "validation": "local_candidate_and_artifact_bytes", "candidate_id": plan.Candidate.ID, "artifacts": files}, nil
+		ready := map[string]any{"status": "ready", "validation": "local_candidate_and_artifact_bytes", "candidate_id": plan.Candidate.ID, "artifacts": files}
+		addUncommittedCandidateWarning(ready, project, leaseReceipt)
+		return ready, nil
 	}
 	output, err := reserveAgentClaimOutput(action, a.get("out", ""))
 	if err != nil {
@@ -194,6 +197,9 @@ func remoteAgentCommand(cmd string, a args, config, project string, binding remo
 	}
 	if err == nil && action == "heartbeat" && leaseReceipt != nil {
 		err = updateAgentLease(a.get("lease-file", ""), leaseReceipt, response)
+	}
+	if err == nil && (action == "submit" || action == "observe") && a.get("repository", "") != "" {
+		addUncommittedCandidateWarning(response, project, leaseReceipt)
 	}
 	return finishAgentOutput(response, err, output, a.get("out", ""))
 }
@@ -292,4 +298,31 @@ func queueRequest(a args, action string) (map[string]any, error) {
 		return nil, core.Error("AGENT_REQUEST_INVALID", "queue-transfer requires --to RUNNER and --reason")
 	}
 	return body, nil
+}
+
+// An execute-step candidate taken from uncommitted changes is still valid,
+// but verification is bound to that exact working tree. Committing it later
+// changes HEAD and therefore the candidate, which makes every verify claim
+// fail with CANDIDATE_CHANGED. Warn while the Agent can still act on it.
+func addUncommittedCandidateWarning(response map[string]any, project string, receipt map[string]any) {
+	if response == nil || receipt == nil {
+		return
+	}
+	attempt, _ := receipt["attempt"].(map[string]any)
+	unit, _ := attempt["unit"].(string)
+	if unit == "" || strings.HasPrefix(unit, "check:") {
+		return
+	}
+	paths, err := remote.UncommittedPaths(project)
+	if err != nil || len(paths) == 0 {
+		return
+	}
+	sample := paths
+	if len(sample) > 5 {
+		sample = sample[:5]
+	}
+	warning := fmt.Sprintf("CANDIDATE_UNCOMMITTED: the %s candidate includes %d uncommitted path(s) (%s); verification needs this exact working tree, so do not commit, amend, stash or reset until checks finish. To verify a commit instead, commit first and observe/submit again", unit, len(paths), strings.Join(sample, ", "))
+	warnings, _ := response["warnings"].([]any)
+	response["warnings"] = append(warnings, warning)
+	fmt.Fprintln(os.Stderr, "AEL warning · "+warning)
 }

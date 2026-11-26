@@ -4,6 +4,7 @@ import (
 	"ael/internal/store"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -132,7 +133,7 @@ func (s *Service) RemoteClaimTx(tx *store.Tx, input RemoteClaimInput) (Task, Att
 	unit := task.Step
 	if task.Step == "verify" {
 		if task.Candidate == "" || task.Candidate != input.Candidate {
-			return task, attempt, Error("CANDIDATE_CHANGED", "verify the exact submitted candidate")
+			return task, attempt, Error("CANDIDATE_CHANGED", verifyCandidateChangedDetail(task, input.Candidate))
 		}
 		if task.CandidateWorkspace != "remote:"+input.Runner+"/"+input.Workspace {
 			return task, attempt, Error("REMOTE_WORKSPACE_MISMATCH", "verify in the producing runner workspace")
@@ -397,4 +398,27 @@ func (s *Service) RemoteRecoverTx(tx *store.Tx, input RemoteRecovery) (Task, err
 func remoteCheckFinished(task *Task, check Check) bool {
 	evidence := CurrentEvidence(task, check)
 	return evidence != nil && (evidence.Result == "pass" || (task.Definition.Goal == "report" && evidence.Result == "fail"))
+}
+
+// verifyCandidateChangedDetail tells the claiming Agent which candidate the
+// verify step is bound to and how to leave the deadlock when that exact
+// working tree can no longer be restored (for example after the execute
+// changes were committed, which changes the candidate's HEAD). Returning to
+// execute is an ordinary executor action; it needs no reviewer.
+func verifyCandidateChangedDetail(task Task, observed string) string {
+	short := func(id string) string {
+		if id == "" {
+			return "none"
+		}
+		if len(id) > 12 {
+			return id[:12]
+		}
+		return id
+	}
+	detail := fmt.Sprintf("verify needs submitted candidate %s, claim observed %s; restore that exact tree, or if it cannot be reproduced run: ael resume --task %s --return-to execute --expected-revision %s --operation-id OP --idempotency-key KEY, then re-execute and resubmit",
+		short(task.Candidate), short(observed), task.Definition.ID, RemoteRevision(task))
+	if len(detail) > 500 {
+		detail = "verify the exact submitted candidate; if it cannot be reproduced run ael resume --task ID --return-to execute and resubmit"
+	}
+	return detail
 }
