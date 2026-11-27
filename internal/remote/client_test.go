@@ -77,3 +77,22 @@ func TestOfflineReadIsExplicitlyMarkedAsStaleCache(t *testing.T) {
 		t.Fatalf("another credential received the first user's offline cache: %v", err)
 	}
 }
+
+func TestEpicRefusalDetailReachesAgent(t *testing.T) {
+	project := t.TempDir()
+	config := filepath.Join(t.TempDir(), "config")
+	if err := SaveProfile(config, project, "central", "http://127.0.0.1:7332", "ael_synthetic"); err != nil {
+		t.Fatal(err)
+	}
+	binding := Binding{Schema: 1, Profile: "central", ProjectID: "shared"}
+	client := &http.Client{Transport: transportFunc(func(r *http.Request) (*http.Response, error) {
+		if r.Method == http.MethodGet && r.URL.Path == "/api/v1/meta" {
+			return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"mode":"server","protocol":1,"capabilities":["remote_tasks","remote_integration"]}`))}, nil
+		}
+		return &http.Response{StatusCode: http.StatusConflict, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"code":"EPIC_LEAF_NOT_INCLUDED","detail":"03 docs/llm-prompt-composition.md; lost"}`))}, nil
+	})}
+	_, err := Call(config, project, binding, http.MethodPost, "/tasks/epic/integrate", map[string]string{"operation_id": "op", "idempotency_key": "key"}, client)
+	if err == nil || err.Error() != "EPIC_LEAF_NOT_INCLUDED: 03 docs/llm-prompt-composition.md; lost" {
+		t.Fatalf("integration refusal detail hidden: %v", err)
+	}
+}

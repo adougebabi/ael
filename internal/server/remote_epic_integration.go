@@ -5,6 +5,7 @@ import (
 	"ael/internal/remote"
 	"ael/internal/store"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -87,6 +88,43 @@ func validateRemoteEpicIntegration(tx *store.Tx, parent *core.Task, project stri
 	return nil
 }
 
+// workspacePredecessor finds the accepted result of another required leaf that
+// the leaf's workspace held before the leaf started. Edits made before the
+// execution claim are part of the claimed input, so the claim input alone
+// cannot show that the leaf began from an earlier leaf's result. The
+// workspace observation history can: walking back from the first observation
+// of the claim input, every observation is by this leaf until one shows the
+// workspace holding exactly another required leaf's accepted candidate.
+func workspacePredecessor(tx *store.Tx, leaf, input string, accepted map[string]string) (string, error) {
+	var workspace, repository, created string
+	var row int64
+	if err := tx.Row("SELECT o.workspace_id,r.repository,o.created,o.rowid FROM portable_observations o JOIN remote_runners r ON r.id=o.runner_id WHERE o.task_id=? AND o.candidate_id=? ORDER BY o.created,o.rowid LIMIT 1", leaf, input).Scan(&workspace, &repository, &created, &row); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
+	}
+	rows, err := tx.Conn.QueryContext(context.Background(), "SELECT o.task_id,o.candidate_id FROM portable_observations o JOIN remote_runners r ON r.id=o.runner_id WHERE o.workspace_id=? AND r.repository=? AND (o.created<? OR (o.created=? AND o.rowid<?)) ORDER BY o.created DESC,o.rowid DESC", workspace, repository, created, created, row)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var task, candidate string
+		if err = rows.Scan(&task, &candidate); err != nil {
+			return "", err
+		}
+		if task == leaf {
+			continue
+		}
+		if owner, ok := accepted[candidate]; ok && owner != leaf {
+			return candidate, nil
+		}
+		return "", nil
+	}
+	return "", rows.Err()
+}
+
 func equalIntegrationFiles(left, right map[string]core.CandidateFile) bool {
 	if len(left) != len(right) {
 		return false
@@ -138,6 +176,10 @@ func (p *portableStore) prepareEpicIntegration(principal standalonePrincipal, ta
 		leafOutputs := map[string]map[string]core.RemoteIntegrationOutput{}
 		leafChanges := map[string]core.RemoteIntegrationFiles{}
 		leafLineage := map[string]core.RemoteIntegrationFiles{}
+		leafContinuity := map[string]core.RemoteIntegrationFiles{}
+		leafInputs := map[string]string{}
+		leafResults := map[string]map[string]core.CandidateFile{}
+		acceptedCandidates := map[string]string{}
 		rows, err := tx.Conn.QueryContext(context.Background(), "SELECT body FROM tasks WHERE json_extract(body,'$.epic_membership.parent')=?", taskID)
 		if err != nil {
 			return nil, err
@@ -170,6 +212,8 @@ func (p *portableStore) prepareEpicIntegration(principal standalonePrincipal, ta
 				return nil, err
 			}
 			leafRepositories[leaf.Definition.ID] = manifest.Repository
+			leafResults[leaf.Definition.ID] = leafFiles
+			acceptedCandidates[leaf.Candidate] = leaf.Definition.ID
 			leafOutputs[leaf.Definition.ID] = map[string]core.RemoteIntegrationOutput{}
 			var execution *core.Attempt
 			for _, attempt := range leaf.Attempts {
@@ -211,11 +255,25 @@ func (p *portableStore) prepareEpicIntegration(principal standalonePrincipal, ta
 						return nil, core.Error("EPIC_REPOSITORY_UNVERIFIED", leaf.Definition.ID)
 					}
 					leafLineage[leaf.Definition.ID] = core.RemoteIntegrationFiles{Before: before, After: leafFiles}
+					leafInputs[leaf.Definition.ID] = attempt.Input
 					if len(leafOutputs[leaf.Definition.ID]) == 0 {
 						leafChanges[leaf.Definition.ID] = leafLineage[leaf.Definition.ID]
 					}
 					break
 				}
+			}
+		}
+		for id, input := range leafInputs {
+			before, err := workspacePredecessor(tx, id, input, acceptedCandidates)
+			if err != nil {
+				return nil, err
+			}
+			if before != "" {
+				_, files, err := integrationCandidate(tx, before)
+				if err != nil {
+					return nil, err
+				}
+				leafContinuity[id] = core.RemoteIntegrationFiles{Before: files, After: leafResults[id]}
 			}
 		}
 		impactPath, impactHash := "", ""
@@ -235,7 +293,7 @@ func (p *portableStore) prepareEpicIntegration(principal standalonePrincipal, ta
 		if err != nil {
 			return nil, err
 		}
-		prepared, err := p.service.PrepareRemoteEpicIntegrationTx(tx, taskID, input.ExpectedRevision, core.RemoteIntegrationSnapshot{InputsKnown: snapshotContext["inputs_known"] == true, Candidate: candidateID, Repository: repository, Project: p.project, Head: candidate.Commit, Workspace: "remote:" + runnerID + "/" + workspace, Files: files, LeafRepositories: leafRepositories, LeafOutputs: leafOutputs, LeafFiles: leafChanges, LeafLineage: leafLineage, Basis: basis, ImpactEvidence: impactPath, ImpactHash: impactHash})
+		prepared, err := p.service.PrepareRemoteEpicIntegrationTx(tx, taskID, input.ExpectedRevision, core.RemoteIntegrationSnapshot{InputsKnown: snapshotContext["inputs_known"] == true, Candidate: candidateID, Repository: repository, Project: p.project, Head: candidate.Commit, Workspace: "remote:" + runnerID + "/" + workspace, Files: files, LeafRepositories: leafRepositories, LeafOutputs: leafOutputs, LeafFiles: leafChanges, LeafLineage: leafLineage, LeafContinuity: leafContinuity, Basis: basis, ImpactEvidence: impactPath, ImpactHash: impactHash})
 		if err != nil {
 			return nil, err
 		}

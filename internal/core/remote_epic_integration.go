@@ -22,6 +22,10 @@ type RemoteIntegrationSnapshot struct {
 	// result, including leaves proven by outputs, so a later leaf that started
 	// from an earlier result can explain why the final file differs.
 	LeafLineage map[string]RemoteIntegrationFiles
+	// LeafContinuity starts from another required leaf's accepted result that
+	// the same workspace held before this leaf began, so edits made before the
+	// execution claim still prove which result the leaf built on.
+	LeafContinuity map[string]RemoteIntegrationFiles
 	Basis            []BasisReference
 	ImpactEvidence   string
 	ImpactHash       string
@@ -124,12 +128,17 @@ func (s *Service) PrepareRemoteEpicIntegrationTx(tx *store.Tx, id, revision stri
 	}
 	history := map[string][]leafPathChange{}
 	for _, leaf := range members {
-		files, ok := snapshot.LeafLineage[leaf.Definition.ID]
-		if !leaf.EpicMembership.Required || !acceptedEpicLeaf(parent, leaf) || !ok || snapshot.LeafRepositories[leaf.Definition.ID] != snapshot.Repository {
+		if !leaf.EpicMembership.Required || !acceptedEpicLeaf(parent, leaf) || snapshot.LeafRepositories[leaf.Definition.ID] != snapshot.Repository {
 			continue
 		}
-		for _, change := range candidateChanges(files.Before, files.After) {
-			history[change.Path] = append(history[change.Path], leafPathChange{leaf: leaf.Definition.ID, change: change})
+		for _, edges := range []map[string]RemoteIntegrationFiles{snapshot.LeafLineage, snapshot.LeafContinuity} {
+			files, ok := edges[leaf.Definition.ID]
+			if !ok {
+				continue
+			}
+			for _, change := range candidateChanges(files.Before, files.After) {
+				history[change.Path] = append(history[change.Path], leafPathChange{leaf: leaf.Definition.ID, change: change})
+			}
 		}
 	}
 	finalFile := func(path string) *CandidateFile {
@@ -147,7 +156,7 @@ func (s *Service) PrepareRemoteEpicIntegrationTx(tx *store.Tx, id, revision stri
 			return parent, Error("EPIC_REQUIRED_LEAF_NOT_ACCEPTED", leaf.Definition.ID)
 		}
 		superseded := func(path string, after *CandidateFile) bool {
-			return supersedingLeaves(after, finalFile(path), history[path], map[string]bool{leaf.Definition.ID: true}) != nil
+			return supersedingLeaves(after, finalFile(path), history[path], leaf.Definition.ID) != nil
 		}
 		if snapshot.LeafRepositories[leaf.Definition.ID] != snapshot.Repository {
 			return parent, Error("EPIC_REPOSITORY_UNVERIFIED", leaf.Definition.ID)

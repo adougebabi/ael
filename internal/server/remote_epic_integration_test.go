@@ -5,6 +5,7 @@ import (
 	"ael/internal/store"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -64,5 +65,63 @@ func TestRemoteIntegrationRejectsChangedInventoryAndUnknownWorkspace(t *testing.
 				t.Fatalf("expected %s, got %v", test.code, err)
 			}
 		})
+	}
+}
+
+func TestWorkspacePredecessorUsesObservationHistory(t *testing.T) {
+	f := newArtifactFixture(t)
+	candidate := portableFixtureCandidate(t)
+	standaloneJSON(t, standaloneRequest(t, f.h, "POST", "/api/v1/projects/shared/repositories", map[string]any{"id": "repo-one", "expected_revision": "absent", "operation_id": "repo", "idempotency_key": "repo"}, nil, "", f.uploader, "", "1"), http.StatusCreated)
+	standaloneJSON(t, standaloneRequest(t, f.h, "POST", "/api/v1/projects/shared/candidates", map[string]any{"task_id": "task", "expected_revision": f.revision, "checkout_id": "checkout", "workspace_id": "workspace", "runner_id": "runner", "candidate": candidate, "operation_id": "observe", "idempotency_key": "observe"}, nil, "", f.uploader, "", "1"), http.StatusCreated)
+	service, err := f.s.projectService("shared")
+	if err != nil {
+		t.Fatal(err)
+	}
+	accepted := map[string]string{"c-a": "a", "c-b": "b"}
+	run := func(observations [][3]string) (string, error) {
+		var found string
+		err := service.Store.Write(func(tx *store.Tx) error {
+			for _, statement := range []string{"DELETE FROM portable_observations", "DELETE FROM remote_runners", "INSERT INTO remote_runners(id,actor,workspace_id,checkout_id,repository,version,capabilities,created) VALUES('runner','u','workspace','checkout','repo-one','1','[]','x'),('elsewhere','u','other','checkout','repo-one','1','[]','x')"} {
+				if _, err := tx.Exec(statement); err != nil {
+					return err
+				}
+			}
+			for i, o := range observations {
+				if _, err := tx.Exec("INSERT INTO portable_observations(id,task_id,task_revision,candidate_id,checkout_id,workspace_id,runner_id,inputs_known,actor,created) VALUES(?,?,'r',?,'checkout',?,?,1,'u',?)", "o"+string(rune('a'+i)), o[0], o[1], o[2], map[string]string{"workspace": "runner", "other": "elsewhere"}[o[2]], "2026-11-26T00:00:0"+string(rune('0'+i))+"Z"); err != nil {
+					return err
+				}
+			}
+			var err error
+			found, err = workspacePredecessor(tx, "b", "c-b-input", accepted)
+			return err
+		})
+		return found, err
+	}
+	for _, test := range []struct {
+		name         string
+		observations [][3]string
+		want         string
+	}{
+		{"edits before claim start from earlier leaf", [][3]string{{"a", "c-a", "workspace"}, {"b", "c-b-draft", "workspace"}, {"b", "c-b-input", "workspace"}}, "c-a"},
+		{"parent observing the same result", [][3]string{{"a", "c-a", "workspace"}, {"epic", "c-a", "workspace"}, {"b", "c-b-input", "workspace"}}, "c-a"},
+		{"other task touched the workspace in between", [][3]string{{"a", "c-a", "workspace"}, {"x", "c-x", "workspace"}, {"b", "c-b-input", "workspace"}}, ""},
+		{"earlier result in another workspace", [][3]string{{"a", "c-a", "other"}, {"b", "c-b-input", "workspace"}}, ""},
+		{"no observation of the claim input", [][3]string{{"a", "c-a", "workspace"}}, ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			found, err := run(test.observations)
+			if err != nil || found != test.want {
+				t.Fatalf("predecessor = %q, %v; want %q", found, err, test.want)
+			}
+		})
+	}
+}
+
+func TestEpicRefusalKeepsActionableDetail(t *testing.T) {
+	w := httptest.NewRecorder()
+	standaloneTaskError(w, core.Error("EPIC_LEAF_NOT_INCLUDED", "03 docs/a.md; lost"))
+	var body map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil || w.Code != http.StatusConflict || body["code"] != "EPIC_LEAF_NOT_INCLUDED" || body["detail"] != "03 docs/a.md; lost" {
+		t.Fatalf("detail hidden: %d %s", w.Code, w.Body.String())
 	}
 }

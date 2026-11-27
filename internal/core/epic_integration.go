@@ -463,16 +463,20 @@ type leafPathChange struct {
 // result (its recorded input equals this result) and that the chain of such
 // leaves ends in the current parent content. The superseded leaf is still
 // rechecked on the parent candidate; its own acceptance is never rewritten.
-func supersedingLeaves(from *CandidateFile, final *CandidateFile, history []leafPathChange, seen map[string]bool) []string {
-	for _, next := range history {
-		if seen[next.leaf] || !sameCandidateFile(next.change.Before, from) || sameCandidateFile(next.change.Before, next.change.After) {
+func supersedingLeaves(from *CandidateFile, final *CandidateFile, history []leafPathChange, exclude string) []string {
+	return supersedingChain(from, final, history, exclude, make([]bool, len(history)))
+}
+
+func supersedingChain(from *CandidateFile, final *CandidateFile, history []leafPathChange, exclude string, seen []bool) []string {
+	for i, next := range history {
+		if seen[i] || next.leaf == exclude || !sameCandidateFile(next.change.Before, from) || sameCandidateFile(next.change.Before, next.change.After) {
 			continue
 		}
-		seen[next.leaf] = true
+		seen[i] = true
 		if sameCandidateFile(next.change.After, final) {
 			return []string{next.leaf}
 		}
-		if chain := supersedingLeaves(next.change.After, final, history, seen); chain != nil {
+		if chain := supersedingChain(next.change.After, final, history, exclude, seen); chain != nil {
 			return append([]string{next.leaf}, chain...)
 		}
 	}
@@ -627,7 +631,7 @@ func integratedLeaves(parent Task, members []Task, snapshot candidateSnapshot, i
 					}
 				}
 				if own, ok := ownChanges[change.Path]; ok && owners[leaf.Definition.ID] {
-					if chain := supersedingLeaves(own.After, change.After, history[change.Path], map[string]bool{leaf.Definition.ID: true}); chain != nil {
+					if chain := supersedingLeaves(own.After, change.After, history[change.Path], leaf.Definition.ID); chain != nil {
 						// A later accepted leaf demonstrably built on this result;
 						// the content is re-proven by the mapped parent recheck.
 						for _, id := range chain {
