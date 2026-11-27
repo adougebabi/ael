@@ -80,7 +80,7 @@ func (s *Service) remoteParentWorkTx(tx *store.Tx, request WorkRequest, parent *
 			}
 		}
 		if EffectiveCheckMethod(check) == "human" {
-			return workStopped(request, "wait_human", "a current-candidate human conclusion is required", parent, unit), nil
+			return workStopped(request, "wait_human", "a current-candidate human conclusion is required; "+humanWaitReason(*parent, check.ID), parent, unit), nil
 		}
 		return WorkResult{Action: "ready", Checkpoint: WorkCheckpoint{Parent: request.Parent, Runner: request.Runner, Task: parent.Definition.ID, Step: "verify", Unit: unit, Revision: parent.Definition.Revision, PlanRevision: parent.Plan.Revision, At: time.Now().UTC()}, stateHash: taskStateHash(*parent)}, nil
 	}

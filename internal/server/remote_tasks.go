@@ -259,6 +259,10 @@ func (h *standaloneHandler) remoteTasks(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	allowed := map[string]bool{"reconcile-import": true, "edit": true, "pause": true, "cancel": true, "resume": true, "link": true, "confirm": true}
+	if len(parts) == 2 && parts[1] == "review-brief" && r.Method == http.MethodPost {
+		h.remoteReviewBrief(w, r, principal, project, parts[0], service)
+		return
+	}
 	if len(parts) == 2 && parts[1] == "review-failure" && r.Method == http.MethodPost {
 		h.remoteFailureReview(w, r, principal, project, parts[0], service)
 		return

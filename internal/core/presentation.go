@@ -35,8 +35,9 @@ type CheckAccess struct {
 	Reason             string `json:"reason,omitempty"`
 }
 type PendingHumanReview struct {
-	Check  string   `json:"check"`
-	Covers []string `json:"covers"`
+	Check  string       `json:"check"`
+	Covers []string     `json:"covers"`
+	Brief  *ReviewBrief `json:"brief,omitempty"`
 }
 
 // EffectiveCheckMethod preserves the original explicit method. Only legacy
@@ -213,7 +214,7 @@ func (s *Service) summarize(n Next, includeEpic bool) (TaskSummary, error) {
 	}
 	for _, c := range t.Definition.Checks {
 		if ReviewAccess(n, c).CanReview {
-			r.ManualReviews = append(r.ManualReviews, PendingHumanReview{Check: c.ID, Covers: c.Covers})
+			r.ManualReviews = append(r.ManualReviews, PendingHumanReview{Check: c.ID, Covers: c.Covers, Brief: CurrentReviewBrief(*t, c.ID)})
 		}
 		if c.Required {
 			r.Checks.Required++

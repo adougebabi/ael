@@ -342,7 +342,7 @@ export function workFocus(s:any) {
  if(s?.next_action==='wait_children')return '等待子任务处理，剩余工作见下方';
  if(s?.next_action==='wait_integration')return '子任务条件已满足，父级仍待集成与整体验收';
  if(s?.next_action==='repair')return '待修复：'+(p.reason || p.latest || '具体失败点请查看原检查记录');
- if(s?.manual_reviews?.length)return '需要判断：'+[...new Set<string>(s.manual_reviews.flatMap((c:any)=>c.covers?.length ? c.covers : [c.check]))].join('；');
+ if(s?.manual_reviews?.length){const briefs=s.manual_reviews.map((c:any)=>c.brief?.summary).filter(Boolean);return briefs.length?'请你判断：'+briefs.join('；'):'需要判断（执行者未说明审核内容）：'+[...new Set<string>(s.manual_reviews.flatMap((c:any)=>c.covers?.length ? c.covers : [c.check]))].join('；');}
  if(s?.running && h.no_progress)return (h.current_work || '已有执行责任')+'；最近上报后运行情况待核实';
  if(s?.running)return h.current_work || p.latest || '已接手，尚未回报具体工作';
  if(p.latest)return p.latest;

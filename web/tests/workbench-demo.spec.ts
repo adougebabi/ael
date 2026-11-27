@@ -152,6 +152,15 @@ test("切片3 验收：同处查看、只提交当前检查、反馈回到修复
   // Cards show a thumbnail only when the task has a current-candidate image.
   for (const card of await page.locator(".wb-attention-card").all()) if (await card.locator(".wb-attention-image").count()) await expect(card.locator("img")).toBeVisible();
   await shot(page, "s3-workbench-attention");
+  // Cards say what to decide when the executor wrote a brief, and say plainly
+  // when it did not.
+  await expect(page.locator('.wb-task-row[data-task="account-menu"]')).toContainText("请你判断：确认只用键盘就能打开、浏览和退出账户菜单");
+  await expect(page.locator('.wb-task-row[data-task="evidence-review"]')).toContainText("执行者未说明审核内容");
+  await go(page, "tasks?review=evidence-review");
+  const missing = page.getByRole("dialog", { name: "查看并验收" });
+  await expect(missing.locator(".wb-brief.missing")).toContainText("执行者还没有说明要审核什么");
+  await expect(missing.locator(".wb-brief.missing")).toContainText("错误提示与输入框对齐");
+  await missing.getByRole("button", { name: "稍后处理" }).click();
   await go(page, "tasks?review=account-menu");
   const review = page.getByRole("dialog", { name: "查看并验收" });
   await expect(review).toContainText("2 项人工检查");
@@ -180,6 +189,16 @@ test("切片3 验收：同处查看、只提交当前检查、反馈回到修复
   expect(state.evidence.some((e: any) => e.check === "keyboard")).toBe(false);
   expect(state.status).toBe("open");
   await review.getByRole("button", { name: "keyboard", exact: true }).click();
+  const brief = review.locator(".wb-brief");
+  await expect(brief).toContainText("确认只用键盘就能打开、浏览和退出账户菜单");
+  await expect(brief).toContainText("怎么查看");
+  await expect(brief).toContainText("关闭后焦点回到头像按钮");
+  await expect(brief.locator(".wb-brief-thumb img")).toBeVisible();
+  await shot(page, "s3-review-brief");
+  await brief.locator(".wb-brief-thumb").first().click();
+  const briefPreview = page.getByRole("dialog", { name: "account-after.png" });
+  await expect(briefPreview.locator("img.wb-preview-image")).toBeVisible();
+  await page.keyboard.press("Escape");
   await review.getByRole("button", { name: "需要调整" }).click();
   await review.getByLabel("具体问题").fill("菜单关闭后焦点没有回到 owner 按钮");
   await review.getByRole("button", { name: "提交反馈" }).click();

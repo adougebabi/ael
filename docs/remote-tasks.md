@@ -119,6 +119,8 @@ POST `/api/v1/projects/ID/findings` 复用 context 检查报告事务和当前�
 
 项目 reviewer/admin 登录中央 Dashboard 后，可在任务“检查与验收”中记录人工意见或对声明为 human 的检查提交 pass/fail/blocked。记录人来自登录身份。正式提交绑定显示的候选、定义和计划，包含实际证据、观察及失败/阻塞恢复条件；其余必要检查继续参与门禁。普通 Agent 令牌不能提交人工裁定。
 
+执行者在人工检查前用 `task review-brief`（POST `/api/v1/projects/PROJECT/tasks/ID/review-brief`）写审核说明：一句话要判断什么、改了什么、怎么查看、重点看什么，以及当前候选上已上传的附件 ID。说明绑定写入时的当前候选，在工作台卡片、任务列表和验收弹窗中置顶显示，截图以缩略图分批展示；候选变化后标为过期。未写说明时页面明确提示“执行者还没有说明要审核什么”，只展示验收条件和提交说明。审核说明不记录结论，不影响门禁。
+
 图片比较从明确选择基准和实际图开始，可并排、缩放、叠加、定位及下载中央原件。图像由外部客户端通过原 artifact upload 上传。未知基准保持待选择，来源、上传者和候选可追溯；发现报告携带的页面、视口、环境及交互证据一同展示。候选变化时保留输入和选择，重新读取后须再次确认。只有明确相同版本的当前检查会得到正式结论。
 
 会话 API 为 POST `/api/v1/projects/ID/reviews`。请求字段为 action（review_result、review_pending、review_confirm、review_resume）、id、unit、reason、recovery、result、artifacts、candidate、revision、plan_revision、request_key，可附 review_note_id 和 comparison（baseline、actual 中央附件 ID）。executor 兼容旧表单字段，服务端始终使用实际会话身份。相同请求和 request_key 可恢复同一回执，修改内容须用新键。原始图片与比较来源在正式证据中保存。读取和上传未完成状态分别由 Dashboard 的 review-evidence 与原附件接口投影。

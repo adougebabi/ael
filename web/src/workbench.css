@@ -518,6 +518,24 @@ details.wb-disclosure[open] > summary::before { content: "−"; }
 .wb-review-head svg { width: 17px; height: 17px; color: var(--accent); }
 .wb-review-head strong { font-size: 14px; font-weight: 600; }
 .wb-review-body { padding: 19px; }
+/* Review brief: what the reviewer decides, written by the executor. */
+.wb-brief { margin-bottom: 16px; }
+.wb-brief-eyebrow { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--accent); margin: 0 0 6px; }
+.wb-brief-eyebrow svg { width: 14px; height: 14px; }
+.wb-brief.missing .wb-brief-eyebrow { color: var(--warn); }
+.wb-brief.missing { padding: 12px 14px; border-radius: 8px; background: var(--warn-soft); }
+.wb-brief-summary { font-size: 15px; font-weight: 600; line-height: 1.6; margin: 0 0 8px; color: var(--ink); }
+.wb-brief-changes { font-size: 14px; line-height: 1.7; margin: 0 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); }
+.wb-brief-block { margin-top: 12px; }
+.wb-brief-block h4 { font-size: 13px; font-weight: 600; margin: 0 0 6px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.wb-brief-block h4 small { font-weight: 400; }
+.wb-brief-block ol, .wb-brief-block ul { margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+.wb-brief-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-bottom: 8px; }
+button.wb-brief-thumb { display: flex; flex-direction: column; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); cursor: zoom-in; min-width: 0; text-align: left; }
+.wb-brief-thumb img, .wb-brief-thumb > span { display: block; width: 100%; height: 132px; object-fit: contain; object-position: top; border-radius: 5px; background: var(--bg); font-size: 12px; }
+.wb-brief-thumb > span { display: grid; place-items: center; }
+.wb-brief-thumb small { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wb-brief-meta { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
 .wb-review-question { font-size: 15px; font-weight: 550; line-height: 1.7; margin-bottom: 15px; }
 button.wb-review-image { width: 100%; max-width: 100%; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #f6f6fb; display: block; padding: 0; max-height: 290px; min-height: 120px; cursor: zoom-in; }
 .wb-inline-review.compact button.wb-review-image { max-height: 420px; }

@@ -4,6 +4,7 @@ import { api, ApiError, params, uploadReviewImage, remoteProject } from "../api"
 import { goalLabel, label, nextAction, readableError, stamp } from "../display";
 import { navigate } from "../router";
 import AppIcon from "./AppIcon.vue";
+import ReviewBriefView from "./ReviewBriefView.vue";
 import EvidenceComparison from "./EvidenceComparison.vue";
 import { readReviewDraft, writeReviewDraft, clearReviewDraft, readPriorWork, clearPriorWork } from "../reviewDraft";
 
@@ -306,6 +307,7 @@ async function send(payload: any) {
       <p v-if="loading" role="status">正在读取当前候选和检查…</p>
       <template v-else-if="snapshot && !receipt">
         <div class="candidate-bar"><AppIcon name="lock"/><span>{{ pendingReview ? '待确认提交的候选' : '当前候选' }} <strong :title="pendingReview?.candidate || snapshot.task.candidate">{{ (pendingReview?.candidate || snapshot.task.candidate)?.slice(0, 12) || "尚未生成" }}</strong> · 定义修订 {{ pendingReview?.revision || snapshot.definition_revision }} · 计划修订 {{ pendingReview?.plan_revision || snapshot.plan_revision }}</span><small>{{ selectingCheck ? '请选择具体检查' : checkId ? '本次操作：检查 ' + checkId : '本次操作：任务级人工意见' }}</small></div>
+        <ReviewBriefView v-if="checkId && !selectingCheck" :snapshot="snapshot" :check-id="checkId" :objects="remoteEvidence" />
         <p v-if="candidateState === 'checking' && !pendingReview" class="alert" role="status">{{ remoteProject ? '正在核对中央候选与客户端后续观察…' : '正在核对工作区是否仍与验收候选一致…' }}</p>
         <div v-if="candidateState === 'changed' && !pendingReview" class="alert" role="alert">{{ remoteProject ? '中央候选与后续上报不一致，请由执行者核对实施结果并提交当前候选，再进行人工验收；你的输入会保留。' : '工作区在生成候选后发生了变化，当前候选及其检查结果需要重新核对。请由执行者重新提交实施结果并生成候选，再进行人工验收；你的输入会保留。' }}</div>
         <div v-if="candidateState === 'error' && !pendingReview" class="alert" role="alert">无法核对当前候选，请重新读取后再验收。<button type="button" @click="reloadVersion">重新读取</button></div>

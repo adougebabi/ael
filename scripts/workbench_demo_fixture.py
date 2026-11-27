@@ -290,6 +290,18 @@ for (const [file,title,accent] of SHOTS) {await page.setContent('<!doctype html>
     execute('a', 'account-menu', '菜单层级已整理，等待确认新版交互')
     before = upload_context('b', 'account-menu', out / 'account-before.png', 'explicit-design-reference; previous version')
     after = upload_context('a', 'account-menu', out / 'account-after.png', 'actual-host-render; viewport=960x600; page=/account')
+    # The executor explains what the keyboard review is about; visual keeps no
+    # brief so both presentations stay covered.
+    brief = out / 'keyboard-brief.json'
+    brief.write_text(json.dumps({'summary': '确认只用键盘就能打开、浏览和退出账户菜单',
+                                 'changes': '菜单改为原生按钮加弹出层，Esc 关闭后焦点回到头像按钮。',
+                                 'steps': ['在 /account 页按 Tab 移到右上角头像，按 Enter 打开', '用方向键浏览菜单项，再按 Esc'],
+                                 'focus': ['关闭后焦点回到头像按钮', '焦点轮廓清楚可见'],
+                                 'evidence': [after]}, ensure_ascii=False))
+    revision = cli('a', 'task', 'show', '--task', 'account-menu')['revision']
+    key = 'brief-' + str(next(serial))
+    cli('a', 'task', 'review-brief', '--task', 'account-menu', '--check', 'keyboard', '--file', str(brief),
+        '--expected-revision', revision, '--operation-id', key, '--idempotency-key', key)
 
     # Direct observation without attachments, and an explicit screenshot demand.
     create('copy-review', '调整空状态提示文案', 'improvement', checks=[{'id': 'wording', 'kind': 'review', 'method': 'human', 'covers': ['空状态提示读起来清楚'], 'required': True}],

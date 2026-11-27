@@ -6,6 +6,7 @@ import { readReviewDraft, writeReviewDraft, clearReviewDraft } from '../reviewDr
 import { snapshotResults, mergeResultMetadata, scopedResults, readResult } from '../results';
 import { candidateMaterials, isImage, type Material } from '../materials';
 import MaterialPreview from './MaterialPreview.vue';
+import ReviewBriefView from './ReviewBriefView.vue';
 import AppIcon from './AppIcon.vue';
 
 // One human check, reviewed where its result is visible. Submitting records
@@ -44,7 +45,9 @@ const evidenceMissing = computed(() => !!access.value.evidence_required && !chec
 // Required specific evidence is attached in the full review record; a quick
 // direct observation never stands in for it.
 const evidenceRequired = computed(() => !!access.value.evidence_required);
-const question = computed(() => props.check.covers?.join('；') || props.check.id);
+// A current brief carries its own materials; the generic attachment preview
+// below is only a fallback when the executor did not point at any.
+const briefEvidence = computed(() => (task.value.review_briefs || []).some((b: any) => b.check === props.check.id && task.value.candidate && b.candidate === task.value.candidate && b.evidence?.length));
 const otherOpen = computed(() => (task.value.definition.checks || []).filter((c: any) => c.required !== false && c.id !== props.check.id && props.snapshot.current_checks?.[c.id]?.result !== 'pass'));
 
 const imageSrc = ref(''), imageError = ref('');
@@ -125,10 +128,12 @@ const tag = computed(() => recorded.value?.result === 'pass' ? ['已通过', 'do
   <section class="wb-inline-review" :class="{ compact }" :data-check="check.id" :aria-label="'人工检查 ' + check.id">
     <div class="wb-review-head"><AppIcon name="user" /><strong>{{ head }}</strong><span class="wb-review-check">{{ check.id }} · {{ label(check.kind) }}</span><span class="spacer"></span><span class="tag" :class="tag[1]">{{ tag[0] }}</span></div>
     <div class="wb-review-body">
-      <p class="wb-review-question">{{ question }}</p>
+      <ReviewBriefView :snapshot="snapshot" :check-id="check.id" :objects="objects" />
+      <template v-if="!briefEvidence">
       <button v-if="shownImage" class="wb-review-image" :aria-label="'放大查看 ' + shownImage.name" @click="openPreview(shownImage)"><img v-if="imageSrc && !imageError" :src="imageSrc" :alt="shownImage.name" @error="imageError = '图片原件损坏或无法显示'" /><span v-else class="muted">{{ imageError || '正在读取图片…' }}</span></button>
       <div v-if="otherFiles.length" class="wb-review-files"><button v-for="m in otherFiles" :key="m.ref" class="small" @click="openPreview(m)"><AppIcon :name="isImage(m) ? 'image' : 'file'" />{{ m.name }}</button></div>
       <p v-if="!shownImage && !otherFiles.length" class="wb-review-empty">暂无附件。{{ evidenceMissing ? '本项要求专项证据（' + (check.artifacts?.join('、') || (access.screenshot_required ? '真实截图' : '约定材料')) + '），当前尚未关联所需材料；需由执行者补充后再验收。' : eligible ? '可以直接观察实际结果；这项检查不要求额外上传附件。' : '进入验证阶段后，再由对应责任方核对这一条件。' }}</p>
+      </template>
       <p v-if="evidenceRequired && !evidenceMissing" class="wb-review-help">本项要求专项证据：请在完整验收记录中关联上面的材料后确认。</p>
       <p class="wb-review-help"><template v-if="shownImage && !checkFiles.length">图片来自本任务当前候选的上传，供查看实际效果；确认通过记录为具名直接观察，需要附图时用「更多选项」。</template>仅对当前检查作出判断，其他必要条件继续独立保留。</p>
       <p v-if="recorded" class="wb-review-recorded">已记录：{{ label(recorded.result) }} · {{ recorded.source?.replace('human:', '') || '记录人未知' }}<template v-if="recorded.reason"> · {{ recorded.reason }}</template></p>

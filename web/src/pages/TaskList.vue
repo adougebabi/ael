@@ -89,7 +89,11 @@ function segments(row: any) { const total = Math.min(row.children, 12); const do
 function attentionKind(kind: string) { return ({ human: '人工观察', decision: '需要决定', history: '历史核对' } as Record<string, string>)[kind] || '需要处理'; }
 function attentionQuestion(item: any) {
   const t = item.task;
-  if (item.kind === 'human') return [...new Set<string>((t.manual_reviews || []).flatMap((c: any) => c.covers?.length ? c.covers : [c.check]))].join('；') || '检查内容未记录';
+  if (item.kind === 'human') {
+    const briefs = (t.manual_reviews || []).map((c: any) => c.brief?.summary).filter(Boolean);
+    if (briefs.length) return briefs.join('；');
+    return '执行者尚未说明要审核什么 · 验收条件：' + ([...new Set<string>((t.manual_reviews || []).flatMap((c: any) => c.covers?.length ? c.covers : [c.check]))].join('；') || '未记录');
+  }
   if (item.kind === 'history') return historyReviewText(workPresentation(t).reason);
   return workPresentation(t).reason || blockerText(t.blocking_reasons?.[0] || '审阅当前定义、计划和实际依据后作出决定。');
 }

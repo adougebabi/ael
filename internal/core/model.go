@@ -212,6 +212,7 @@ type Delivery struct {
 	Status      string `json:"status" yaml:"status"`
 }
 type Task struct {
+	ReviewBriefs        []ReviewBrief           `json:"review_briefs,omitempty"`
 	UnboundArtifacts    []string                `json:"unbound_artifacts,omitempty"`
 	ExecutionBase       *CandidateBaseline      `json:"execution_base,omitempty"`
 	Integration         *EpicIntegration        `json:"integration,omitempty"`

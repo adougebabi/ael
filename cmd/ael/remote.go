@@ -117,6 +117,7 @@ func remoteCommand(cmd string, a args, binding remote.Binding) (any, error) {
 		"task integrate":        {"task", "context", "impact-artifact", "external-file", "expected-revision", "operation-id", "idempotency-key"},
 		"task reconcile-import": {"task", "context", "reason", "start", "expected-revision", "operation-id", "idempotency-key"},
 		"task review-failure":   {"task", "file", "expected-revision", "operation-id", "idempotency-key"},
+		"task review-brief":     {"task", "check", "file", "expected-revision", "operation-id", "idempotency-key"},
 		"operation show":        {"idempotency-key"},
 		"artifact upload":       {"context", "lease-file", "task", "file", "mime", "source", "attempt", "candidate", "operation-id", "idempotency-key", "expected-revision"},
 		"artifact list":         {"task"}, "artifact show": {"artifact"}, "artifact download": {"artifact", "out"},
@@ -276,6 +277,18 @@ func remoteCommand(cmd string, a args, binding remote.Binding) (any, error) {
 			integration["external"] = external
 		}
 		payload = integration
+	case "task review-brief":
+		brief, err := reviewBriefInput(a)
+		if err != nil {
+			return nil, err
+		}
+		op, key, expected := a.get("operation-id", ""), a.get("idempotency-key", ""), a.get("expected-revision", "")
+		if op == "" || key == "" || expected == "" {
+			return nil, core.Error("REMOTE_OPERATION_REQUIRED", "provide --operation-id, --idempotency-key and --expected-revision")
+		}
+		method = http.MethodPost
+		path = "/tasks/" + url.PathEscape(id) + "/review-brief"
+		payload = map[string]any{"brief": brief, "expected_revision": expected, "operation_id": op, "idempotency_key": key}
 	case "task review-failure":
 		var review core.FailureReview
 		if err = input(a.get("file", ""), &review); err != nil {

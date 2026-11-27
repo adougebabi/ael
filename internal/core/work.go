@@ -603,7 +603,7 @@ func (s *Service) chooseWorkTx(tx *store.Tx, req WorkRequest) (WorkResult, error
 			}
 			unit = check.ID
 			if len(check.Command) == 0 && check.Method != "model" && check.Method != "scenario" {
-				return workStopped(req, "wait_human", "check requires a human decision: "+check.ID, t, unit), nil
+				return workStopped(req, "wait_human", humanWaitReason(*t, check.ID), t, unit), nil
 			}
 			if len(check.Command) == 0 && !slices.Contains(req.Capabilities, check.Method) {
 				return workStopped(req, "wait_capability", "runner lacks check capability: "+check.Method, t, unit), nil
