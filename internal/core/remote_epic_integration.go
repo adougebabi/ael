@@ -159,20 +159,8 @@ func (s *Service) PrepareRemoteEpicIntegrationTx(tx *store.Tx, id, revision stri
 		if base < 0 || !members[base].EpicMembership.Required || !acceptedEpicLeaf(parent, members[base]) || snapshot.LeafRepositories[snapshot.External.Base] != snapshot.Repository || snapshot.ExternalBaseFiles == nil {
 			return parent, Error("EPIC_EXTERNAL_INVALID", "base must be an accepted required leaf of this parent in the same repository: "+snapshot.External.Base)
 		}
-		external = &ExternalIntegrationRecord{ExternalIntegration: *snapshot.External, BaseCandidate: members[base].Candidate, Changes: []CandidateChange{}}
-		external.Sources = slices.Clone(snapshot.External.Sources)
-		for _, change := range candidateChanges(snapshot.ExternalBaseFiles, snapshot.Files) {
-			explained := false
-			for _, leafChange := range history[change.Path] {
-				explained = explained || sameCandidateFile(leafChange.change.After, change.After)
-			}
-			if !explained && change.Path != snapshot.ImpactEvidence {
-				external.Changes = append(external.Changes, change)
-			}
-			history[change.Path] = append(history[change.Path], leafPathChange{leaf: externalIntegrationLeaf, change: change})
-		}
-		if len(external.Changes) == 0 {
-			return parent, Error("EPIC_EXTERNAL_UNUSED", "the final candidate has no change outside this parent's leaves since "+snapshot.External.Base)
+		if external, err = externalChange(snapshot.External, members[base].Candidate, snapshot.ExternalBaseFiles, snapshot.Files, history, snapshot.ImpactEvidence); err != nil {
+			return parent, err
 		}
 	}
 	finalFile := func(path string) *CandidateFile {

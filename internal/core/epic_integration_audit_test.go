@@ -756,3 +756,76 @@ func TestRewrittenLeafChangeClosesThroughParentRecheck(t *testing.T) {
 		}
 	}
 }
+
+// Work merged after the last accepted leaf (another task, a merge, a
+// regenerated index) is declared once at integration instead of being
+// disguised as a retroactive leaf.
+func TestLocalIntegrationDeclaresChangesOutsideParent(t *testing.T) {
+	s := fixture(t)
+	impact := integrationImpactFixture(t, s)
+	parent := create(t, s, core.Definition{ID: "epic", Title: "外部改动", Type: "epic", Goal: "verified", IntegrationImpact: impact, Acceptance: []string{"整体"}, Checks: []core.Check{parentCheck("integration", "true", "a", "b"), parentCheck("recheck", "test -s shared.txt", "a", "b")}})
+	originals := map[string]core.Task{}
+	for _, id := range []string{"a", "b"} {
+		create(t, s, core.Definition{ID: id, Parent: parent, Title: id, Type: "bug", Goal: "verified", Scope: []string{"shared.txt"}, Acceptance: []string{"文件非空"}, Checks: []core.Check{{ID: "unit", Kind: "functional", Method: "command", Command: []string{"sh", "-c", "test -s shared.txt"}, Covers: []string{"文件非空"}, Required: true}}})
+		step(t, s, id, "fixture-"+id)
+		claim, err := s.Claim(id, "", "fixture-"+id, "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = os.WriteFile(filepath.Join(s.Root, "shared.txt"), []byte(strings.ToUpper(id)+" rewritten\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = s.Submit(core.Submission{Task: id, Attempt: claim.Attempt.ID, Token: claim.Attempt.Token, Key: core.ID("external-"), Result: core.StepResult{Status: "pass", Summary: "顺序改写", Artifacts: []string{"shared.txt"}}}); err != nil {
+			t.Fatal(err)
+		}
+		n, err := s.Verify(id, "unit", "checker-"+id)
+		if err != nil || n.Task.Status != "completed" {
+			t.Fatalf("leaf %s: %+v %v", id, n, err)
+		}
+		originals[id] = *n.Task
+	}
+	for name, content := range map[string]string{"shared.txt": "B rewritten\nmobile layout\n", "mobile.txt": "merged mobile work\n"} {
+		if err := os.WriteFile(filepath.Join(s.Root, name), []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.PrepareEpicIntegration(parent); err == nil || !strings.Contains(err.Error(), "--external-file") {
+		t.Fatalf("outside change was not refused with the declaration as next step: %v", err)
+	}
+	sources := []string{"merge 05790dc2 (mobile)"}
+	if _, err := s.PrepareEpicIntegrationWith(parent, &core.ExternalIntegration{Base: "a", Sources: sources, Reason: "too early"}); err == nil || !strings.HasPrefix(err.Error(), "EPIC_LEAF_NOT_INCLUDED: b: ") {
+		t.Fatalf("an earlier base hid the later leaf's replaced work: %v", err)
+	}
+	if _, err := s.PrepareEpicIntegrationWith(parent, &core.ExternalIntegration{Base: "epic", Sources: sources, Reason: "x"}); err == nil || !strings.Contains(err.Error(), "EPIC_EXTERNAL_INVALID") {
+		t.Fatalf("non-leaf base accepted: %v", err)
+	}
+	if _, err := s.PrepareEpicIntegrationWith(parent, &core.ExternalIntegration{Base: "b", Sources: sources, Reason: "merged after b was accepted"}); err != nil {
+		t.Fatalf("declared outside change still blocks integration: %v", err)
+	}
+	prepared, err := s.Get(parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := prepared.Integration.External
+	if record == nil || record.Base != "b" || record.BaseCandidate != originals["b"].Candidate || len(record.Changes) != 2 || record.Changes[0].Path != "mobile.txt" || record.Changes[1].Path != "shared.txt" {
+		t.Fatalf("outside changes were not recorded: %+v", record)
+	}
+	for _, leaf := range prepared.Integration.Leaves {
+		if len(leaf.Rechecks) == 0 {
+			t.Fatalf("leaf %s accepted without recheck: %+v", leaf.ID, leaf)
+		}
+	}
+	if _, err = s.Verify(parent, "integration", "checker"); err != nil {
+		t.Fatal(err)
+	}
+	n, err := s.Verify(parent, "recheck", "checker")
+	if err != nil || n.Task.Status != "completed" {
+		t.Fatalf("parent did not close: %+v %v", n, err)
+	}
+	for id, original := range originals {
+		after, err := s.Get(id)
+		if err != nil || after.Status != "completed" || !after.Completed.Equal(*original.Completed) || len(after.Attempts) != len(original.Attempts) {
+			t.Fatalf("leaf %s was reopened or rewritten: %+v %v", id, after, err)
+		}
+	}
+}

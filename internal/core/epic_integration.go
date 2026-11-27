@@ -95,6 +95,28 @@ func validExternalIntegration(external *ExternalIntegration) error {
 	return nil
 }
 
+// externalChange links the base leaf's accepted files to the final candidate
+// as one change made outside the epic and records every path it produced
+// that no leaf result explains. history must already hold the leaf changes.
+func externalChange(external *ExternalIntegration, baseCandidate string, baseFiles, final map[string]CandidateFile, history map[string][]leafPathChange, impactPath string) (*ExternalIntegrationRecord, error) {
+	record := &ExternalIntegrationRecord{ExternalIntegration: *external, BaseCandidate: baseCandidate, Changes: []CandidateChange{}}
+	record.Sources = slices.Clone(external.Sources)
+	for _, change := range candidateChanges(baseFiles, final) {
+		explained := change.Path == impactPath || change.Path == ".git"
+		for _, leafChange := range history[change.Path] {
+			explained = explained || sameCandidateFile(leafChange.change.After, change.After)
+		}
+		if !explained {
+			record.Changes = append(record.Changes, change)
+		}
+		history[change.Path] = append(history[change.Path], leafPathChange{leaf: externalIntegrationLeaf, change: change})
+	}
+	if len(record.Changes) == 0 {
+		return nil, Error("EPIC_EXTERNAL_UNUSED", "the final candidate has no change outside this parent's leaves since "+external.Base)
+	}
+	return record, nil
+}
+
 // Both candidate workspaces and attempt workspaces are normally canonicalized
 // on claim. Treat unknown paths conservatively rather than asserting isolation.
 func overlappingWorkspaces(a, b string) bool {
@@ -487,6 +509,13 @@ func preservesOverlappingChange(root string, proof *CandidateProof, change Candi
 	return true
 }
 
+func fileAt(files map[string]CandidateFile, path string) *CandidateFile {
+	if file, ok := files[path]; ok {
+		return &file
+	}
+	return nil
+}
+
 type leafPathChange struct {
 	leaf   string
 	change CandidateChange
@@ -516,7 +545,7 @@ func supersedingChain(from *CandidateFile, final *CandidateFile, history []leafP
 	return nil
 }
 
-func integratedLeaves(parent Task, members []Task, snapshot candidateSnapshot, impactComplete bool, impactPath, parentRepo, root string, supporting *[]IntegrationSupport) ([]IntegratedLeaf, error) {
+func integratedLeaves(parent Task, members []Task, snapshot candidateSnapshot, impactComplete bool, impactPath, parentRepo, root string, supporting *[]IntegrationSupport, external *ExternalIntegration, record **ExternalIntegrationRecord) ([]IntegratedLeaf, error) {
 	leaves := []IntegratedLeaf{}
 	changedBy := map[string]map[string]bool{}
 	history := map[string][]leafPathChange{}
@@ -547,6 +576,24 @@ func integratedLeaves(parent Task, members []Task, snapshot candidateSnapshot, i
 				changedBy[change.Path] = map[string]bool{}
 			}
 			changedBy[change.Path][leaf.Definition.ID] = true
+		}
+	}
+	var baseFiles map[string]CandidateFile
+	if external != nil {
+		if err := validExternalIntegration(external); err != nil {
+			return nil, err
+		}
+		for _, leaf := range members {
+			if leaf.Definition.ID == external.Base && leaf.EpicMembership.Required && acceptedEpicLeaf(parent, leaf) && validCandidateProof(leaf.CandidateProof, leaf.Candidate) {
+				baseFiles = leaf.CandidateProof.Files
+				var err error
+				if *record, err = externalChange(external, leaf.Candidate, baseFiles, snapshot.Files, history, impactPath); err != nil {
+					return nil, err
+				}
+			}
+		}
+		if baseFiles == nil {
+			return nil, Error("EPIC_EXTERNAL_INVALID", "base must be an accepted required leaf of this parent with a content proof: "+external.Base)
 		}
 	}
 	for _, leaf := range members {
@@ -656,7 +703,13 @@ func integratedLeaves(parent Task, members []Task, snapshot candidateSnapshot, i
 				}
 				owners := changedBy[change.Path]
 				if len(owners) == 0 {
-					return nil, Error("EPIC_LEAF_BASELINE_MISMATCH", leaf.Definition.ID+": "+change.Path)
+					// Unchanged from this leaf to the declared base, then changed
+					// outside the epic: rechecked, never silently accepted.
+					if baseFiles != nil && sameCandidateFile(change.Before, fileAt(baseFiles, change.Path)) && !sameCandidateFile(change.Before, change.After) {
+						needsRecheck = true
+						continue
+					}
+					return nil, Error("EPIC_LEAF_BASELINE_MISMATCH", leaf.Definition.ID+": "+change.Path+"; if this was changed outside this parent after the last accepted leaf, integrate again with --external-file declaring that leaf as base")
 				}
 				for owner := range owners {
 					if _, ok := optional[owner]; ok {
@@ -677,10 +730,10 @@ func integratedLeaves(parent Task, members []Task, snapshot candidateSnapshot, i
 					}
 				}
 				if owners[leaf.Definition.ID] && len(owners) == 1 {
-					return nil, Error("EPIC_LEAF_NOT_INCLUDED", leaf.Definition.ID+": "+change.Path+"; the parent candidate lost this accepted change and no later accepted leaf records it as its input")
+					return nil, Error("EPIC_LEAF_NOT_INCLUDED", leaf.Definition.ID+": "+change.Path+"; the parent candidate lost this accepted change and no later accepted leaf records it as its input; if work outside this parent replaced it, integrate again with --external-file declaring the last accepted leaf as base")
 				}
 				if owners[leaf.Definition.ID] && !preservesOverlappingChange(root, proof, ownChanges[change.Path], snapshot) {
-					return nil, Error("EPIC_LEAF_NOT_INCLUDED", leaf.Definition.ID+": overlapping change cannot be proven: "+change.Path+"; no later accepted leaf records this result as its input")
+					return nil, Error("EPIC_LEAF_NOT_INCLUDED", leaf.Definition.ID+": overlapping change cannot be proven: "+change.Path+"; no later accepted leaf records this result as its input; if work outside this parent replaced it, integrate again with --external-file declaring the last accepted leaf as base")
 				}
 				if scopeContainsPath(leaf.Definition.Scope, change.Path) || declaredAffected || unknownImpact {
 					needsRecheck = true
@@ -730,6 +783,12 @@ func validSupportingLeaves(parent Task, members []Task) bool {
 // only after actual required leaf changes are shown to be present. Checks are
 // still executed separately on that exact candidate.
 func (s *Service) PrepareEpicIntegration(id string) (Next, error) {
+	return s.PrepareEpicIntegrationWith(id, nil)
+}
+
+// PrepareEpicIntegrationWith also accepts a declaration of changes made
+// outside the epic after the named base leaf was accepted.
+func (s *Service) PrepareEpicIntegrationWith(id string, external *ExternalIntegration) (Next, error) {
 	if err := s.active(); err != nil {
 		return Next{}, err
 	}
@@ -805,7 +864,8 @@ func (s *Service) PrepareEpicIntegration(id string) (Next, error) {
 			return err
 		}
 		var supporting []IntegrationSupport
-		leaves, err := integratedLeaves(current, members, snapshot, impactComplete, impactPath, parentRepo, s.Root, &supporting)
+		var externalRecord *ExternalIntegrationRecord
+		leaves, err := integratedLeaves(current, members, snapshot, impactComplete, impactPath, parentRepo, s.Root, &supporting, external, &externalRecord)
 		if err != nil {
 			return err
 		}
@@ -817,7 +877,7 @@ func (s *Service) PrepareEpicIntegration(id string) (Next, error) {
 		if current.EpicPlan != nil {
 			digest = current.EpicPlan.Digest
 		}
-		if current.Integration != nil && current.Integration.StaleReason == "" && current.Step == "verify" && current.Candidate == snapshot.Fingerprint && current.Integration.Plan == current.Plan.Revision && current.Integration.Candidate == snapshot.Fingerprint && current.Integration.Definition == current.Definition.Revision && current.Integration.PlanDigest == digest && current.Integration.ImpactEvidence == impactPath && current.Integration.ImpactHash == impactHash && equivalent(current.Integration.Leaves, leaves) && equivalent(current.Integration.Supporting, supporting) {
+		if current.Integration != nil && current.Integration.StaleReason == "" && current.Step == "verify" && current.Candidate == snapshot.Fingerprint && current.Integration.Plan == current.Plan.Revision && current.Integration.Candidate == snapshot.Fingerprint && current.Integration.Definition == current.Definition.Revision && current.Integration.PlanDigest == digest && current.Integration.ImpactEvidence == impactPath && current.Integration.ImpactHash == impactHash && equivalent(current.Integration.Leaves, leaves) && equivalent(current.Integration.Supporting, supporting) && equivalent(current.Integration.External, externalRecord) {
 			return nil
 		}
 		current.Plan.Revision++
@@ -829,7 +889,7 @@ func (s *Service) PrepareEpicIntegration(id string) (Next, error) {
 		current.Evidence = nil
 		current.Candidate, current.CandidateWorkspace = snapshot.Fingerprint, s.Root
 		current.Basis = basis
-		current.Integration = &EpicIntegration{Candidate: snapshot.Fingerprint, ProjectID: project.ID, LocalRepository: parentRepo, GitHead: snapshot.Head, ToolBuild: s.ToolBuild, Files: snapshot.Files, Definition: current.Definition.Revision, Plan: current.Plan.Revision, PlanDigest: digest, ImpactEvidence: impactPath, ImpactHash: impactHash, Leaves: leaves, Supporting: supporting, Prepared: time.Now().UTC()}
+		current.Integration = &EpicIntegration{Candidate: snapshot.Fingerprint, ProjectID: project.ID, LocalRepository: parentRepo, GitHead: snapshot.Head, ToolBuild: s.ToolBuild, Files: snapshot.Files, Definition: current.Definition.Revision, Plan: current.Plan.Revision, PlanDigest: digest, ImpactEvidence: impactPath, ImpactHash: impactHash, Leaves: leaves, Supporting: supporting, External: externalRecord, Prepared: time.Now().UTC()}
 		current.Step, current.Route, current.Failure = "verify", "", ""
 		if err = s.save(tx, &current); err != nil {
 			return err
