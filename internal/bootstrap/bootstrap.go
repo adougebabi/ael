@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-const Version = "0.1.39"
+const Version = "0.1.40"
 
 const DefaultPolicy = "{\"schema\":1,\"max_retries\":3,\"max_seconds\":0,\"lease_seconds\":1800,\"checks\":[],\"critical_knowledge\":[],\"delivery_requires_confirmation\":true}\n"
 
