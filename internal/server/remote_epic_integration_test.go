@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestRemoteIntegrationRejectsChangedInventoryAndUnknownWorkspace(t *testing.T) {
@@ -123,5 +124,11 @@ func TestEpicRefusalKeepsActionableDetail(t *testing.T) {
 	var body map[string]string
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil || w.Code != http.StatusConflict || body["code"] != "EPIC_LEAF_NOT_INCLUDED" || body["detail"] != "03 docs/a.md; lost" {
 		t.Fatalf("detail hidden: %d %s", w.Code, w.Body.String())
+	}
+	w = httptest.NewRecorder()
+	standaloneTaskError(w, core.Error("EPIC_LEAF_NOT_INCLUDED", "07 "+strings.Repeat("页面/", 200)))
+	body = nil
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil || !strings.HasPrefix(body["detail"], "07 页面/") || !strings.HasSuffix(body["detail"], "...") || len(body["detail"]) > 500 || !utf8.ValidString(body["detail"]) {
+		t.Fatalf("long detail not shortened safely: %s", w.Body.String())
 	}
 }

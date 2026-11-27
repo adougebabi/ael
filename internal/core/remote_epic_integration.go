@@ -26,9 +26,13 @@ type RemoteIntegrationSnapshot struct {
 	// the same workspace held before this leaf began, so edits made before the
 	// execution claim still prove which result the leaf built on.
 	LeafContinuity map[string]RemoteIntegrationFiles
-	Basis            []BasisReference
-	ImpactEvidence   string
-	ImpactHash       string
+	// External, when declared, links the base leaf's accepted files to the
+	// final candidate as one change made outside this parent.
+	External          *ExternalIntegration
+	ExternalBaseFiles map[string]CandidateFile
+	Basis             []BasisReference
+	ImpactEvidence    string
+	ImpactHash        string
 }
 
 type RemoteIntegrationOutput struct {
@@ -141,6 +145,36 @@ func (s *Service) PrepareRemoteEpicIntegrationTx(tx *store.Tx, id, revision stri
 			}
 		}
 	}
+	var external *ExternalIntegrationRecord
+	if snapshot.External != nil {
+		if err = validExternalIntegration(snapshot.External); err != nil {
+			return parent, err
+		}
+		base := -1
+		for i, leaf := range members {
+			if leaf.Definition.ID == snapshot.External.Base {
+				base = i
+			}
+		}
+		if base < 0 || !members[base].EpicMembership.Required || !acceptedEpicLeaf(parent, members[base]) || snapshot.LeafRepositories[snapshot.External.Base] != snapshot.Repository || snapshot.ExternalBaseFiles == nil {
+			return parent, Error("EPIC_EXTERNAL_INVALID", "base must be an accepted required leaf of this parent in the same repository: "+snapshot.External.Base)
+		}
+		external = &ExternalIntegrationRecord{ExternalIntegration: *snapshot.External, BaseCandidate: members[base].Candidate, Changes: []CandidateChange{}}
+		external.Sources = slices.Clone(snapshot.External.Sources)
+		for _, change := range candidateChanges(snapshot.ExternalBaseFiles, snapshot.Files) {
+			explained := false
+			for _, leafChange := range history[change.Path] {
+				explained = explained || sameCandidateFile(leafChange.change.After, change.After)
+			}
+			if !explained && change.Path != snapshot.ImpactEvidence {
+				external.Changes = append(external.Changes, change)
+			}
+			history[change.Path] = append(history[change.Path], leafPathChange{leaf: externalIntegrationLeaf, change: change})
+		}
+		if len(external.Changes) == 0 {
+			return parent, Error("EPIC_EXTERNAL_UNUSED", "the final candidate has no change outside this parent's leaves since "+snapshot.External.Base)
+		}
+	}
 	finalFile := func(path string) *CandidateFile {
 		if file, ok := snapshot.Files[path]; ok {
 			return &file
@@ -173,14 +207,14 @@ func (s *Service) PrepareRemoteEpicIntegrationTx(tx *store.Tx, id, revision stri
 				}
 			}
 			if !included {
-				return parent, Error("EPIC_LEAF_NOT_INCLUDED", leaf.Definition.ID+" "+artifact+"; the final candidate lost this accepted output and no later accepted leaf records it as its input")
+				return parent, Error("EPIC_LEAF_NOT_INCLUDED", leaf.Definition.ID+" "+artifact+"; the final candidate lost this accepted output and no later accepted leaf records it as its input; if work outside this parent replaced it, integrate again declaring the last accepted leaf as the external base")
 			}
 		}
 		if files, ok := snapshot.LeafFiles[leaf.Definition.ID]; ok {
 			for _, change := range candidateChanges(files.Before, files.After) {
 				actual, exists := snapshot.Files[change.Path]
 				if ((change.After == nil && exists) || (change.After != nil && (!exists || actual != *change.After))) && !superseded(change.Path, change.After) {
-					return parent, Error("EPIC_LEAF_NOT_INCLUDED", leaf.Definition.ID+" "+change.Path+"; the final candidate lost this accepted change and no later accepted leaf records it as its input")
+					return parent, Error("EPIC_LEAF_NOT_INCLUDED", leaf.Definition.ID+" "+change.Path+"; the final candidate lost this accepted change and no later accepted leaf records it as its input; if work outside this parent replaced it, integrate again declaring the last accepted leaf as the external base")
 				}
 			}
 		}
@@ -211,7 +245,7 @@ func (s *Service) PrepareRemoteEpicIntegrationTx(tx *store.Tx, id, revision stri
 	parent.Evidence = nil
 	parent.Candidate, parent.CandidateWorkspace = snapshot.Candidate, snapshot.Workspace
 	parent.Basis = slices.Clone(snapshot.Basis)
-	parent.Integration = &EpicIntegration{ImpactUnknown: !snapshot.InputsKnown, RemoteRepository: snapshot.Repository, Candidate: snapshot.Candidate, ProjectID: snapshot.Project, GitHead: snapshot.Head, ToolBuild: s.ToolBuild, Files: snapshot.Files, Definition: parent.Definition.Revision, Plan: parent.Plan.Revision, PlanDigest: digest, ImpactEvidence: snapshot.ImpactEvidence, ImpactHash: snapshot.ImpactHash, Leaves: leaves, Prepared: time.Now().UTC()}
+	parent.Integration = &EpicIntegration{ImpactUnknown: !snapshot.InputsKnown, RemoteRepository: snapshot.Repository, Candidate: snapshot.Candidate, ProjectID: snapshot.Project, GitHead: snapshot.Head, ToolBuild: s.ToolBuild, Files: snapshot.Files, Definition: parent.Definition.Revision, Plan: parent.Plan.Revision, PlanDigest: digest, ImpactEvidence: snapshot.ImpactEvidence, ImpactHash: snapshot.ImpactHash, Leaves: leaves, External: external, Prepared: time.Now().UTC()}
 	parent.Step, parent.Route, parent.Failure = "verify", "", ""
 	if err = s.ValidateRemoteIntegration(tx, &parent); err != nil {
 		return parent, err

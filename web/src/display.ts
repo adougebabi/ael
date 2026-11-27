@@ -291,6 +291,8 @@ export function readableError(error: string) {
     EPIC_LEAF_NOT_INCLUDED: "父候选缺少或改动了必要叶子的内容，请核对并集成后重试。",
     EPIC_LEAF_INCLUSION_UNKNOWN: "现有记录无法证明叶子内容已纳入；请针对该叶子补充可靠验证。",
     EPIC_LEAF_BASELINE_MISMATCH: "父候选与叶子受验输入存在无法解释的差异，请核对对应文件。",
+    EPIC_EXTERNAL_INVALID: "父任务之外改动的声明无效：起点须为本父任务已验收的必需叶子，并写明来源与说明。",
+    EPIC_EXTERNAL_UNUSED: "声明的起点叶子之后没有父任务之外的改动，无需声明。",
     EPIC_RECHECK_REQUIRED: "受影响或影响未知的叶子需要在父候选上运行等价必需检查。",
     EPIC_ARTIFACT_NOT_BOUND: "叶子产物未纳入候选指纹，不能据此证明集成。",
     EPIC_EXCLUDED_SCOPE_UNKNOWN: "候选排除范围与叶子范围重叠或无法判定，请核对后重试。",

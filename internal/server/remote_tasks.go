@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 type remoteTaskMutation struct {
@@ -91,7 +92,14 @@ func standaloneTaskError(w http.ResponseWriter, err error) {
 	if code := strings.SplitN(err.Error(), ":", 2)[0]; (strings.HasPrefix(code, "EPIC_") || strings.HasPrefix(code, "PLAN_")) && standaloneID.MatchString(code) {
 		// Integration refusals name the leaf, check or path to act on; without
 		// that the agent cannot tell which recorded step to repair.
-		if detail := strings.TrimSpace(strings.TrimPrefix(err.Error(), code+":")); strings.HasPrefix(code, "EPIC_") && detail != "" && len(detail) <= 500 && !strings.ContainsAny(detail, "\r\n\x00") {
+		if detail := strings.TrimSpace(strings.TrimPrefix(err.Error(), code+":")); strings.HasPrefix(code, "EPIC_") && detail != "" && !strings.ContainsAny(detail, "\r\n\x00") {
+			if len(detail) > 500 {
+				cut := 497
+				for cut > 0 && !utf8.RuneStart(detail[cut]) {
+					cut--
+				}
+				detail = detail[:cut] + "..."
+			}
 			standaloneReply(w, http.StatusConflict, map[string]string{"code": code, "error": code, "detail": detail})
 			return
 		}

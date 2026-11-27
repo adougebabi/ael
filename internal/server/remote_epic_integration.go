@@ -13,11 +13,13 @@ import (
 )
 
 type remoteIntegrationInput struct {
-	ContextID        string `json:"context_id"`
-	ImpactArtifact   string `json:"impact_artifact"`
-	ExpectedRevision string `json:"expected_revision"`
-	OperationID      string `json:"operation_id"`
-	IdempotencyKey   string `json:"idempotency_key"`
+	ContextID      string `json:"context_id"`
+	ImpactArtifact string `json:"impact_artifact"`
+	// External declares changes made outside this parent after its base leaf.
+	External         *core.ExternalIntegration `json:"external,omitempty"`
+	ExpectedRevision string                    `json:"expected_revision"`
+	OperationID      string                    `json:"operation_id"`
+	IdempotencyKey   string                    `json:"idempotency_key"`
 }
 
 func integrationCandidate(tx *store.Tx, id string) (remote.PortableCandidate, map[string]core.CandidateFile, error) {
@@ -276,6 +278,10 @@ func (p *portableStore) prepareEpicIntegration(principal standalonePrincipal, ta
 				leafContinuity[id] = core.RemoteIntegrationFiles{Before: files, After: leafResults[id]}
 			}
 		}
+		var externalBase map[string]core.CandidateFile
+		if input.External != nil {
+			externalBase = leafResults[input.External.Base]
+		}
 		impactPath, impactHash := "", ""
 		if parent.Definition.IntegrationImpact != nil && parent.Definition.IntegrationImpact.Complete {
 			item, err := scanArtifact(tx.Row("SELECT "+artifactColumns+" FROM artifact_objects WHERE id=?", input.ImpactArtifact))
@@ -293,7 +299,7 @@ func (p *portableStore) prepareEpicIntegration(principal standalonePrincipal, ta
 		if err != nil {
 			return nil, err
 		}
-		prepared, err := p.service.PrepareRemoteEpicIntegrationTx(tx, taskID, input.ExpectedRevision, core.RemoteIntegrationSnapshot{InputsKnown: snapshotContext["inputs_known"] == true, Candidate: candidateID, Repository: repository, Project: p.project, Head: candidate.Commit, Workspace: "remote:" + runnerID + "/" + workspace, Files: files, LeafRepositories: leafRepositories, LeafOutputs: leafOutputs, LeafFiles: leafChanges, LeafLineage: leafLineage, LeafContinuity: leafContinuity, Basis: basis, ImpactEvidence: impactPath, ImpactHash: impactHash})
+		prepared, err := p.service.PrepareRemoteEpicIntegrationTx(tx, taskID, input.ExpectedRevision, core.RemoteIntegrationSnapshot{InputsKnown: snapshotContext["inputs_known"] == true, Candidate: candidateID, Repository: repository, Project: p.project, Head: candidate.Commit, Workspace: "remote:" + runnerID + "/" + workspace, Files: files, LeafRepositories: leafRepositories, LeafOutputs: leafOutputs, LeafFiles: leafChanges, LeafLineage: leafLineage, LeafContinuity: leafContinuity, External: input.External, ExternalBaseFiles: externalBase, Basis: basis, ImpactEvidence: impactPath, ImpactHash: impactHash})
 		if err != nil {
 			return nil, err
 		}

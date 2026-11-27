@@ -42,24 +42,57 @@ type IntegrationSupport struct {
 // EpicIntegration records the actual parent candidate and the exact leaf
 // states whose content was checked against it. It is not a passing check.
 type EpicIntegration struct {
-	ImpactUnknown    bool                     `json:"impact_unknown,omitempty"`
-	RemoteRepository string                   `json:"remote_repository,omitempty"`
-	Candidate        string                   `json:"candidate"`
-	ProjectID        string                   `json:"project_id"`
-	LocalRepository  string                   `json:"local_repository,omitempty"`
-	GitHead          string                   `json:"git_head,omitempty"`
-	ToolBuild        string                   `json:"tool_build,omitempty"`
-	Files            map[string]CandidateFile `json:"files"`
-	Definition       int                      `json:"definition_revision"`
-	Plan             int                      `json:"plan_revision"`
-	PlanDigest       string                   `json:"plan_digest,omitempty"`
-	ImpactEvidence   string                   `json:"impact_evidence,omitempty"`
-	ImpactHash       string                   `json:"impact_hash,omitempty"`
-	Leaves           []IntegratedLeaf         `json:"leaves"`
-	Supporting       []IntegrationSupport     `json:"supporting,omitempty"`
-	Prepared         time.Time                `json:"prepared_at"`
-	StaleReason      string                   `json:"stale_reason,omitempty"`
-	WaitReason       string                   `json:"wait_reason,omitempty"`
+	ImpactUnknown    bool                       `json:"impact_unknown,omitempty"`
+	RemoteRepository string                     `json:"remote_repository,omitempty"`
+	Candidate        string                     `json:"candidate"`
+	ProjectID        string                     `json:"project_id"`
+	LocalRepository  string                     `json:"local_repository,omitempty"`
+	GitHead          string                     `json:"git_head,omitempty"`
+	ToolBuild        string                     `json:"tool_build,omitempty"`
+	Files            map[string]CandidateFile   `json:"files"`
+	Definition       int                        `json:"definition_revision"`
+	Plan             int                        `json:"plan_revision"`
+	PlanDigest       string                     `json:"plan_digest,omitempty"`
+	ImpactEvidence   string                     `json:"impact_evidence,omitempty"`
+	ImpactHash       string                     `json:"impact_hash,omitempty"`
+	Leaves           []IntegratedLeaf           `json:"leaves"`
+	Supporting       []IntegrationSupport       `json:"supporting,omitempty"`
+	External         *ExternalIntegrationRecord `json:"external,omitempty"`
+	Prepared         time.Time                  `json:"prepared_at"`
+	StaleReason      string                     `json:"stale_reason,omitempty"`
+	WaitReason       string                     `json:"wait_reason,omitempty"`
+}
+
+// ExternalIntegration declares that the final parent candidate is a required
+// leaf's accepted result plus changes made outside this parent (merges,
+// independent tasks, generated indexes). It explains leaf content that those
+// changes replaced; leaf content absent from the base result is still refused.
+type ExternalIntegration struct {
+	Base    string   `json:"base"`
+	Sources []string `json:"sources"`
+	Reason  string   `json:"reason"`
+}
+
+// ExternalIntegrationRecord keeps the declaration with the exact base
+// candidate and every path the external changes produced, for review.
+type ExternalIntegrationRecord struct {
+	ExternalIntegration
+	BaseCandidate string            `json:"base_candidate"`
+	Changes       []CandidateChange `json:"changes"`
+}
+
+const externalIntegrationLeaf = "(external)"
+
+func validExternalIntegration(external *ExternalIntegration) error {
+	if external.Base == "" || len(external.Sources) == 0 || len(external.Sources) > 32 || strings.TrimSpace(external.Reason) == "" || len(external.Reason) > 2000 || strings.ContainsRune(external.Reason, 0) {
+		return Error("EPIC_EXTERNAL_INVALID", "name the base leaf, 1-32 sources and a reason of at most 2000 bytes")
+	}
+	for _, source := range external.Sources {
+		if strings.TrimSpace(source) == "" || len(source) > 300 || strings.ContainsAny(source, "\r\n\x00") {
+			return Error("EPIC_EXTERNAL_INVALID", "each source is one line of at most 300 bytes")
+		}
+	}
+	return nil
 }
 
 // Both candidate workspaces and attempt workspaces are normally canonicalized

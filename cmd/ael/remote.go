@@ -114,7 +114,7 @@ func remoteCommand(cmd string, a args, binding remote.Binding) (any, error) {
 		"task confirm":          {"task", "file", "username", "password-stdin"},
 		"task review":           {"file", "username", "password-stdin"},
 		"runner keepalive":      {"owner-pid", "lease-file", "runner"},
-		"task integrate":        {"task", "context", "impact-artifact", "expected-revision", "operation-id", "idempotency-key"},
+		"task integrate":        {"task", "context", "impact-artifact", "external-file", "expected-revision", "operation-id", "idempotency-key"},
 		"task reconcile-import": {"task", "context", "reason", "start", "expected-revision", "operation-id", "idempotency-key"},
 		"task review-failure":   {"task", "file", "expected-revision", "operation-id", "idempotency-key"},
 		"operation show":        {"idempotency-key"},
@@ -267,7 +267,15 @@ func remoteCommand(cmd string, a args, binding remote.Binding) (any, error) {
 	case "task integrate":
 		method = http.MethodPost
 		path = "/tasks/" + url.PathEscape(id) + "/integrate"
-		payload = map[string]any{"context_id": a.get("context", ""), "impact_artifact": a.get("impact-artifact", ""), "expected_revision": a.get("expected-revision", ""), "operation_id": a.get("operation-id", ""), "idempotency_key": a.get("idempotency-key", "")}
+		integration := map[string]any{"context_id": a.get("context", ""), "impact_artifact": a.get("impact-artifact", ""), "expected_revision": a.get("expected-revision", ""), "operation_id": a.get("operation-id", ""), "idempotency_key": a.get("idempotency-key", "")}
+		if file := a.get("external-file", ""); file != "" {
+			var external core.ExternalIntegration
+			if err = input(file, &external); err != nil {
+				return nil, err
+			}
+			integration["external"] = external
+		}
+		payload = integration
 	case "task review-failure":
 		var review core.FailureReview
 		if err = input(a.get("file", ""), &review); err != nil {
