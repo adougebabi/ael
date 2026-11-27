@@ -3,6 +3,9 @@ package core_test
 import (
 	"ael/internal/core"
 	"ael/internal/store"
+	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -49,5 +52,65 @@ func TestRemoteIntegrationPreservesAcceptedOutputContent(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRemoteIntegrationAcceptsLeafResultSupersededByLaterLeaf(t *testing.T) {
+	s := fixture(t)
+	parentID := create(t, s, core.Definition{ID: "epic", Title: "Remote rewrite", Type: "epic", Goal: "verified", Acceptance: []string{"结果存在"}, Checks: []core.Check{{ID: "parent-unit", Kind: "functional", Method: "command", Command: []string{"sh", "-c", "test -s shared.txt"}, Covers: []string{"结果存在"}, Required: true, Affected: []string{"a", "b"}}}})
+	for _, id := range []string{"a", "b"} {
+		create(t, s, core.Definition{ID: id, Parent: parentID, Title: id, Type: "bug", Goal: "verified", Scope: []string{"shared.txt"}, Acceptance: []string{"结果存在"}, Checks: []core.Check{{ID: "unit", Kind: "functional", Method: "command", Command: []string{"sh", "-c", "test -s shared.txt"}, Covers: []string{"结果存在"}, Required: true}}})
+		step(t, s, id, "fixture-"+id)
+		claim, err := s.Claim(id, "", "fixture-"+id, "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = os.WriteFile(filepath.Join(s.Root, "shared.txt"), []byte(id), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = s.Submit(core.Submission{Task: id, Attempt: claim.Attempt.ID, Token: claim.Attempt.Token, Key: core.ID("remote-rewrite-"), Result: core.StepResult{Status: "pass", Summary: "rewrite", Artifacts: []string{"shared.txt"}}}); err != nil {
+			t.Fatal(err)
+		}
+		if n, err := s.Verify(id, "unit", "checker-"+id); err != nil || n.Task.Status != "completed" {
+			t.Fatalf("leaf %s: %+v %v", id, n, err)
+		}
+	}
+	parent, err := s.Get(parentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.RemoteAuthority = true
+	s.ValidateRemoteIntegration = func(*store.Tx, *core.Task) error { return nil }
+	base := core.CandidateFile{Hash: "base", Mode: 0644}
+	aOut := core.CandidateFile{Hash: "a-result", Mode: 0644}
+	bOut := core.CandidateFile{Hash: "b-result", Mode: 0644}
+	other := core.CandidateFile{Hash: "unrelated", Mode: 0644}
+	prepare := func(lineage map[string]core.RemoteIntegrationFiles, final core.CandidateFile) error {
+		snapshot := core.RemoteIntegrationSnapshot{Candidate: "parent-candidate", Repository: "repository", Project: "project", Workspace: "remote:runner/workspace", Files: map[string]core.CandidateFile{"shared.txt": final}, LeafRepositories: map[string]string{"a": "repository", "b": "repository"},
+			LeafOutputs: map[string]map[string]core.RemoteIntegrationOutput{"a": {"a-output": {Files: map[string]core.CandidateFile{"shared.txt": aOut}}}},
+			LeafFiles:   map[string]core.RemoteIntegrationFiles{"b": lineage["b"]}, LeafLineage: lineage}
+		return s.Store.Write(func(tx *store.Tx) error {
+			if _, err := s.PrepareRemoteEpicIntegrationTx(tx, parentID, core.RemoteRevision(parent), snapshot); err != nil {
+				return err
+			}
+			return errors.New("rollback")
+		})
+	}
+	parallel := map[string]core.RemoteIntegrationFiles{
+		"a": {Before: map[string]core.CandidateFile{"shared.txt": base}, After: map[string]core.CandidateFile{"shared.txt": aOut}},
+		"b": {Before: map[string]core.CandidateFile{"shared.txt": base}, After: map[string]core.CandidateFile{"shared.txt": bOut}},
+	}
+	if err = prepare(parallel, bOut); err == nil || !strings.Contains(err.Error(), "EPIC_LEAF_NOT_INCLUDED") {
+		t.Fatalf("a later leaf that never saw the earlier result erased it silently: %v", err)
+	}
+	sequential := map[string]core.RemoteIntegrationFiles{
+		"a": parallel["a"],
+		"b": {Before: map[string]core.CandidateFile{"shared.txt": aOut}, After: map[string]core.CandidateFile{"shared.txt": bOut}},
+	}
+	if err = prepare(sequential, other); err == nil || !strings.Contains(err.Error(), "EPIC_LEAF_NOT_INCLUDED") {
+		t.Fatalf("unexplained final content accepted: %v", err)
+	}
+	if err = prepare(sequential, bOut); err == nil || err.Error() != "rollback" {
+		t.Fatalf("superseded remote leaf still blocks integration: %v", err)
 	}
 }

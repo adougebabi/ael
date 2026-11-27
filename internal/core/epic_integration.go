@@ -364,7 +364,7 @@ func epicRechecks(parent, leaf Task) ([]IntegrationRecheck, error) {
 			break
 		}
 		if match == "" {
-			return nil, Error("EPIC_RECHECK_REQUIRED", leaf.Definition.ID+": "+required.ID)
+			return nil, Error("EPIC_RECHECK_REQUIRED", leaf.Definition.ID+": "+required.ID+"; the leaf stays completed: edit the parent definition to add a required check with the same kind, method, command, timeout and artifacts and list \""+leaf.Definition.ID+"\" in its affected_tasks, then integrate again")
 		}
 		rechecks = append(rechecks, IntegrationRecheck{LeafCheck: required.ID, ParentCheck: match})
 	}
@@ -454,9 +454,35 @@ func preservesOverlappingChange(root string, proof *CandidateProof, change Candi
 	return true
 }
 
+type leafPathChange struct {
+	leaf   string
+	change CandidateChange
+}
+
+// supersedingLeaves proves that a later accepted leaf started from this
+// result (its recorded input equals this result) and that the chain of such
+// leaves ends in the current parent content. The superseded leaf is still
+// rechecked on the parent candidate; its own acceptance is never rewritten.
+func supersedingLeaves(from *CandidateFile, final *CandidateFile, history []leafPathChange, seen map[string]bool) []string {
+	for _, next := range history {
+		if seen[next.leaf] || !sameCandidateFile(next.change.Before, from) || sameCandidateFile(next.change.Before, next.change.After) {
+			continue
+		}
+		seen[next.leaf] = true
+		if sameCandidateFile(next.change.After, final) {
+			return []string{next.leaf}
+		}
+		if chain := supersedingLeaves(next.change.After, final, history, seen); chain != nil {
+			return append([]string{next.leaf}, chain...)
+		}
+	}
+	return nil
+}
+
 func integratedLeaves(parent Task, members []Task, snapshot candidateSnapshot, impactComplete bool, impactPath, parentRepo, root string, supporting *[]IntegrationSupport) ([]IntegratedLeaf, error) {
 	leaves := []IntegratedLeaf{}
 	changedBy := map[string]map[string]bool{}
+	history := map[string][]leafPathChange{}
 	optional := map[string]Task{}
 	usedOptional := map[string]bool{}
 	for _, leaf := range members {
@@ -473,6 +499,7 @@ func integratedLeaves(parent Task, members []Task, snapshot candidateSnapshot, i
 			optional[leaf.Definition.ID] = leaf
 		}
 		for _, change := range leaf.CandidateProof.Changes {
+			history[change.Path] = append(history[change.Path], leafPathChange{leaf: leaf.Definition.ID, change: change})
 			if !leaf.EpicMembership.Required {
 				actual, exists := snapshot.Files[change.Path]
 				if (change.After == nil && exists) || (change.After != nil && (!exists || actual != *change.After)) {
@@ -599,11 +626,24 @@ func integratedLeaves(parent Task, members []Task, snapshot candidateSnapshot, i
 						usedOptional[owner] = true
 					}
 				}
+				if own, ok := ownChanges[change.Path]; ok && owners[leaf.Definition.ID] {
+					if chain := supersedingLeaves(own.After, change.After, history[change.Path], map[string]bool{leaf.Definition.ID: true}); chain != nil {
+						// A later accepted leaf demonstrably built on this result;
+						// the content is re-proven by the mapped parent recheck.
+						for _, id := range chain {
+							if _, ok := optional[id]; ok {
+								usedOptional[id] = true
+							}
+						}
+						needsRecheck = true
+						continue
+					}
+				}
 				if owners[leaf.Definition.ID] && len(owners) == 1 {
-					return nil, Error("EPIC_LEAF_NOT_INCLUDED", leaf.Definition.ID+": "+change.Path)
+					return nil, Error("EPIC_LEAF_NOT_INCLUDED", leaf.Definition.ID+": "+change.Path+"; the parent candidate lost this accepted change and no later accepted leaf records it as its input")
 				}
 				if owners[leaf.Definition.ID] && !preservesOverlappingChange(root, proof, ownChanges[change.Path], snapshot) {
-					return nil, Error("EPIC_LEAF_NOT_INCLUDED", leaf.Definition.ID+": overlapping change cannot be proven: "+change.Path)
+					return nil, Error("EPIC_LEAF_NOT_INCLUDED", leaf.Definition.ID+": overlapping change cannot be proven: "+change.Path+"; no later accepted leaf records this result as its input")
 				}
 				if scopeContainsPath(leaf.Definition.Scope, change.Path) || declaredAffected || unknownImpact {
 					needsRecheck = true

@@ -137,6 +137,7 @@ func (p *portableStore) prepareEpicIntegration(principal standalonePrincipal, ta
 		leafRepositories := map[string]string{}
 		leafOutputs := map[string]map[string]core.RemoteIntegrationOutput{}
 		leafChanges := map[string]core.RemoteIntegrationFiles{}
+		leafLineage := map[string]core.RemoteIntegrationFiles{}
 		rows, err := tx.Conn.QueryContext(context.Background(), "SELECT body FROM tasks WHERE json_extract(body,'$.epic_membership.parent')=?", taskID)
 		if err != nil {
 			return nil, err
@@ -195,7 +196,7 @@ func (p *portableStore) prepareEpicIntegration(principal standalonePrincipal, ta
 					}
 				}
 			}
-			if execution != nil && len(leafOutputs[leaf.Definition.ID]) == 0 {
+			if execution != nil {
 				// The first claim in this execution revision retains the original
 				// input across failed checks and an expired lease's recovery.
 				for _, attempt := range leaf.Attempts {
@@ -204,9 +205,15 @@ func (p *portableStore) prepareEpicIntegration(principal standalonePrincipal, ta
 					}
 					baseline, before, err := integrationCandidate(tx, attempt.Input)
 					if err != nil || baseline.Repository != manifest.Repository {
+						if len(leafOutputs[leaf.Definition.ID]) > 0 {
+							break
+						}
 						return nil, core.Error("EPIC_REPOSITORY_UNVERIFIED", leaf.Definition.ID)
 					}
-					leafChanges[leaf.Definition.ID] = core.RemoteIntegrationFiles{Before: before, After: leafFiles}
+					leafLineage[leaf.Definition.ID] = core.RemoteIntegrationFiles{Before: before, After: leafFiles}
+					if len(leafOutputs[leaf.Definition.ID]) == 0 {
+						leafChanges[leaf.Definition.ID] = leafLineage[leaf.Definition.ID]
+					}
 					break
 				}
 			}
@@ -228,7 +235,7 @@ func (p *portableStore) prepareEpicIntegration(principal standalonePrincipal, ta
 		if err != nil {
 			return nil, err
 		}
-		prepared, err := p.service.PrepareRemoteEpicIntegrationTx(tx, taskID, input.ExpectedRevision, core.RemoteIntegrationSnapshot{InputsKnown: snapshotContext["inputs_known"] == true, Candidate: candidateID, Repository: repository, Project: p.project, Head: candidate.Commit, Workspace: "remote:" + runnerID + "/" + workspace, Files: files, LeafRepositories: leafRepositories, LeafOutputs: leafOutputs, LeafFiles: leafChanges, Basis: basis, ImpactEvidence: impactPath, ImpactHash: impactHash})
+		prepared, err := p.service.PrepareRemoteEpicIntegrationTx(tx, taskID, input.ExpectedRevision, core.RemoteIntegrationSnapshot{InputsKnown: snapshotContext["inputs_known"] == true, Candidate: candidateID, Repository: repository, Project: p.project, Head: candidate.Commit, Workspace: "remote:" + runnerID + "/" + workspace, Files: files, LeafRepositories: leafRepositories, LeafOutputs: leafOutputs, LeafFiles: leafChanges, LeafLineage: leafLineage, Basis: basis, ImpactEvidence: impactPath, ImpactHash: impactHash})
 		if err != nil {
 			return nil, err
 		}

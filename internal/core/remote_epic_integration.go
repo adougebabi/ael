@@ -18,6 +18,10 @@ type RemoteIntegrationSnapshot struct {
 	LeafRepositories map[string]string
 	LeafOutputs      map[string]map[string]RemoteIntegrationOutput
 	LeafFiles        map[string]RemoteIntegrationFiles
+	// LeafLineage records every required leaf's execution input and accepted
+	// result, including leaves proven by outputs, so a later leaf that started
+	// from an earlier result can explain why the final file differs.
+	LeafLineage map[string]RemoteIntegrationFiles
 	Basis            []BasisReference
 	ImpactEvidence   string
 	ImpactHash       string
@@ -118,6 +122,22 @@ func (s *Service) PrepareRemoteEpicIntegrationTx(tx *store.Tx, id, revision stri
 			}
 		}
 	}
+	history := map[string][]leafPathChange{}
+	for _, leaf := range members {
+		files, ok := snapshot.LeafLineage[leaf.Definition.ID]
+		if !leaf.EpicMembership.Required || !acceptedEpicLeaf(parent, leaf) || !ok || snapshot.LeafRepositories[leaf.Definition.ID] != snapshot.Repository {
+			continue
+		}
+		for _, change := range candidateChanges(files.Before, files.After) {
+			history[change.Path] = append(history[change.Path], leafPathChange{leaf: leaf.Definition.ID, change: change})
+		}
+	}
+	finalFile := func(path string) *CandidateFile {
+		if file, ok := snapshot.Files[path]; ok {
+			return &file
+		}
+		return nil
+	}
 	leaves := []IntegratedLeaf{}
 	for _, leaf := range members {
 		if !leaf.EpicMembership.Required {
@@ -125,6 +145,9 @@ func (s *Service) PrepareRemoteEpicIntegrationTx(tx *store.Tx, id, revision stri
 		}
 		if !acceptedEpicLeaf(parent, leaf) {
 			return parent, Error("EPIC_REQUIRED_LEAF_NOT_ACCEPTED", leaf.Definition.ID)
+		}
+		superseded := func(path string, after *CandidateFile) bool {
+			return supersedingLeaves(after, finalFile(path), history[path], map[string]bool{leaf.Definition.ID: true}) != nil
 		}
 		if snapshot.LeafRepositories[leaf.Definition.ID] != snapshot.Repository {
 			return parent, Error("EPIC_REPOSITORY_UNVERIFIED", leaf.Definition.ID)
@@ -135,20 +158,20 @@ func (s *Service) PrepareRemoteEpicIntegrationTx(tx *store.Tx, id, revision stri
 		for artifact, output := range snapshot.LeafOutputs[leaf.Definition.ID] {
 			included := false
 			for path, expected := range output.Files {
-				if actual, exists := snapshot.Files[path]; exists && actual == expected {
+				if actual, exists := snapshot.Files[path]; (exists && actual == expected) || superseded(path, &expected) {
 					included = true
 					break
 				}
 			}
 			if !included {
-				return parent, Error("EPIC_LEAF_NOT_INCLUDED", leaf.Definition.ID+" "+artifact)
+				return parent, Error("EPIC_LEAF_NOT_INCLUDED", leaf.Definition.ID+" "+artifact+"; the final candidate lost this accepted output and no later accepted leaf records it as its input")
 			}
 		}
 		if files, ok := snapshot.LeafFiles[leaf.Definition.ID]; ok {
 			for _, change := range candidateChanges(files.Before, files.After) {
 				actual, exists := snapshot.Files[change.Path]
-				if (change.After == nil && exists) || (change.After != nil && (!exists || actual != *change.After)) {
-					return parent, Error("EPIC_LEAF_NOT_INCLUDED", leaf.Definition.ID+" "+change.Path)
+				if ((change.After == nil && exists) || (change.After != nil && (!exists || actual != *change.After))) && !superseded(change.Path, change.After) {
+					return parent, Error("EPIC_LEAF_NOT_INCLUDED", leaf.Definition.ID+" "+change.Path+"; the final candidate lost this accepted change and no later accepted leaf records it as its input")
 				}
 			}
 		}

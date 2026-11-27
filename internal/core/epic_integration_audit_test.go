@@ -696,3 +696,63 @@ func TestFailedUnboundArtifactCannotDisappearWhenGitIsInitialized(t *testing.T) 
 		t.Fatalf("unbound failed artifact was forgotten: %v", err)
 	}
 }
+
+// A later leaf that rewrites an earlier completed leaf's lines must not strand
+// the parent: the earlier leaf stays completed and is re-proven on the parent.
+func TestRewrittenLeafChangeClosesThroughParentRecheck(t *testing.T) {
+	s := fixture(t)
+	impact := integrationImpactFixture(t, s)
+	parent := create(t, s, core.Definition{ID: "epic", Title: "改写闭环", Type: "epic", Goal: "verified", IntegrationImpact: impact, Acceptance: []string{"整体"}, Checks: []core.Check{parentCheck("integration", "true", "a", "b")}})
+	originals := map[string]core.Task{}
+	for _, id := range []string{"a", "b"} {
+		create(t, s, core.Definition{ID: id, Parent: parent, Title: id, Type: "bug", Goal: "verified", Scope: []string{"shared.txt"}, Acceptance: []string{"文件非空"}, Checks: []core.Check{{ID: "unit", Kind: "functional", Method: "command", Command: []string{"sh", "-c", "test -s shared.txt"}, Covers: []string{"文件非空"}, Required: true}}})
+		step(t, s, id, "fixture-"+id)
+		claim, err := s.Claim(id, "", "fixture-"+id, "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = os.WriteFile(filepath.Join(s.Root, "shared.txt"), []byte(strings.ToUpper(id)+" rewritten\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = s.Submit(core.Submission{Task: id, Attempt: claim.Attempt.ID, Token: claim.Attempt.Token, Key: core.ID("rewrite-"), Result: core.StepResult{Status: "pass", Summary: "顺序改写", Artifacts: []string{"shared.txt"}}}); err != nil {
+			t.Fatal(err)
+		}
+		n, err := s.Verify(id, "unit", "checker-"+id)
+		if err != nil || n.Task.Status != "completed" {
+			t.Fatalf("leaf %s: %+v %v", id, n, err)
+		}
+		originals[id] = *n.Task
+	}
+	if _, err := s.PrepareEpicIntegration(parent); err == nil || !strings.Contains(err.Error(), "EPIC_RECHECK_REQUIRED") || !strings.Contains(err.Error(), "affected_tasks") {
+		t.Fatalf("rewritten leaf did not ask for a parent recheck: %v", err)
+	}
+	current, err := s.Get(parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := current.Definition
+	d.Checks = append(d.Checks, parentCheck("recheck", "test -s shared.txt", "a", "b"))
+	if _, err = s.Edit(parent, d, "recheck rewritten leaf on the parent"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.PrepareEpicIntegration(parent); err != nil {
+		t.Fatalf("superseded leaf still blocks integration: %v", err)
+	}
+	prepared, err := s.Get(parent)
+	if err != nil || prepared.Integration.Leaves[0].ID != "a" || prepared.Integration.Leaves[0].Method != "content_changes_rechecked" {
+		t.Fatalf("superseded leaf was not rechecked: %+v %v", prepared.Integration, err)
+	}
+	if _, err = s.Verify(parent, "integration", "checker"); err != nil {
+		t.Fatal(err)
+	}
+	n, err := s.Verify(parent, "recheck", "checker")
+	if err != nil || n.Task.Status != "completed" {
+		t.Fatalf("parent did not close: %+v %v", n, err)
+	}
+	for id, original := range originals {
+		after, err := s.Get(id)
+		if err != nil || after.Status != "completed" || !after.Completed.Equal(*original.Completed) || len(after.Attempts) != len(original.Attempts) {
+			t.Fatalf("leaf %s was reopened or rewritten: %+v %v", id, after, err)
+		}
+	}
+}

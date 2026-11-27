@@ -150,7 +150,7 @@ POST 路径依次为 `/api/v1/projects/PROJECT/findings/ID/decisions`、`/repair
 
 ## 共享机器 CLI 与项目入口
 
-远程父级集成使用 `task integrate --task EPIC --context CONTEXT --expected-revision REV --operation-id OP --idempotency-key KEY`。必需叶子先达标，最终父候选保留同仓库与输出清单证明，并将全部必需叶子检查映射到父级重新执行。准备后通过 runner next/claim 继续逐项提交，人工角色检查由看板完成。输入影响未知保留 `impact_unknown`，Git 祖先关系由外部宿主核查。完整影响声明另传 `--impact-artifact ID`，附件须与声明路径和当前候选匹配。
+远程父级集成使用 `task integrate --task EPIC --context CONTEXT --expected-revision REV --operation-id OP --idempotency-key KEY`。必需叶子先达标，最终父候选保留同仓库与输出清单证明，并将全部必需叶子检查映射到父级重新执行。叶子结果被后续叶子改写时，Server 以后一叶子的执行输入清单证明改写衔接，不要求重新打开已完成叶子。准备后通过 runner next/claim 继续逐项提交，人工角色检查由看板完成。输入影响未知保留 `impact_unknown`，Git 祖先关系由外部宿主核查。完整影响声明另传 `--impact-artifact ID`，附件须与声明路径和当前候选匹配。
 
 源码输出附件通过叶子候选的内容哈希定位路径，父候选须包含匹配的内容和执行位。后续修改同一输出时，应先更新并验收受影响叶子的候选，再准备父集成。重叠修改的包含性需要可验证的当前叶子输出，宿主 Git 操作与父级检查都须实际执行。
 
